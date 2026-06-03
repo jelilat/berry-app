@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <path
+    d="M31.1 18.4C34.4 9.8 42.2 5.8 52.2 8.8C50.6 19.1 42.7 25.1 32.8 22.2C31.8 21.9 31.2 20.7 31.1 18.4Z"
+    fill="url(#leaf-gradient)"
+  />
+  <path
+    d="M31.5 20C28.8 13.4 31.4 7.6 38.5 3.8C39.8 11 37.4 16.5 31.5 20Z"
+    fill="#0FA886"
+  />
+  <path
+    d="M32 19.7C18.7 19.7 8.9 29.1 8.9 42C8.9 55 18.8 62.1 32 62.1C45.2 62.1 55.1 55 55.1 42C55.1 29.1 45.3 19.7 32 19.7Z"
+    fill="url(#berry-gradient)"
+  />
+  <path
+    d="M18.6 39.5C18.6 28.4 27.4 22.2 37.2 24.3C45.5 26.1 50.2 33.2 50.2 42.5C50.2 52.3 43.3 58.1 32.9 58.1C23.3 58.1 18.6 52.5 18.6 39.5Z"
+    fill="url(#berry-sheen)"
+    opacity="0.72"
+  />
+  <path
+    d="M21.3 28.6L23 32.8L27.2 34.5L23 36.2L21.3 40.4L19.6 36.2L15.4 34.5L19.6 32.8L21.3 28.6Z"
+    fill="#FFFFFF"
+    opacity="0.7"
+  />
+  <circle cx="27" cy="48.4" r="2.15" fill="#FFD6E4" opacity="0.72"/>
+  <circle cx="38.8" cy="34.5" r="1.75" fill="#FFD6E4" opacity="0.52"/>
+  <circle cx="43.5" cy="48.1" r="1.35" fill="#FFD6E4" opacity="0.48"/>
+  <circle cx="28.9" cy="29" r="1.1" fill="#FFFFFF" opacity="0.42"/>
+  <defs>
+    <linearGradient id="berry-gradient" x1="13" y1="24.5" x2="50.5" y2="58.5" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F05F8D"/>
+      <stop offset="0.5" stop-color="#D6336C"/>
+      <stop offset="1" stop-color="#A61E4D"/>
+    </linearGradient>
+    <linearGradient id="leaf-gradient" x1="33" y1="20" x2="50.4" y2="9.8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0FA886"/>
+      <stop offset="1" stop-color="#52D6C3"/>
+    </linearGradient>
+    <radialGradient id="berry-sheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(26.9 30.1) rotate(55.5) scale(30.6 24.8)">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.68" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>

@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-base: #f5f3ef;
+  --bg-surface: rgba(255, 255, 255, 0.76);
+  --bg-elevated: #ffffff;
+  --bg-overlay: #ebe7df;
+  --border: rgba(28, 25, 23, 0.1);
+  --border-strong: rgba(28, 25, 23, 0.16);
+  --text-primary: #000000;
+  --text-secondary: rgba(0, 0, 0, 0.64);
+  --text-muted: rgba(23, 21, 20, 0.42);
+  --accent: #d6336c;
+  --accent-glow: rgba(214, 51, 108, 0.2);
+  --accent-hover: #c2255c;
+  --accent-soft: #f05f8d;
+  --leaf: #0fa886;
+  --leaf-light: #52d6c3;
+  --shadow-soft: 0 18px 60px rgba(40, 34, 31, 0.12);
+}
+
+.dark {
+  --bg-base: #0c0c0f;
+  --bg-surface: #111115;
+  --bg-elevated: #17171d;
+  --bg-overlay: #1f1f26;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text-primary: #f0f0f5;
+  --text-secondary: rgba(240, 240, 245, 0.6);
+  --text-muted: rgba(240, 240, 245, 0.35);
+  --shadow-soft: 0 18px 60px rgba(0, 0, 0, 0.36);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+}
+
+::selection {
+  background: rgba(214, 51, 108, 0.22);
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.brand-float {
+  animation: float 5s ease-in-out infinite;
+}
+
+.brand-wire {
+  stroke-dasharray: 10;
+  stroke-dashoffset: 80;
+  animation: draw 1.7s ease-out forwards;
+}

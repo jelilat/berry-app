@@ -65,20 +65,32 @@ export interface TerminalDefinition {
   capabilities?: string[]
 }
 
-export type ComponentCategory =
-  | 'layout'
-  | 'board'
-  | 'actuator'
-  | 'sensor'
-  | 'display'
-  | 'passive'
-  | 'input'
+/**
+ * Studio tray / UI grouping for catalog parts.
+ * Distinct from `project.board`, which is the firmware target (dev board profile).
+ */
+export type ComponentGroup =
+  | 'microcontrollers'
+  | 'breadboards'
+  | 'inputs'
+  | 'displays'
+  | 'sensors'
+  | 'actuators'
+  | 'passives'
 
 export interface ComponentDefinition {
   id: ComponentTypeId
   name: string
-  category: ComponentCategory
+  /** Tray section in Studio (e.g. microcontrollers, sensors). */
+  group: ComponentGroup
   terminals: TerminalDefinition[]
+}
+
+/** One section of the component tray for Studio UI. */
+export interface CatalogTraySection {
+  group: ComponentGroup
+  label: string
+  parts: ComponentDefinition[]
 }
 
 export interface ComponentInstance {

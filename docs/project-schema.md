@@ -110,13 +110,29 @@ Wires are 3D polylines for rendering. Each wire belongs to exactly one net.
 
 Catalog entries describe part **types** (terminals, electrical kinds). Projects only reference `type` ids.
 
+Each part has a **`group`** for the Studio tray (not the same as `project.board`):
+
+| Group | Examples |
+|-------|----------|
+| `breadboards` | Full breadboard |
+| `microcontrollers` | ESP32 DevKit, Arduino UNO |
+| `sensors` | HC-SR04, BME280 |
+| `displays` | LCD 1602 I2C |
+| `inputs` | Push button |
+| `actuators` | SG90 servo |
+| `passives` | LED, resistors |
+
+Tray UI: `listCatalogGrouped()` in `src/lib/project/catalog-groups.ts`.
+
 Terminal kinds include: `power_in`, `power_out`, `ground`, `gpio`, `analog_in`, `i2c_sda`, `i2c_scl`, `uart_tx`, `uart_rx`, `passive`, etc.
 
 See `src/lib/project/catalog.ts` for shipped definitions.
 
-## Board profile
+## Board profile (`project.board`)
 
-`board` selects pin capabilities for the MCU instance (GPIO names, default I2C pins, voltage). See `src/lib/project/boards.ts`.
+`project.board` is the **firmware target** (which dev board you compile for), e.g. `esp32-devkit-v1`. It is not a tray group.
+
+Pin maps and voltage live in `src/lib/project/boards.ts`. The same id may appear as a **microcontrollers** part on the canvas and as `project.board`.
 
 ## Example files
 

@@ -4,13 +4,13 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'breadboard-full': {
     id: 'breadboard-full',
     name: 'Full breadboard',
-    category: 'layout',
+    group: 'breadboards',
     terminals: [],
   },
   'esp32-devkit-v1': {
     id: 'esp32-devkit-v1',
     name: 'ESP32 DevKit V1',
-    category: 'board',
+    group: 'microcontrollers',
     terminals: [
       { id: 'VIN', kind: 'power_in', voltage: 5, label: 'VIN' },
       { id: '3V3', kind: 'power_out', voltage: 3.3, label: '3V3' },
@@ -29,7 +29,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'arduino-uno': {
     id: 'arduino-uno',
     name: 'Arduino UNO',
-    category: 'board',
+    group: 'microcontrollers',
     terminals: [
       { id: '5V', kind: 'power_out', voltage: 5 },
       { id: '3V3', kind: 'power_out', voltage: 3.3 },
@@ -42,7 +42,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'led-5mm': {
     id: 'led-5mm',
     name: 'LED 5mm',
-    category: 'passive',
+    group: 'passives',
     terminals: [
       { id: 'anode', kind: 'passive', label: '+' },
       { id: 'cathode', kind: 'passive', label: '-' },
@@ -51,7 +51,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'resistor-220': {
     id: 'resistor-220',
     name: 'Resistor 220Ω',
-    category: 'passive',
+    group: 'passives',
     terminals: [
       { id: 'pin1', kind: 'passive' },
       { id: 'pin2', kind: 'passive' },
@@ -60,7 +60,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'resistor-1k': {
     id: 'resistor-1k',
     name: 'Resistor 1kΩ',
-    category: 'passive',
+    group: 'passives',
     terminals: [
       { id: 'pin1', kind: 'passive' },
       { id: 'pin2', kind: 'passive' },
@@ -69,7 +69,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'resistor-2k': {
     id: 'resistor-2k',
     name: 'Resistor 2kΩ',
-    category: 'passive',
+    group: 'passives',
     terminals: [
       { id: 'pin1', kind: 'passive' },
       { id: 'pin2', kind: 'passive' },
@@ -78,7 +78,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'push-button': {
     id: 'push-button',
     name: 'Push button',
-    category: 'input',
+    group: 'inputs',
     terminals: [
       { id: 'pin1', kind: 'passive' },
       { id: 'pin2', kind: 'passive' },
@@ -87,7 +87,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'hc-sr04': {
     id: 'hc-sr04',
     name: 'HC-SR04 ultrasonic',
-    category: 'sensor',
+    group: 'sensors',
     terminals: [
       { id: 'VCC', kind: 'power_in', voltage: 5 },
       { id: 'TRIG', kind: 'gpio', capabilities: ['digital'] },
@@ -98,7 +98,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'bme280': {
     id: 'bme280',
     name: 'BME280',
-    category: 'sensor',
+    group: 'sensors',
     terminals: [
       { id: 'VCC', kind: 'power_in', voltage: 3.3 },
       { id: 'GND', kind: 'ground' },
@@ -109,7 +109,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'servo-sg90': {
     id: 'servo-sg90',
     name: 'SG90 servo',
-    category: 'actuator',
+    group: 'actuators',
     terminals: [
       { id: 'VCC', kind: 'power_in', voltage: 5 },
       { id: 'GND', kind: 'ground' },
@@ -119,7 +119,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'lcd-1602-i2c': {
     id: 'lcd-1602-i2c',
     name: 'LCD 1602 (I2C)',
-    category: 'display',
+    group: 'displays',
     terminals: [
       { id: 'VCC', kind: 'power_in', voltage: 5 },
       { id: 'GND', kind: 'ground' },

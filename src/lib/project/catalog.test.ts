@@ -9,7 +9,7 @@ describe('component catalog', () => {
   it('getComponentDefinition returns ESP32 with GPIO terminals', () => {
     const def = getComponentDefinition('esp32-devkit-v1')
     expect(def.id).toBe('esp32-devkit-v1')
-    expect(def.category).toBe('board')
+    expect(def.group).toBe('microcontrollers')
     expect(def.terminals.some((t) => t.id === 'IO13')).toBe(true)
   })
 })

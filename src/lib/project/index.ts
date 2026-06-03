@@ -1,5 +1,6 @@
 export * from './types'
 export * from './vec3'
 export * from './catalog'
+export * from './catalog-groups'
 export * from './boards'
 export * from './io'

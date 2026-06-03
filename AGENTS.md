@@ -49,3 +49,7 @@ linear-gradient(135deg, #F05F8D 0%, #D6336C 50%, #A61E4D 100%)
 - Keep typography bold and highly legible.
 - Use pink as the main action color and green only as a leaf/status accent.
 - Keep copy practical and builder-focused.
+
+## Build Plan
+
+Implementation order and checklists live in **[BUILD_PLAN.md](./BUILD_PLAN.md)**. Prefer the current phase there before adding features from later phases. Update checkboxes and **Current phase** when a stage is done.

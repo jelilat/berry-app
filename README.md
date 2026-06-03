@@ -4,6 +4,10 @@
 
 Berry helps builders go from an idea to working hardware with AI-guided wiring, code generation, debugging, and deployment support.
 
+## Build Plan
+
+Track implementation progress in **[BUILD_PLAN.md](./BUILD_PLAN.md)** — phased checklist from project model → Studio → validation → simulation → deploy → AI orchestration.
+
 ## Brand Snapshot
 
 - Name: `berry.`
@@ -44,4 +48,5 @@ pnpm typecheck
 
 ## Notes For Future Agents
 
-Use `AGENTS.md` and `.cursor/rules/berry-brand.mdc` before changing product copy, brand colors, or core UI direction.
+- **Build order:** follow [BUILD_PLAN.md](./BUILD_PLAN.md); check off tasks as stages complete.
+- **Brand & copy:** use `AGENTS.md` and `.cursor/rules/berry-brand.mdc` before changing product voice, colors, or core UI direction.

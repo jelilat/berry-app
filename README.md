@@ -8,6 +8,8 @@ Berry helps builders go from an idea to working hardware with AI-guided wiring, 
 
 Track implementation progress in **[BUILD_PLAN.md](./BUILD_PLAN.md)** — phased checklist from project model → Studio → validation → simulation → deploy → AI orchestration.
 
+Project JSON format (3D-native, 2D uses xy): **[docs/project-schema.md](./docs/project-schema.md)**.
+
 ## Brand Snapshot
 
 - Name: `berry.`
@@ -37,6 +39,15 @@ pnpm dev
 
 Then open [http://localhost:3000](http://localhost:3000).
 
+## Testing
+
+Unit tests use [Vitest](https://vitest.dev/) for the project model (`src/lib/project/`).
+
+```bash
+pnpm test        # watch mode
+pnpm test:run    # single run (CI)
+```
+
 ## Scripts
 
 ```bash
@@ -44,6 +55,7 @@ pnpm dev
 pnpm build
 pnpm lint
 pnpm typecheck
+pnpm test:run
 ```
 
 ## Notes For Future Agents

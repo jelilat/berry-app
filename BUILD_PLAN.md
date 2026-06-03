@@ -4,7 +4,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Product goal:** Talk to AI → design in Studio → validate wiring → simulate firmware → deploy the same build to a real device.
 
-**Current phase:** Phase 0 — Foundation
+**Current phase:** Phase 1 — Studio (2D)
 
 **Last updated:** 2026-06-03
 
@@ -26,7 +26,7 @@ flowchart TD
   G --> F
 ```
 
-**Principle:** One canonical `project.json` graph is the source of truth for Studio, validation, codegen, simulation, deploy, and AI tools.
+**Principle:** One canonical `project.json` is the source of truth. The format is **3D-native** (`xyz` on positions and wire points); 2D Studio uses **x/y only** (`z: 0`). See [docs/project-schema.md](./docs/project-schema.md).
 
 ---
 
@@ -35,8 +35,8 @@ flowchart TD
 | Phase | Name | Status |
 |-------|------|--------|
 | — | Repo bootstrap & brand | Done |
-| 0 | Foundation | In progress |
-| 1 | Studio 2D | Not started |
+| 0 | Foundation | Done |
+| 1 | Studio 2D | In progress |
 | 2 | Functional wiring / validation | Not started |
 | 3 | Codegen + compile | Not started |
 | 4 | Simulation | Not started |
@@ -59,13 +59,14 @@ flowchart TD
 
 **Outcome:** Serializable project model and starter component catalog. No canvas yet.
 
-- [ ] Define `Project` schema (components, nets, metadata, target board)
-- [ ] Define `ComponentDefinition` schema (pins, kinds, voltage, protocols)
-- [ ] Define `Net` / wire model (shared electrical node, not just canvas lines)
-- [ ] Ship starter catalog (10–20 parts: ESP32 devkit, UNO, LED, resistor, button, BME280, etc.)
-- [ ] Project import/export JSON (save/load)
-- [ ] Board profiles (pin maps per board variant)
-- [ ] Document schema in `docs/` or inline types + examples
+- [x] Define `BerryProject` schema (3D transforms, components, nets, wires, metadata, board)
+- [x] Define `ComponentDefinition` schema (terminals, kinds, voltage, capabilities)
+- [x] Define `Net` + `Wire` model (electrical nets + 3D wire polylines)
+- [x] Ship starter catalog (ESP32, UNO, breadboard, LED, resistors, HC-SR04, BME280, servo, LCD, button)
+- [x] Project import/export JSON (`src/lib/project/io.ts`)
+- [x] Board profiles (`esp32-devkit-v1`, `arduino-uno`)
+- [x] Document schema in `docs/project-schema.md` + `examples/esp32-led-blink.project.json`
+- [x] Unit tests for `src/lib/project/` (`pnpm test:run`)
 
 **Exit criteria:** Can hand-write or generate a valid `project.json` and load it without Studio UI.
 
@@ -223,7 +224,7 @@ flowchart TD
 ## Suggested code layout (as phases land)
 
 ```
-src/lib/project/       # Phase 0 — schemas, catalog
+src/lib/project/       # Phase 0 — schemas, catalog (done)
 src/lib/validation/    # Phase 2 — rule engine
 src/components/studio/ # Phase 1 — canvas UI
 src/server/tools/      # Phases 3–6 — build, sim, deploy APIs
@@ -237,3 +238,4 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | Date | Change |
 |------|--------|
 | 2026-06-03 | Initial build plan from product brainstorm |
+| 2026-06-03 | Phase 0: 3D-native project schema, catalog, boards, io, example |

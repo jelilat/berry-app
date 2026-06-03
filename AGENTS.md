@@ -53,3 +53,11 @@ linear-gradient(135deg, #F05F8D 0%, #D6336C 50%, #A61E4D 100%)
 ## Build Plan
 
 Implementation order and checklists live in **[BUILD_PLAN.md](./BUILD_PLAN.md)**. Prefer the current phase there before adding features from later phases. Update checkboxes and **Current phase** when a stage is done.
+
+## Project format
+
+Hardware projects use **3D-native JSON** (`position` and wire `points` are `{ x, y, z }`). 2D Studio edits **x/y only**; keep `z: 0` until 3D view ships. Schema: **[docs/project-schema.md](./docs/project-schema.md)**. Types: `src/lib/project/`.
+
+## Code style
+
+- Add a JSDoc comment to **every function** (purpose, params, throws when relevant). Keep inline comments for non-obvious logic only.

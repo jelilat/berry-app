@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "board": "esp32-devkit-v1",
+  "metadata": {
+    "name": "ESP32 LED blink",
+    "description": "Minimal 3D-native project. 2D Studio uses x/y only; z stays 0."
+  },
+  "components": [
+    {
+      "id": "breadboard_1",
+      "type": "breadboard-full",
+      "transform": {
+        "position": { "x": 0, "y": 0, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "esp32_1",
+      "type": "esp32-devkit-v1",
+      "parent": "breadboard_1",
+      "anchor": "center",
+      "transform": {
+        "position": { "x": 0.04, "y": 0.03, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "resistor_1",
+      "type": "resistor-220",
+      "parent": "breadboard_1",
+      "transform": {
+        "position": { "x": 0.14, "y": 0.05, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 90 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "led_1",
+      "type": "led-5mm",
+      "parent": "breadboard_1",
+      "transform": {
+        "position": { "x": 0.18, "y": 0.05, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": "net_gnd",
+      "terminals": [
+        { "component": "esp32_1", "terminal": "GND_R" },
+        { "component": "led_1", "terminal": "cathode" }
+      ]
+    },
+    {
+      "id": "net_gpio_led",
+      "terminals": [
+        { "component": "esp32_1", "terminal": "IO13" },
+        { "component": "resistor_1", "terminal": "pin1" }
+      ]
+    },
+    {
+      "id": "net_led_anode",
+      "terminals": [
+        { "component": "resistor_1", "terminal": "pin2" },
+        { "component": "led_1", "terminal": "anode" }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "wire_gnd",
+      "net": "net_gnd",
+      "color": "black",
+      "points": [
+        { "x": 0.08, "y": 0.04, "z": 0 },
+        { "x": 0.16, "y": 0.04, "z": 0 },
+        { "x": 0.18, "y": 0.05, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_signal",
+      "net": "net_gpio_led",
+      "color": "yellow",
+      "points": [
+        { "x": 0.08, "y": 0.06, "z": 0 },
+        { "x": 0.14, "y": 0.05, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_led",
+      "net": "net_led_anode",
+      "color": "red",
+      "points": [
+        { "x": 0.15, "y": 0.05, "z": 0 },
+        { "x": 0.18, "y": 0.05, "z": 0 }
+      ]
+    }
+  ]
+}

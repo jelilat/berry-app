@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "lucide-react": "latest",
@@ -24,7 +26,8 @@
     "eslint-config-next": "14.2.35",
     "postcss": "latest",
     "tailwindcss": "3.4.19",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "^4.1.8"
   },
   "engines": {
     "node": ">=18"

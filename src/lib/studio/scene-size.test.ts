@@ -2,25 +2,32 @@ import { describe, expect, it } from 'vitest'
 import { catalogSceneSize, sceneSizeFromPhysicalMm } from './scene-size'
 
 describe('catalogSceneSize', () => {
-  it('keeps tiny passives large enough to edit on the 2D bench', () => {
-    const physicalLed = sceneSizeFromPhysicalMm('led-5mm')
-    const editableLed = catalogSceneSize('led-5mm')
-    const editableResistor = catalogSceneSize('resistor-220')
-
-    expect(editableLed.w).toBeGreaterThan(physicalLed.w)
-    expect(editableLed.w).toBeGreaterThanOrEqual(0.06)
-    expect(editableLed.h).toBeGreaterThanOrEqual(0.072)
-    expect(editableResistor.w).toBeGreaterThanOrEqual(0.12)
-    expect(editableResistor.h).toBeGreaterThanOrEqual(0.032)
+  it('keeps normal non-Wokwi parts at physical scale', () => {
+    expect(catalogSceneSize('bme280')).toEqual(sceneSizeFromPhysicalMm('bme280'))
   })
 
-  it('keeps ESP32 dev boards large enough beside Arduino boards', () => {
+  it('gives tiny loose parts a modest interaction floor', () => {
+    const physicalLed = sceneSizeFromPhysicalMm('led-5mm')
+    const led = catalogSceneSize('led-5mm')
+    const resistor = catalogSceneSize('resistor-220')
+
+    expect(led.w).toBeGreaterThan(physicalLed.w)
+    expect(led.w).toBeCloseTo(0.028)
+    expect(led.h).toBeCloseTo(0.04)
+    expect(resistor.w).toBeCloseTo(0.08)
+    expect(resistor.h).toBeCloseTo(0.018)
+  })
+
+  it('orients Wokwi boards to their native visual orientation without inflating them', () => {
     const esp32 = catalogSceneSize('esp32-devkit-v1')
     const arduino = catalogSceneSize('arduino-uno')
+    const breadboard = catalogSceneSize('breadboard-full')
 
-    expect(esp32.w).toBeGreaterThanOrEqual(0.12)
-    expect(esp32.h).toBeGreaterThanOrEqual(0.22)
-    expect(esp32.h).toBeGreaterThan(arduino.h)
+    expect(esp32.w).toBeCloseTo(sceneSizeFromPhysicalMm('esp32-devkit-v1').h)
+    expect(esp32.h).toBeCloseTo(sceneSizeFromPhysicalMm('esp32-devkit-v1').w)
+    expect(esp32.h).toBeLessThan(breadboard.w / 3)
+    expect(arduino.w).toBeCloseTo(sceneSizeFromPhysicalMm('arduino-uno').w)
+    expect(arduino.h).toBeCloseTo(sceneSizeFromPhysicalMm('arduino-uno').h)
   })
 
   it('preserves board-scale footprints for large parts', () => {

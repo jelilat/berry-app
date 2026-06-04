@@ -2,7 +2,13 @@
 
 import { useViewport } from '@xyflow/react'
 import { orthogonalWireRoute } from '@/lib/project/wire-route'
-import type { WireDraftState } from '@/lib/studio/wire-draft'
+
+/** Minimal draft shape needed to render a live wire route. */
+interface WireDraftOverlayState {
+  startPx: { x: number; y: number }
+  cursorPx: { x: number; y: number }
+  hoverTargetPx: { x: number; y: number } | null
+}
 
 /**
  * Live wire preview while dragging from an SVG pin to a target.
@@ -13,7 +19,7 @@ export function WireDraftOverlay({
   draft,
   color,
 }: {
-  draft: WireDraftState | null
+  draft: WireDraftOverlayState | null
   color: string
 }) {
   const { x, y, zoom } = useViewport()
@@ -37,7 +43,7 @@ export function WireDraftOverlay({
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeDasharray={draft.hoverTarget ? undefined : '6 4'}
+          strokeDasharray={draft.hoverTargetPx ? undefined : '6 4'}
           opacity={0.92}
         />
       </g>

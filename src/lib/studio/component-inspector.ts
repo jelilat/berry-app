@@ -1,6 +1,7 @@
 import { formatBreadboardSite } from '@/lib/project/breadboard'
 import { getComponentDefinition } from '@/lib/project/catalog'
 import { COMPONENT_GROUP_LABELS } from '@/lib/project/catalog-groups'
+import { canManuallyEditTerminalSites } from '@/lib/project/mutations'
 import {
   componentSceneDimensions,
   normalizeRotationZ,
@@ -25,6 +26,8 @@ export interface ComponentPinRow {
   kind: TerminalKind
   displayKind: string
   hole: string | null
+  holeInput: string | null
+  canEditHole: boolean
   netId: string | null
   peers: PinNetPeer[]
   wireIds: string[]
@@ -157,6 +160,8 @@ export function buildComponentInspectorModel(
       kind: term.kind,
       displayKind: terminalKindLabel(term.kind),
       hole: site ? formatBreadboardSite(site) : null,
+      holeInput: site?.kind === 'hole' ? `${site.row}${site.column}` : null,
+      canEditHole: canManuallyEditTerminalSites(instance) && !!instance.parent,
       netId: net?.id ?? null,
       peers,
       wireIds,

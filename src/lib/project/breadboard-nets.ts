@@ -1,11 +1,18 @@
 import { getComponentDefinition } from './catalog'
 import {
+  BREADBOARD_COLUMNS,
+  BREADBOARD_ROWS_BOTTOM,
+  BREADBOARD_ROWS_TOP,
+  breadboardHole,
   breadboardTieKey,
+  formatBreadboardSite,
   sitesShareTie,
   type BreadboardPlacement,
   type BreadboardSite,
 } from './breadboard'
 import type { BerryProject, ComponentInstance, Net, NetTerminal } from './types'
+import { componentSceneDimensions } from './terminal-layout'
+import { holeScenePosition } from '@/lib/studio/breadboard-layout'
 
 /** A terminal reference with optional breadboard hole. */
 export interface ResolvedNetEndpoint {
@@ -178,6 +185,149 @@ function getTerminalSite(
 }
 
 /**
+ * Stable key for a physical breadboard site (exact hole or rail strip).
+ * @param site Hole or rail site on the board.
+ */
+export function breadboardPhysicalSiteKey(site: BreadboardSite): string {
+  return site.kind === 'hole'
+    ? `hole:${site.block}:${site.row}:${site.column}`
+    : breadboardTieKey(site)
+}
+
+/**
+ * Map occupied breadboard sites to `componentId:terminalId` (excluding one part when dragging).
+ * @param project Berry project.
+ * @param breadboardId Breadboard instance id.
+ * @param excludeComponentId Optional instance to omit (e.g. the part being moved).
+ */
+export function collectOccupiedBreadboardSites(
+  project: BerryProject,
+  breadboardId: string,
+  excludeComponentId?: string,
+): Map<string, string> {
+  const occupied = new Map<string, string>()
+  const breadboard = project.components.find((c) => c.id === breadboardId)
+  if (!breadboard || breadboard.type !== 'breadboard-full') return occupied
+
+  for (const inst of project.components) {
+    if (inst.parent !== breadboardId) continue
+    if (excludeComponentId && inst.id === excludeComponentId) continue
+
+    for (const [terminalId, site] of Object.entries(inst.placement?.sites ?? {})) {
+      occupied.set(breadboardPhysicalSiteKey(site), `${inst.id}:${terminalId}`)
+    }
+
+    for (const site of coveredBreadboardHoles(breadboard, inst)) {
+      const key = breadboardPhysicalSiteKey(site)
+      if (!occupied.has(key)) occupied.set(key, `${inst.id} body`)
+    }
+  }
+  return occupied
+}
+
+/**
+ * Main-grid holes physically covered by a placed component's scene footprint.
+ * @param breadboard Breadboard instance.
+ * @param instance Component sitting on the breadboard.
+ */
+export function coveredBreadboardHoles(
+  breadboard: ComponentInstance,
+  instance: ComponentInstance,
+): BreadboardSite[] {
+  const rotationZ = instance.transform.rotation?.z ?? 0
+  const box = componentSceneDimensions(instance.type, rotationZ)
+  const x1 = instance.transform.position.x
+  const y1 = instance.transform.position.y
+  const x2 = x1 + box.w
+  const y2 = y1 + box.h
+  const sites: BreadboardSite[] = []
+
+  const rows = [...BREADBOARD_ROWS_TOP, ...BREADBOARD_ROWS_BOTTOM]
+  for (const row of rows) {
+    for (let column = 1; column <= BREADBOARD_COLUMNS; column++) {
+      const site = breadboardHole(row, column)
+      const center = holeScenePosition(
+        breadboard.transform.position.x,
+        breadboard.transform.position.y,
+        row,
+        column,
+      )
+      if (center.x >= x1 && center.x <= x2 && center.y >= y1 && center.y <= y2) {
+        sites.push(site)
+      }
+    }
+  }
+
+  return sites
+}
+
+/**
+ * First conflict caused by a component footprint covering occupied breadboard holes.
+ * @param project Berry project.
+ * @param breadboardId Breadboard instance id.
+ * @param instance Candidate component placement.
+ * @param excludeComponentId Optional instance to omit from existing occupancy.
+ */
+export function describeFootprintHoleConflict(
+  project: BerryProject,
+  breadboardId: string,
+  instance: ComponentInstance,
+  excludeComponentId?: string,
+): string | null {
+  const breadboard = project.components.find((c) => c.id === breadboardId)
+  if (!breadboard || breadboard.type !== 'breadboard-full') return null
+
+  const occupied = collectOccupiedBreadboardSites(
+    project,
+    breadboardId,
+    excludeComponentId,
+  )
+
+  for (const site of coveredBreadboardHoles(breadboard, instance)) {
+    const existing = occupied.get(breadboardPhysicalSiteKey(site))
+    if (existing) return `${formatBreadboardSite(site)} is covered by ${existing}`
+  }
+
+  return null
+}
+
+/**
+ * First occupancy conflict when placing legs on a breadboard, or null if clear.
+ * @param project Berry project.
+ * @param breadboardId Breadboard instance id.
+ * @param placement Proposed terminal sites.
+ * @param excludeComponentId Optional instance to omit from existing occupancy.
+ */
+export function describePlacementHoleConflict(
+  project: BerryProject,
+  breadboardId: string,
+  placement: BreadboardPlacement,
+  excludeComponentId?: string,
+): string | null {
+  const occupied = collectOccupiedBreadboardSites(
+    project,
+    breadboardId,
+    excludeComponentId,
+  )
+  const usedInPlacement = new Map<string, string>()
+
+  for (const [terminalId, site] of Object.entries(placement.sites)) {
+    const key = breadboardPhysicalSiteKey(site)
+    const existing = occupied.get(key)
+    if (existing) {
+      const label = formatBreadboardSite(site)
+      return `${label} is already used by ${existing}`
+    }
+    const duplicate = usedInPlacement.get(key)
+    if (duplicate) {
+      return `Two pins cannot share ${formatBreadboardSite(site)}`
+    }
+    usedInPlacement.set(key, terminalId)
+  }
+  return null
+}
+
+/**
  * List duplicate hole assignments on one breadboard (two legs in same hole).
  * @param project Berry project.
  * @param breadboardId Breadboard instance id.
@@ -187,13 +337,11 @@ export function findHoleOccupancyConflicts(
   breadboardId: string,
 ): string[] {
   const holeUsers = new Map<string, string[]>()
-  const key = (s: BreadboardSite) =>
-    s.kind === 'hole' ? `hole:${s.block}:${s.row}:${s.column}` : breadboardTieKey(s)
 
   for (const inst of project.components) {
     if (inst.parent !== breadboardId || !inst.placement?.sites) continue
     for (const [terminalId, site] of Object.entries(inst.placement.sites)) {
-      const k = key(site)
+      const k = breadboardPhysicalSiteKey(site)
       const users = holeUsers.get(k) ?? []
       users.push(`${inst.id}:${terminalId}`)
       holeUsers.set(k, users)

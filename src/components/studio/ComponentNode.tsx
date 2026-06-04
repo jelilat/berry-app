@@ -3,6 +3,7 @@
 import { memo, useCallback, useMemo, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { ComponentNodeData } from '@/lib/studio/flow-map'
+import type { ComponentTypeId } from '@/lib/project/types'
 import { WOKWI_SELECTION_OUTLINE } from '@/lib/studio/wokwi-connect-ui'
 import { getWokwiVisual } from '@/lib/studio/wokwi-map'
 import { usePartDrag } from './use-part-drag'
@@ -48,15 +49,21 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
     baseWidth,
     baseHeight,
     rotationZ,
+    placementDriven,
     onPinWireStart,
     onPinWireTarget,
     onVisualPinLayout,
     onPartDragEnd,
+    onPartDragMove,
     typeId,
   } = d
 
-  const visual = getWokwiVisual(typeId)
-  const { onPartPointerDown } = usePartDrag(d.instanceId, onPartDragEnd ?? (() => {}))
+  const visual = placementDriven ? null : getWokwiVisual(typeId)
+  const { onPartPointerDown } = usePartDrag(
+    d.instanceId,
+    onPartDragEnd ?? (() => {}),
+    onPartDragMove,
+  )
 
   const [wokwiPinLayout, setWokwiPinLayout] = useState<Record<string, { x: number; y: number }> | null>(
     null,
@@ -65,11 +72,12 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
 
   const handlePinLayout = useCallback(
     (layout: Record<string, { x: number; y: number }>) => {
+      if (placementDriven) return
       if (Object.keys(layout).length === 0) return
       setWokwiPinLayout((prev) => ({ ...terminalLayout, ...prev, ...layout }))
       onVisualPinLayout?.(d.instanceId, layout)
     },
-    [d.instanceId, onVisualPinLayout, terminalLayout],
+    [d.instanceId, onVisualPinLayout, placementDriven, terminalLayout],
   )
 
   const layout = useMemo(
@@ -77,7 +85,7 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
     [terminalLayout, wokwiPinLayout],
   )
 
-  const rot = rotationZ ?? 0
+  const rot = placementDriven ? 0 : rotationZ ?? 0
   const connectedTerminals = useMemo(
     () => new Set(connectedTerminalIds),
     [connectedTerminalIds],
@@ -87,7 +95,7 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
   const pinHit = isBoard ? PIN_HIT_BOARD : PIN_HIT_DEFAULT
 
   const selectionRing =
-    selected && !visual && !isBreadboard
+    selected && !visual && !isBreadboard && !placementDriven
       ? '0 0 0 2px rgba(214,51,108,0.35)'
       : selected && isBreadboard
         ? 'inset 0 0 0 2px rgba(214,51,108,0.45)'
@@ -121,6 +129,15 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
             height={baseHeight}
             fit
             onPinLayout={handlePinLayout}
+          />
+        ) : placementDriven ? (
+          <FlexiblePlacementArt
+            typeId={typeId}
+            label={d.label}
+            width={baseWidth}
+            height={baseHeight}
+            layout={layout}
+            terminals={terminals}
           />
         ) : (
           <div
@@ -166,7 +183,11 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
           const left = rel.x * baseWidth
           const top = rel.y * baseHeight
           const connected = connectedTerminals.has(term.id)
-          const pinState = pinVisualState(connected, null, hoveredPin === term.id)
+          const pinState = pinVisualState(
+            connected,
+            null,
+            hoveredPin === term.id,
+          )
 
           return (
             <div key={term.id}>
@@ -219,6 +240,78 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
         })}
       </div>
     </div>
+  )
+}
+
+/**
+ * Draw a flexible two-terminal part between its actual breadboard hole endpoints.
+ * @param props Placement-driven art props.
+ */
+function FlexiblePlacementArt({
+  typeId,
+  label,
+  width,
+  height,
+  layout,
+  terminals,
+}: {
+  typeId: ComponentTypeId
+  label: string
+  width: number
+  height: number
+  layout: Record<string, { x: number; y: number }>
+  terminals: { id: string; label: string; kind: string }[]
+}) {
+  const points = terminals
+    .map((terminal) => layout[terminal.id])
+    .filter((point): point is { x: number; y: number } => Boolean(point))
+    .map((point) => ({ x: point.x * width, y: point.y * height }))
+  const [a, b] = points
+  if (!a || !b) {
+    return <FallbackPartArt type={typeId} size={Math.min(width, height) * 0.85} />
+  }
+
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const distance = Math.hypot(dx, dy)
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+  const cx = (a.x + b.x) / 2
+  const cy = (a.y + b.y) / 2
+  const isResistor = typeId.startsWith('resistor-')
+  const isLed = typeId === 'led-5mm'
+  const bodyLength = Math.max(18, Math.min(distance * 0.42, 42))
+  const bodyRadius = isLed ? 8 : 6
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-label={label}>
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#a8a8a8" strokeWidth="3" strokeLinecap="round" />
+      {isLed ? (
+        <g transform={`translate(${cx} ${cy}) rotate(${angle})`}>
+          <circle cx="0" cy="0" r={bodyRadius} fill="#f05f8d" stroke="#a61e4d" strokeWidth="1.5" />
+          <rect x="-1.5" y={-bodyRadius} width="3" height={bodyRadius * 2} fill="rgba(255,255,255,0.28)" />
+        </g>
+      ) : (
+        <g transform={`translate(${cx} ${cy}) rotate(${angle})`}>
+          <rect
+            x={-bodyLength / 2}
+            y={-bodyRadius}
+            width={bodyLength}
+            height={bodyRadius * 2}
+            rx={bodyRadius}
+            fill={isResistor ? '#d6c2a0' : '#f5f3ef'}
+            stroke="#9f8c70"
+            strokeWidth="1"
+          />
+          {isResistor && (
+            <>
+              <rect x={-bodyLength / 4 - 1.5} y={-bodyRadius} width="3" height={bodyRadius * 2} fill="#ef4444" />
+              <rect x="-1.5" y={-bodyRadius} width="3" height={bodyRadius * 2} fill="#ef4444" />
+              <rect x={bodyLength / 4 - 1.5} y={-bodyRadius} width="3" height={bodyRadius * 2} fill="#8b5a2b" />
+            </>
+          )}
+        </g>
+      )}
+    </svg>
   )
 }
 

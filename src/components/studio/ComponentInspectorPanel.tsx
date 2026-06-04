@@ -7,8 +7,9 @@ import {
   INSPECTOR_WIDTH_MIN,
 } from '@/lib/studio/constants'
 import { useInspectorResizableWidth } from '@/lib/studio/use-resizable-width'
+import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
 import { getComponentDefinition } from '@/lib/project/catalog'
-import type { BerryProject } from '@/lib/project/types'
+import type { BerryProject, BreadboardSite } from '@/lib/project/types'
 import {
   buildComponentInspectorModel,
   formatCanvasCoordinate,
@@ -27,12 +28,14 @@ export function ComponentInspectorPanel({
   onClose,
   onRotate,
   onPositionChange,
+  onPinSiteChange,
 }: {
   project: BerryProject
   componentId: string
   onClose: () => void
   onRotate: (deltaDegrees: number) => void
   onPositionChange: (x: number, y: number) => void
+  onPinSiteChange: (terminalId: string, site: BreadboardSite) => void
 }) {
   const model = useMemo(
     () => buildComponentInspectorModel(project, componentId),
@@ -66,6 +69,16 @@ export function ComponentInspectorPanel({
   const startEditPosition = () => {
     setPosX(sceneXCm)
     setPosY(sceneYCm)
+  }
+
+  /**
+   * Commit a compact hole label for one editable terminal.
+   * @param terminalId Terminal id being edited.
+   * @param value Compact breadboard hole label, e.g. `a30`.
+   */
+  const commitPinHole = (terminalId: string, value: string) => {
+    if (!value.trim()) return
+    onPinSiteChange(terminalId, parseBreadboardHoleLabel(value))
   }
 
   const hasWokwi = hasWokwiVisual(model.typeId)
@@ -267,7 +280,28 @@ export function ComponentInspectorPanel({
                         {pin.label}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[9px]">
-                        {pin.hole ? (
+                        {pin.canEditHole ? (
+                          <input
+                            type="text"
+                            inputMode="text"
+                            defaultValue={pin.holeInput ?? ''}
+                            key={`${pin.terminalId}-${pin.holeInput ?? 'none'}`}
+                            onBlur={(e) => commitPinHole(pin.terminalId, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                commitPinHole(pin.terminalId, e.currentTarget.value)
+                                e.currentTarget.blur()
+                              }
+                            }}
+                            className="w-14 rounded-md px-1 py-0.5 text-right font-mono text-[9px] font-semibold uppercase"
+                            style={{
+                              background: 'var(--bg-elevated)',
+                              border: '1px solid var(--border)',
+                              color: 'var(--text-primary)',
+                            }}
+                            aria-label={`${pin.label} breadboard hole`}
+                          />
+                        ) : pin.hole ? (
                           <span style={{ color: 'var(--text-primary)' }}>{pin.hole}</span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>—</span>

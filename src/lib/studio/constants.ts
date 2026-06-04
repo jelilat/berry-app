@@ -4,9 +4,6 @@ export const STUDIO_STORAGE_KEY = 'berry-studio-project'
 /** Scene units → React Flow pixel scale. */
 export const SCENE_SCALE = 640
 
-/** Default snap grid (scene units); matches {@link SNAP_GRID} in mutations. */
-export const STUDIO_SNAP_GRID = 0.02
-
 /** React Flow node type id for catalog components. */
 export const COMPONENT_NODE_TYPE = 'berryComponent' as const
 

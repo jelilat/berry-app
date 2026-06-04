@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { getComponentDefinition } from '@/lib/project/catalog'
 import { catalogTerminalLayout } from '@/lib/studio/studio-terminal-layout'
 import { parseBerryProject } from '@/lib/project/io'
 import { PinLayoutRegistry } from '@/lib/studio/pin-layout-registry'
@@ -9,6 +10,13 @@ import { catalogSceneSize } from '@/lib/studio/scene-size'
 import { getWokwiVisual } from '@/lib/studio/wokwi-map'
 
 describe('wokwiBaselinePinLayout', () => {
+  it('maps every ESP32 catalog terminal to Wokwi pinInfo', () => {
+    const ids = getComponentDefinition('esp32-devkit-v1').terminals.map((t) => t.id)
+    const layout = wokwiBaselinePinLayout('esp32-devkit-v1', ids)
+    expect(layout).not.toBeNull()
+    expect(Object.keys(layout!)).toHaveLength(30)
+  })
+
   it('places ESP32 3V3 on the bottom-right and EN on the top-left', () => {
     const layout = wokwiBaselinePinLayout('esp32-devkit-v1', ['3V3', 'EN'])
     expect(layout).not.toBeNull()

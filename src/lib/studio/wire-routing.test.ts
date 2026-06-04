@@ -3,8 +3,10 @@ import { parseBerryProject } from '@/lib/project/io'
 import { connectTerminals, moveComponent } from '@/lib/project/mutations'
 import type { BerryProject } from '@/lib/project/types'
 import { PinLayoutRegistry } from '@/lib/studio/pin-layout-registry'
+import { breadboardHole } from '@/lib/project/breadboard'
 import {
   buildVisualWirePoints,
+  projectToLiveWireOverlay,
   rerouteWiresVisual,
   scenePositionOverridesFromNodes,
 } from '@/lib/studio/wire-routing'
@@ -44,7 +46,7 @@ describe('wire-routing', () => {
     const registry = new PinLayoutRegistry()
     registry.merge('led_1', { anode: { x: 0.2, y: 0.4 }, cathode: { x: 0.8, y: 0.4 } })
 
-    const moved = moveComponent(wired, 'led_1', 0.5, 0.3, { snap: false })
+    const moved = moveComponent(wired, 'led_1', 0.5, 0.3)
     const catalogPoints = moved.wires[0].points
     const visualPoints = rerouteWiresVisual(
       moved,
@@ -91,5 +93,39 @@ describe('wire-routing', () => {
       overrides,
     )
     expect(dragged.at(-1)!.x).toBeGreaterThan(atRest.at(-1)!.x)
+  })
+
+  it('uses stored scene points for breadboard jumpers', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'test' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0.1, y: 0.1, z: 0 } },
+        },
+      ],
+      nets: [],
+      wires: [],
+    })
+    const wired = connectTerminals(
+      project,
+      { breadboardId: 'breadboard_1', site: breadboardHole('a', 5) },
+      { breadboardId: 'breadboard_1', site: breadboardHole('e', 25) },
+      {
+        connectors: { start: 'male', end: 'male' },
+        points: [
+          { x: 0.11, y: 0.12, z: 0 },
+          { x: 0.4, y: 0.12, z: 0 },
+          { x: 0.4, y: 0.3, z: 0 },
+          { x: 0.2, y: 0.3, z: 0 },
+        ],
+      },
+    )
+    const overlay = projectToLiveWireOverlay(wired, new PinLayoutRegistry(), SCENE_SCALE)
+    expect(overlay[0].points).toHaveLength(4)
+    expect(overlay[0].points[1].x).toBeCloseTo(0.4 * SCENE_SCALE, 4)
   })
 })

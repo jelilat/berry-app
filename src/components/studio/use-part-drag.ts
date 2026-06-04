@@ -9,15 +9,17 @@ import { flowToScenePosition } from '@/lib/studio/layout'
  * Drag a bench part by its body (not pins) without using React Flow node dragging.
  * @param instanceId Component instance id matching the React Flow node id.
  * @param onDragEnd Called with new scene position when drag completes.
+ * @param onDragMove Optional callback with live scene position while dragging.
  */
 export function usePartDrag(
   instanceId: string,
   onDragEnd: (sceneX: number, sceneY: number) => void,
+  onDragMove?: (sceneX: number, sceneY: number) => void,
 ) {
   const { getNode, setNodes, screenToFlowPosition } = useReactFlow()
   const dragRef = useRef<{
     pointerId: number
-    startClient: { x: number; y: number }
+    startPointerFlow: { x: number; y: number }
     startFlow: { x: number; y: number }
   } | null>(null)
 
@@ -46,7 +48,7 @@ export function usePartDrag(
 
       dragRef.current = {
         pointerId: event.pointerId,
-        startClient: { x: event.clientX, y: event.clientY },
+        startPointerFlow: screenToFlowPosition({ x: event.clientX, y: event.clientY }),
         startFlow: { ...node.position },
       }
 
@@ -54,16 +56,19 @@ export function usePartDrag(
         const drag = dragRef.current
         if (!drag || e.pointerId !== drag.pointerId) return
 
-        const dx = e.clientX - drag.startClient.x
-        const dy = e.clientY - drag.startClient.y
+        const pointerFlow = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+        const dx = pointerFlow.x - drag.startPointerFlow.x
+        const dy = pointerFlow.y - drag.startPointerFlow.y
         const nextX = drag.startFlow.x + dx
         const nextY = drag.startFlow.y + dy
+        const scene = flowToScenePosition(nextX, nextY, SCENE_SCALE)
 
         setNodes((nodes) =>
           nodes.map((n) =>
             n.id === instanceId ? { ...n, position: { x: nextX, y: nextY } } : n,
           ),
         )
+        onDragMove?.(scene.x, scene.y)
       }
 
       const onUp = (e: PointerEvent) => {
@@ -76,7 +81,7 @@ export function usePartDrag(
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
     },
-    [endDrag, getNode, instanceId, setNodes],
+    [endDrag, getNode, instanceId, onDragMove, screenToFlowPosition, setNodes],
   )
 
   return { onPartPointerDown }

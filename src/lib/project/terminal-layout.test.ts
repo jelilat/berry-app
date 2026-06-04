@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getComponentDefinition } from './catalog'
 import {
+  componentSceneDimensions,
   terminalRelativeFromScenePoint,
   terminalScenePositionFromRel,
   terminalRelativePositions,
@@ -16,8 +17,9 @@ describe('terminalScenePositionFromRel', () => {
       { x: 0, y: 0 },
       90,
     )
+    const rotated = componentSceneDimensions('esp32-devkit-v1', 90)
 
-    expect(world.x).toBeCloseTo(0.22, 5)
+    expect(world.x).toBeCloseTo(rotated.w, 5)
     expect(world.y).toBeCloseTo(0, 5)
   })
 })

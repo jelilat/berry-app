@@ -7,29 +7,29 @@ const REF_SCENE_W = 0.42
 const REF_MM_W = 165
 const MM_TO_SCENE = REF_SCENE_W / REF_MM_W
 
-/** Minimum practical canvas footprints for tiny parts (scene units). */
-const EDITABLE_SCENE_SIZE: Partial<Record<ComponentTypeId, { w: number; h: number }>> = {
-  'esp32-devkit-v1': { w: 0.12, h: 0.22 },
-  'led-5mm': { w: 0.06, h: 0.072 },
-  'resistor-220': { w: 0.12, h: 0.032 },
-  'resistor-1k': { w: 0.12, h: 0.032 },
-  'resistor-2k': { w: 0.12, h: 0.032 },
+/** Minimum practical canvas footprints for tiny loose parts (scene units). */
+const INTERACTION_FLOOR_SCENE_SIZE: Partial<Record<ComponentTypeId, { w: number; h: number }>> = {
+  'led-5mm': { w: 0.028, h: 0.04 },
+  'resistor-220': { w: 0.08, h: 0.018 },
+  'resistor-1k': { w: 0.08, h: 0.018 },
+  'resistor-2k': { w: 0.08, h: 0.018 },
+  'push-button': { w: 0.04, h: 0.04 },
 }
 
 /**
- * Apply minimum edit-friendly dimensions without changing physical metadata.
+ * Apply a small interaction floor to tiny loose parts while leaving boards physical.
  * @param type Catalog component type.
  * @param size Physically derived scene footprint.
  */
-export function editableSceneSize(
+export function applyInteractionFloor(
   type: ComponentTypeId,
   size: { w: number; h: number },
 ): { w: number; h: number } {
-  const min = EDITABLE_SCENE_SIZE[type]
-  if (!min) return size
+  const floor = INTERACTION_FLOOR_SCENE_SIZE[type]
+  if (!floor) return size
   return {
-    w: Math.max(size.w, min.w),
-    h: Math.max(size.h, min.h),
+    w: Math.max(size.w, floor.w),
+    h: Math.max(size.h, floor.h),
   }
 }
 
@@ -44,7 +44,7 @@ export function sceneSizeFromPhysicalMm(type: ComponentTypeId): { w: number; h: 
 
 /**
  * Scene footprint aligned to Wokwi SVG aspect ratio (unrotated catalog box).
- * Uses physical mm on the long edge so the SVG fills the node without shrinking.
+ * Uses the real physical footprint, oriented to the Wokwi element's native bounds.
  * @param type Catalog component type.
  */
 export function sceneSizeForWokwiPart(type: ComponentTypeId): { w: number; h: number } {
@@ -53,18 +53,15 @@ export function sceneSizeForWokwiPart(type: ComponentTypeId): { w: number; h: nu
 
   const mm = getPhysicalDimensionsMm(type)
   const aspect = visual.nativeWidth / visual.nativeHeight
-  const longMm = Math.max(mm.width, mm.height)
-  const shortMm = Math.min(mm.width, mm.height)
-
   if (aspect >= 1) {
     return {
-      w: longMm * MM_TO_SCENE,
-      h: (longMm / aspect) * MM_TO_SCENE,
+      w: Math.max(mm.width, mm.height) * MM_TO_SCENE,
+      h: Math.min(mm.width, mm.height) * MM_TO_SCENE,
     }
   }
   return {
-    w: shortMm * MM_TO_SCENE,
-    h: longMm * MM_TO_SCENE,
+    w: Math.min(mm.width, mm.height) * MM_TO_SCENE,
+    h: Math.max(mm.width, mm.height) * MM_TO_SCENE,
   }
 }
 
@@ -73,10 +70,10 @@ export function sceneSizeForWokwiPart(type: ComponentTypeId): { w: number; h: nu
  * @param type Catalog component type.
  */
 export function catalogSceneSize(type: ComponentTypeId): { w: number; h: number } {
-  const physicalSize = getWokwiVisual(type)
+  const physical = getWokwiVisual(type)
     ? sceneSizeForWokwiPart(type)
     : sceneSizeFromPhysicalMm(type)
-  return editableSceneSize(type, physicalSize)
+  return applyInteractionFloor(type, physical)
 }
 
 /**

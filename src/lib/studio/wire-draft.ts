@@ -1,14 +1,17 @@
 import type { TerminalSelection } from '@/lib/studio/flow-map'
+import type { TerminalRef, WireEndpointRef } from '@/lib/project/mutations'
 
 /** In-progress drag from one pin toward another (or the cursor). */
 export interface WireDraftState {
-  from: TerminalSelection
+  from: WireEndpointRef
   startPx: { x: number; y: number }
   cursorPx: { x: number; y: number }
   /** Interaction mode: click-armed source or active drag. */
   mode?: 'armed' | 'dragging'
   /** Snap target pin under the pointer, if any. */
   hoverTarget: TerminalSelection | null
+  /** Actual endpoint to connect on drop (pin or bare breadboard hole). */
+  hoverEndpoint?: WireEndpointRef | null
   /** Canvas position of the hover target pin. */
   hoverTargetPx: { x: number; y: number } | null
 }
@@ -32,7 +35,7 @@ export function terminalFromPinElement(el: Element | null): TerminalSelection | 
  * @param b Second terminal.
  */
 export function sameTerminal(
-  a: TerminalSelection,
+  a: TerminalRef,
   b: TerminalSelection,
 ): boolean {
   return a.componentId === b.componentId && a.terminalId === b.terminalId

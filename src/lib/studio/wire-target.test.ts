@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { breadboardHole } from '@/lib/project/breadboard'
 import { parseBerryProject } from '@/lib/project/io'
 import type { BerryProject } from '@/lib/project/types'
 import { SCENE_SCALE } from './constants'
+import { holeBenchPosition } from './breadboard-snap'
 import { PinLayoutRegistry } from './pin-layout-registry'
 import { catalogTerminalLayout, terminalCanvasPosition } from './studio-terminal-layout'
-import { nearestWireTarget } from './wire-target'
+import { breadboardWireTargetAtPoint, nearestWireTarget } from './wire-target'
 
 /**
  * Build a tiny two-part project for target selection tests.
@@ -118,5 +120,33 @@ describe('nearestWireTarget', () => {
     expect(
       nearestWireTarget(project, { x: 900, y: 900 }, SCENE_SCALE, registry),
     ).toBeNull()
+  })
+
+  it('snaps to a breadboard hole under the cursor', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'breadboard target' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0.1, y: 0.1, z: 0 } },
+        },
+      ],
+      nets: [],
+      wires: [],
+    })
+    const breadboard = project.components[0]
+    const site = breadboardHole('a', 10)
+    const bench = holeBenchPosition(breadboard, site)
+
+    const hit = breadboardWireTargetAtPoint(
+      project,
+      { x: bench.x * SCENE_SCALE, y: bench.y * SCENE_SCALE },
+      SCENE_SCALE,
+    )
+
+    expect(hit?.target).toEqual({ breadboardId: 'breadboard_1', site })
   })
 })

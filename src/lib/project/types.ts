@@ -166,11 +166,21 @@ export type WireColor =
   | 'white'
   | string
 
-/** Component terminal endpoint for a visual wire route. */
+/**
+ * Endpoint of a visual wire route: either a component terminal
+ * (`component` + `terminal`) or a bare breadboard hole/rail (`breadboard` + `site`).
+ */
 export interface WireEndpoint {
-  component: string
-  terminal: string
+  component?: string
+  terminal?: string
+  /** Breadboard instance id when the endpoint plugs straight into a hole/rail. */
+  breadboard?: string
+  /** Which hole or rail on that breadboard. */
+  site?: BreadboardSite
 }
+
+/** How Studio updates a wire path when endpoints move. */
+export type WireRouteMode = 'auto' | 'manual'
 
 /**
  * Visual wire in the scene: a colored polyline for Studio rendering.
@@ -186,6 +196,11 @@ export interface Wire {
   /** Terminal endpoints this visual jumper connects. */
   from?: WireEndpoint
   to?: WireEndpoint
+  /**
+   * `manual` keeps bend points when endpoints move; `auto` recomputes the path.
+   * Breadboard jumpers default to stored `points` even before the first manual edit.
+   */
+  route?: WireRouteMode
   /** Polyline in scene space (xyz). 2D: z = 0 on all points. */
   points: Vec3[]
 }

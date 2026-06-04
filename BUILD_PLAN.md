@@ -6,7 +6,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Current phase:** Phase 2 — Functional wiring (validation)
 
-**Last updated:** 2026-06-03
+**Last updated:** 2026-06-04
 
 ---
 
@@ -76,7 +76,7 @@ flowchart TD
 
 **Outcome:** Drag-and-drop schematic editor backed by the project graph.
 
-- [x] React Flow (or equivalent) canvas with snap-to-grid
+- [x] React Flow (or equivalent) canvas
 - [x] Component tray from catalog
 - [x] Place, move, delete components
 - [x] Wire mode: connect pin A → pin B (updates graph nets)
@@ -108,7 +108,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 **Outcome:** Know what can connect to what before simulation or deploy.
 
 - [x] Breadboard row/column placement (`placement.sites`, tie groups, snap on move)
-- [ ] **TODO:** Fix breadboard hole snapping (still flaky — see `src/lib/studio/breadboard-snap.ts`)
+- [x] Fix breadboard hole snapping with per-terminal placement and selected-hole overlays
 - [ ] Pin type system (`power`, `ground`, `gpio`, `i2c`, `uart`, etc.)
 - [ ] Kind / voltage / protocol matching rules
 - [ ] Warnings (e.g. LED without resistor, floating inputs)

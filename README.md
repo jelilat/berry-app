@@ -15,7 +15,7 @@ Project JSON format (3D-native, 2D uses xy): **[docs/project-schema.md](./docs/p
 Open **[http://localhost:3000/studio](http://localhost:3000/studio)** after `pnpm dev`.
 
 - **Component tray** — grouped catalog (`listCatalogGrouped()`); click to place a part.
-- **Canvas** — drag parts (snap ~0.02 scene units), delete selection, wire mode (terminal A → B).
+- **Canvas** — drag parts, delete selection, wire mode (terminal A → B).
 - **Project** — auto-saves to `localStorage` key `berry-studio-project`; toolbar **Save**, **Export** JSON, **Import** file.
 - **Templates** — **New** (breadboard + ESP32), **Example** (ESP32 LED blink from `public/examples/`).
 - **Undo / redo** — history on project graph mutations (`src/lib/project/mutations.ts`).

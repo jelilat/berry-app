@@ -1,10 +1,10 @@
 /**
  * Breadboard hole grid, tie groups (shared copper), and site formatting.
- * Standard full breadboard: 30 columns, rows a–e (top) / f–j (bottom), 5-hole tie strips.
+ * Standard full breadboard: 60 columns, rows a–e (top) / f–j (bottom), 5-hole tie strips.
  */
 
 /** Column count on the main tie area. */
-export const BREADBOARD_COLUMNS = 30
+export const BREADBOARD_COLUMNS = 60
 
 /** Holes per electrical tie strip (horizontal group on one row letter). */
 export const BREADBOARD_TIE_WIDTH = 5
@@ -60,7 +60,7 @@ export function rowToBlock(row: BreadboardRowId): BreadboardBlock {
 }
 
 /**
- * Validate and normalize a column index (1–30).
+ * Validate and normalize a column index (1–60).
  * @param column User or JSON column number.
  */
 export function normalizeColumn(column: number): number {
@@ -195,7 +195,7 @@ export function formatBreadboardSite(site: BreadboardSite): string {
 /**
  * Build a main-area hole site with block inferred from row when omitted.
  * @param row Row letter.
- * @param column Column 1–30.
+ * @param column Column 1–60.
  * @param block Optional block override.
  */
 export function breadboardHole(
@@ -212,7 +212,21 @@ export function breadboardHole(
 }
 
 /**
- * Offset a hole by column delta on the same row (clamped to 1–30).
+ * Parse a compact main-grid hole label such as `a30` or `J7`.
+ * @param value User-entered breadboard hole label.
+ * @throws When the label is not a valid main-grid hole.
+ */
+export function parseBreadboardHoleLabel(value: string): BreadboardHoleSite {
+  const trimmed = value.trim().toLowerCase()
+  const match = /^([a-j])\s*(\d{1,2})$/.exec(trimmed)
+  if (!match) {
+    throw new Error(`Breadboard hole must look like a30 or j7, got ${value}`)
+  }
+  return breadboardHole(parseBreadboardRow(match[1]), Number(match[2]))
+}
+
+/**
+ * Offset a hole by column delta on the same row (clamped to 1–60).
  * @param site Starting hole.
  * @param columnDelta Columns to move (can be negative).
  */

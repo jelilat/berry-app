@@ -5,7 +5,9 @@ import { useViewport } from '@xyflow/react'
 import type { WireOverlayItem } from '@/lib/studio/flow-map'
 
 const WIRE_HIT_STROKE = 18
-const WIRE_SELECTED_STROKE = 3.5
+const WIRE_STROKE = 1.4
+const WIRE_HOVER_STROKE = 1.8
+const WIRE_SELECTED_STROKE = 2.1
 
 /**
  * SVG wire layer above the React Flow graph (pane space + viewport transform).
@@ -75,7 +77,11 @@ export function WireOverlay({
                   fill="none"
                   stroke={strokeColor}
                   strokeWidth={
-                    selected ? WIRE_SELECTED_STROKE : hovered ? 3.25 : 2.5
+                    selected
+                      ? WIRE_SELECTED_STROKE
+                      : hovered
+                        ? WIRE_HOVER_STROKE
+                        : WIRE_STROKE
                   }
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -145,16 +151,16 @@ function WireEndCap({
   if (gender === 'male') {
     return (
       <g transform={`translate(${x},${y}) rotate(${deg})`} style={{ pointerEvents: 'none' }}>
-        <line x1={-7} y1={0} x2={7} y2={0} stroke={color} strokeWidth={3} strokeLinecap="round" />
-        <rect x={-1.5} y={-4} width={3} height={8} rx={0.5} fill="#c8c8c8" stroke="#888" strokeWidth={0.5} />
+        <line x1={-5} y1={0} x2={5} y2={0} stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+        <rect x={-1} y={-3} width={2} height={6} rx={0.4} fill="#c8c8c8" stroke="#888" strokeWidth={0.45} />
       </g>
     )
   }
 
   return (
     <g transform={`translate(${x},${y}) rotate(${deg})`} style={{ pointerEvents: 'none' }}>
-      <rect x={-4} y={-5} width={8} height={10} rx={1.5} fill="#2a2a2a" stroke="#666" strokeWidth={0.8} />
-      <rect x={-2.5} y={-3.5} width={5} height={7} rx={1} fill="#141414" />
+      <rect x={-3} y={-4} width={6} height={8} rx={1.2} fill="#2a2a2a" stroke="#666" strokeWidth={0.65} />
+      <rect x={-1.8} y={-2.8} width={3.6} height={5.6} rx={0.8} fill="#141414" />
     </g>
   )
 }

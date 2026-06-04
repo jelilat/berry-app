@@ -107,9 +107,9 @@ body {
   cursor: grabbing;
 }
 
-/* Above .react-flow__renderer (z-index 4) so wires paint on top of parts */
+/* Above parts (4) and breadboard hole UI (6); hole connect mode bumps holes to 8 */
 .berry-studio-flow .berry-wire-layer-host {
-  z-index: 5;
+  z-index: 7;
 }
 
 .berry-studio-flow .berry-wire-hit {
@@ -138,8 +138,8 @@ body {
   display: block;
   transform: translate(-50%, -50%);
   border-radius: 9999px;
-  width: 5px;
-  height: 5px;
+  width: 3px;
+  height: 3px;
   opacity: 0;
   background: #d1c479;
   border: 0;
@@ -156,8 +156,8 @@ body {
 .berry-studio-flow .react-flow__handle.pin-state-marker:not([data-pin-state='connected']):hover::after,
 .berry-studio-flow .react-flow__handle.pin-state-marker.connectingfrom::after,
 .berry-studio-flow .react-flow__handle.pin-state-marker.connectingto::after {
-  width: 6px;
-  height: 6px;
+  width: 3px;
+  height: 3px;
   opacity: 0.95;
   background: #28e070;
   box-shadow: none;
@@ -165,13 +165,13 @@ body {
 
 .berry-studio-flow .react-flow__handle.pin-state-marker.connectingfrom::after,
 .berry-studio-flow .react-flow__handle.pin-state-marker.connectingto::after {
-  width: 7px;
-  height: 7px;
+  width: 4px;
+  height: 4px;
 }
 
 .berry-studio-flow .react-flow__handle.pin-state-marker[data-pin-state='connected']::after {
-  width: 6px;
-  height: 6px;
+  width: 2px;
+  height: 2px;
   opacity: 0.95;
   background: #ef4444;
   box-shadow: none;

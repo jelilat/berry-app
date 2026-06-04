@@ -43,8 +43,29 @@ export function terminalRelativePositions(
   const isBoard = type === 'esp32-devkit-v1' || type === 'arduino-uno'
 
   if (isBoard) {
+    const esp32Left = new Set([
+      'VIN',
+      'GND_L',
+      'IO13',
+      'IO12',
+      'IO14',
+      'IO27',
+      'IO26',
+      'IO25',
+      'IO33',
+      'IO32',
+      'IO35',
+      'IO34',
+      'VN',
+      'VP',
+      'EN',
+    ])
     const left = terminals.filter((t) =>
-      ['VIN', 'GND_L', 'IO4', 'IO13', 'IO18', 'IO21', '5V', 'GND', 'D13', 'A4'].includes(t.id),
+      type === 'esp32-devkit-v1'
+        ? esp32Left.has(t.id)
+        : ['VIN', 'GND_L', 'IO4', 'IO13', 'IO18', 'IO21', '5V', 'GND', 'D13', 'A4'].includes(
+            t.id,
+          ),
     )
     const right = terminals.filter((t) => !left.includes(t))
     left.forEach((t, i) => {

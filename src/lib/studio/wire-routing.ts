@@ -1,13 +1,19 @@
 import type { Node } from '@xyflow/react'
 import type { BerryProject, Wire, Vec3 } from '@/lib/project/types'
-import type { TerminalRef } from '@/lib/project/mutations'
-import { resolveWireTerminalRefs } from '@/lib/project/mutations'
+import type { WireEndpointRef } from '@/lib/project/mutations'
+import {
+  anchorWireRoutePoints,
+  isBreadboardHoleRef,
+  resolveWireTerminalRefs,
+  wireHasBreadboardEndpoint,
+} from '@/lib/project/mutations'
 import { orthogonalWireRoute } from '@/lib/project/wire-route'
 import { position2d, xy } from '@/lib/project/vec3'
 import type { ComponentNodeData, WireOverlayItem } from '@/lib/studio/flow-map'
 import { wireStrokeHex } from '@/lib/studio/wire-colors'
 import { flowToScenePosition } from '@/lib/studio/layout'
 import type { PinLayoutRegistry } from '@/lib/studio/pin-layout-registry'
+import { holeBenchPosition } from '@/lib/studio/breadboard-snap'
 import { terminalCanvasPosition } from '@/lib/studio/studio-terminal-layout'
 
 /**
@@ -48,8 +54,8 @@ export function scenePositionOverridesFromNodes(
  */
 export function buildVisualWirePoints(
   project: BerryProject,
-  from: TerminalRef,
-  to: TerminalRef,
+  from: WireEndpointRef,
+  to: WireEndpointRef,
   registry: PinLayoutRegistry,
   scale: number,
   positionOverrides?: Map<string, { x: number; y: number }>,
@@ -79,30 +85,57 @@ export function buildVisualWirePoints(
  */
 export function buildVisualWireCanvasPoints(
   project: BerryProject,
-  from: TerminalRef,
-  to: TerminalRef,
+  from: WireEndpointRef,
+  to: WireEndpointRef,
   registry: PinLayoutRegistry,
   scale: number,
   positionOverrides?: Map<string, { x: number; y: number }>,
 ): { x: number; y: number }[] | null {
-  const a = terminalCanvasPosition(
-    project,
-    from.componentId,
-    from.terminalId,
-    scale,
-    registry,
-    positionOverrides?.get(from.componentId),
-  )
-  const b = terminalCanvasPosition(
-    project,
-    to.componentId,
-    to.terminalId,
-    scale,
-    registry,
-    positionOverrides?.get(to.componentId),
-  )
+  const a = endpointCanvasPosition(project, from, registry, scale, positionOverrides)
+  const b = endpointCanvasPosition(project, to, registry, scale, positionOverrides)
   if (!a || !b) return null
   return orthogonalWireRoute(a, b)
+}
+
+/**
+ * Canvas pixel position of a wire endpoint (component terminal or breadboard hole).
+ * @param project Berry project.
+ * @param ref Wire endpoint reference.
+ * @param registry Runtime pin layout overrides.
+ * @param scale Pixels per scene unit.
+ * @param positionOverrides Optional component top-left overrides (scene units).
+ */
+function endpointCanvasPosition(
+  project: BerryProject,
+  ref: WireEndpointRef,
+  registry: PinLayoutRegistry,
+  scale: number,
+  positionOverrides?: Map<string, { x: number; y: number }>,
+): { x: number; y: number } | null {
+  if (isBreadboardHoleRef(ref)) {
+    const breadboard = project.components.find((c) => c.id === ref.breadboardId)
+    if (!breadboard || breadboard.type !== 'breadboard-full') return null
+    const override = positionOverrides?.get(ref.breadboardId)
+    const board = override
+      ? {
+          ...breadboard,
+          transform: {
+            ...breadboard.transform,
+            position: { x: override.x, y: override.y, z: 0 },
+          },
+        }
+      : breadboard
+    const bench = holeBenchPosition(board, ref.site)
+    return { x: bench.x * scale, y: bench.y * scale }
+  }
+  return terminalCanvasPosition(
+    project,
+    ref.componentId,
+    ref.terminalId,
+    scale,
+    registry,
+    positionOverrides?.get(ref.componentId),
+  )
 }
 
 /**
@@ -122,11 +155,17 @@ export function rerouteWiresVisual(
     const endpoints = resolveWireTerminalRefs(project, wire)
     if (!endpoints) return wire
     const [from, to] = endpoints
-    if (from.componentId !== componentId && to.componentId !== componentId) {
+    if (
+      endpointOwnerId(from) !== componentId &&
+      endpointOwnerId(to) !== componentId
+    ) {
       return wire
     }
 
-    const nextPoints = buildVisualWirePoints(project, from, to, registry, scale)
+    const nextPoints =
+      wire.route === 'manual' || wireHasBreadboardEndpoint(wire)
+        ? anchorWireRoutePoints(project, from, to, wire.points)
+        : buildVisualWirePoints(project, from, to, registry, scale)
     if (wirePointsEqual(wire.points, nextPoints)) return wire
 
     changed = true
@@ -134,6 +173,14 @@ export function rerouteWiresVisual(
   })
 
   return changed ? { ...project, wires } : project
+}
+
+/**
+ * Component id a wire endpoint follows when it moves (the part, or the breadboard).
+ * @param ref Wire endpoint reference.
+ */
+function endpointOwnerId(ref: WireEndpointRef): string {
+  return isBreadboardHoleRef(ref) ? ref.breadboardId : ref.componentId
 }
 
 /**
@@ -196,7 +243,8 @@ function wireToOverlayItem(
   if (!endpoints) return null
   const [from, to] = endpoints
 
-  const points = buildVisualWireCanvasPoints(
+  const points = wireOverlayCanvasPoints(
+    wire,
     project,
     from,
     to,
@@ -212,4 +260,37 @@ function wireToOverlayItem(
     connectors: wire.connectors,
     points,
   }
+}
+
+/**
+ * Canvas-space polyline for a wire overlay (stored bends or auto-routed).
+ * @param wire Project wire record.
+ * @param project Berry project.
+ * @param from Resolved start endpoint.
+ * @param to Resolved end endpoint.
+ * @param registry Runtime pin layouts.
+ * @param scale Pixels per scene unit.
+ * @param positionOverrides Optional live component positions.
+ */
+export function wireOverlayCanvasPoints(
+  wire: Wire,
+  project: BerryProject,
+  from: WireEndpointRef,
+  to: WireEndpointRef,
+  registry: PinLayoutRegistry,
+  scale: number,
+  positionOverrides?: Map<string, { x: number; y: number }>,
+): { x: number; y: number }[] | null {
+  if (wireHasBreadboardEndpoint(wire) || wire.route === 'manual') {
+    const scenePoints = anchorWireRoutePoints(project, from, to, wire.points)
+    return scenePoints.map((p) => ({ x: p.x * scale, y: p.y * scale }))
+  }
+  return buildVisualWireCanvasPoints(
+    project,
+    from,
+    to,
+    registry,
+    scale,
+    positionOverrides,
+  )
 }

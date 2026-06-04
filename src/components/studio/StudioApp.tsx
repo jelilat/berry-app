@@ -11,14 +11,18 @@ import {
   moveComponent,
   removeComponent,
   removeWire,
+  resetWireRoute,
   replaceProject,
   rotateComponent,
+  setComponentTerminalSite,
+  setWireBreadboardEndpoint,
+  type WireEndpointRef,
 } from '@/lib/project/mutations'
+import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
 import { getComponentDefinition, getWireTemplate } from '@/lib/project/catalog'
-import type { BerryProject, ComponentTypeId } from '@/lib/project/types'
+import type { BerryProject, BreadboardSite, ComponentTypeId } from '@/lib/project/types'
 import { brand } from '@/lib/brand'
 import { useProjectHistory } from '@/lib/studio/history'
-import type { TerminalSelection } from '@/lib/studio/flow-map'
 import {
   clearProjectStorage,
   downloadProjectJson,
@@ -30,6 +34,7 @@ import { ComponentTray } from './ComponentTray'
 import { Studio3DPlaceholder } from './Studio3DPlaceholder'
 import { StudioCanvas } from './StudioCanvas'
 import { StudioToolbar } from './StudioToolbar'
+import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
 type ViewMode = '2d' | '3d'
@@ -166,8 +171,8 @@ export function StudioApp() {
 
   const handleWireConnect = useCallback(
     (
-      from: TerminalSelection,
-      to: TerminalSelection,
+      from: WireEndpointRef,
+      to: WireEndpointRef,
       points: { x: number; y: number; z: number }[],
     ) => {
       try {
@@ -246,6 +251,39 @@ export function StudioApp() {
     [selectedNodeId, project, setProject],
   )
 
+  const handlePinSiteChange = useCallback(
+    (terminalId: string, site: BreadboardSite) => {
+      if (!selectedNodeId) return
+      try {
+        setProject(setComponentTerminalSite(project, selectedNodeId, terminalId, site))
+        setErrorMessage(null)
+      } catch (e) {
+        setErrorMessage(e instanceof Error ? e.message : 'Could not move pin')
+      }
+    },
+    [selectedNodeId, project, setProject],
+  )
+
+  const handleWireEndpointHoleChange = useCallback(
+    (end: 'from' | 'to', holeLabel: string) => {
+      if (!selectedWireId) return
+      try {
+        setProject(
+          setWireBreadboardEndpoint(
+            project,
+            selectedWireId,
+            end,
+            parseBreadboardHoleLabel(holeLabel),
+          ),
+        )
+        setErrorMessage(null)
+      } catch (e) {
+        setErrorMessage(e instanceof Error ? e.message : 'Could not move wire end')
+      }
+    },
+    [selectedWireId, project, setProject],
+  )
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
@@ -320,16 +358,20 @@ export function StudioApp() {
           }}
         />
 
-        {status === 'error' && errorMessage && (
+        {errorMessage && (status === 'ready' || status === 'error') && (
           <div
             className="rounded-xl px-4 py-3 text-sm font-semibold"
             style={{ background: 'rgba(214,51,108,0.12)', color: 'var(--accent)' }}
+            role="status"
           >
             {errorMessage}
             <button
               type="button"
               className="ml-3 underline"
-              onClick={() => setStatus('ready')}
+              onClick={() => {
+                setErrorMessage(null)
+                if (status === 'error') setStatus('ready')
+              }}
             >
               Dismiss
             </button>
@@ -358,6 +400,7 @@ export function StudioApp() {
                     onWireConnect={handleWireConnect}
                     onSelectionChange={handleSelectionChange}
                     onWireSelectionChange={handleWireSelectionChange}
+                    onPlacementError={setErrorMessage}
                   />
                 ) : (
                   <div className="relative h-full min-h-0">
@@ -371,6 +414,7 @@ export function StudioApp() {
                       onWireConnect={() => {}}
                       onSelectionChange={handleSelectionChange}
                       onWireSelectionChange={handleWireSelectionChange}
+                      onPlacementError={setErrorMessage}
                     />
                     <Studio3DPlaceholder />
                   </div>
@@ -385,6 +429,35 @@ export function StudioApp() {
               onClose={() => setSelectedNodeId(null)}
               onRotate={handleRotateSelected}
               onPositionChange={handlePositionChange}
+              onPinSiteChange={handlePinSiteChange}
+            />
+          )}
+          {selectedWireId && !selectedNodeId && !isEmpty && (
+            <WireInspectorPanel
+              project={project}
+              wireId={selectedWireId}
+              onClose={() => setSelectedWireId(null)}
+              onEndpointHoleChange={handleWireEndpointHoleChange}
+              onResetRoute={
+                project.wires.some(
+                  (wire) =>
+                    wire.id === selectedWireId &&
+                    (wire.from?.breadboard || wire.to?.breadboard),
+                )
+                  ? () => {
+                      try {
+                        setProject(resetWireRoute(project, selectedWireId))
+                        setErrorMessage(null)
+                      } catch (error) {
+                        setErrorMessage(
+                          error instanceof Error
+                            ? error.message
+                            : 'Could not reset wire route',
+                        )
+                      }
+                    }
+                  : undefined
+              }
             />
           )}
         </div>
@@ -394,8 +467,8 @@ export function StudioApp() {
             className="rounded-xl px-4 py-2.5 text-center text-xs font-semibold"
             style={{ background: 'rgba(15,168,134,0.08)', color: 'var(--leaf)' }}
           >
-            <strong>Wiring</strong> ({getComponentDefinition(activeWireType).name}): click one pin,
-            then another component&apos;s pin, or drag directly between pins. Click a wire to
+            <strong>Wiring</strong> ({getComponentDefinition(activeWireType).name}): drag from a pin
+            to another pin, or drop it onto a breadboard hole to plug in. Click a wire to
             select it; press{' '}
             <kbd className="rounded px-1 py-0.5 text-[10px]" style={{ background: 'var(--bg-elevated)' }}>
               Delete

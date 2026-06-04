@@ -77,12 +77,10 @@ When a part sits on a `breadboard-full`, `placement.sites` maps each **terminal 
 | `kind` | `"hole"` (main grid) or `"rail"` (power strip) |
 | `block` | `"top"` (rows a–e) or `"bottom"` (rows f–j) |
 | `row` | Row letter `a`–`j` (hole only) |
-| `column` | Column `1`–`30` |
+| `column` | Column `1`–`60` |
 | `edge` / `polarity` | For rails: `top`/`bottom` edge, `positive`/`negative` |
 
-**Tie groups:** On a standard board, holes in the same row letter and same 5-column group (cols 1–5, 6–10, …) share copper. Studio snaps moves to the nearest hole and infers placement for 2-pin passives.
-
-> **TODO:** Hole snapping in Studio is provisional and still flaky (`src/lib/studio/breadboard-snap.ts`). Placement in JSON is authoritative until snap is polished.
+**Tie groups:** On a standard full breadboard, holes in the same row letter and same 5-column group (cols 1–5, 6–10, …) share copper. Studio snaps moves to the nearest hole and records per-terminal placement.
 
 Electrical connectivity is still stored in `nets`; placement records **where** legs sit on the breadboard.
 
@@ -135,7 +133,10 @@ Wires are 3D polylines for rendering. Each wire belongs to exactly one net.
 | `net` | yes | References `nets[].id` |
 | `color` | no | Studio palette name or hex |
 | `connectors` | no | Jumper ends: `{ "start": "male"|"female", "end": "male"|"female" }` |
+| `from` / `to` | no | Endpoints for rerouting: a component terminal `{ "component", "terminal" }` or a bare breadboard hole `{ "breadboard", "site": { ... } }` |
 | `points` | yes | At least 2 points; path in scene space |
+
+A jumper plugged straight into the breadboard uses a `{ "breadboard", "site" }` endpoint (no component) on its `from`/`to` and on the net terminal.
 
 2D routing: vary `x`/`y` along the polyline; keep all `z` at `0`.
 

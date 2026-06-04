@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   Background,
   ConnectionLineType,
@@ -14,12 +21,22 @@ import {
   type Connection,
   type Edge,
   type OnNodesChange,
+  type OnConnectStartParams,
+  type FinalConnectionState,
   applyNodeChanges,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { orthogonalWireRoute } from '@/lib/project/wire-route'
 import { position2d } from '@/lib/project/vec3'
-import { moveComponent, removeComponent } from '@/lib/project/mutations'
+import {
+  isBreadboardHoleRef,
+  moveComponent,
+  removeComponent,
+  type BreadboardHoleRef,
+  type WireEndpointRef,
+} from '@/lib/project/mutations'
+import { breadboardPhysicalSiteKey } from '@/lib/project/breadboard-nets'
+import { snapPositionToBreadboardHole } from '@/lib/studio/breadboard-layout'
 import type { BerryProject } from '@/lib/project/types'
 import type { ComponentTypeId } from '@/lib/project/types'
 import { COMPONENT_NODE_TYPE, SCENE_SCALE } from '@/lib/studio/constants'
@@ -38,18 +55,33 @@ import {
 import { wireStrokeHex } from '@/lib/studio/wire-colors'
 import {
   connectedTerminalKeys,
+  isBreadboardEndpointOccupied,
   isTerminalConnected,
+  terminalOccupiesBreadboardEndpoint,
 } from '@/lib/studio/connect-pins'
 import {
   sameTerminal,
   terminalFromPinElement,
   type WireDraftState,
 } from '@/lib/studio/wire-draft'
-import { nearestWireTarget } from '@/lib/studio/wire-target'
+import {
+  breadboardWireTargetAtPoint,
+  nearestWireTarget,
+} from '@/lib/studio/wire-target'
 import { getWireTemplate } from '@/lib/project/catalog'
+import { wireConnectorsFitEndpoints } from '@/lib/project/connection-gender'
 import { componentDropScenePosition } from '@/lib/studio/drop-position'
-import { BreadboardHoleOverlay } from './BreadboardHoleOverlay'
+import {
+  evaluateBreadboardSnap,
+  findBreadboardAtPoint,
+  holeBenchPosition,
+} from '@/lib/studio/breadboard-snap'
+import {
+  BreadboardHoleOverlay,
+  type BreadboardHoleHoverMarker,
+} from './BreadboardHoleOverlay'
 import { ComponentNode } from './ComponentNode'
+import { WireDraftOverlay } from './WireDraftOverlay'
 import { WireOverlay } from './WireOverlay'
 
 const nodeTypes = { [COMPONENT_NODE_TYPE]: ComponentNode }
@@ -68,6 +100,7 @@ export function StudioCanvas({
   onWireConnect,
   onSelectionChange,
   onWireSelectionChange,
+  onPlacementError,
 }: {
   project: BerryProject
   activeWireType: ComponentTypeId
@@ -76,12 +109,13 @@ export function StudioCanvas({
   onProjectChange: (next: BerryProject) => void
   onPartDrop: (type: ComponentTypeId, x: number, y: number) => void
   onWireConnect: (
-    from: TerminalSelection,
-    to: TerminalSelection,
+    from: WireEndpointRef,
+    to: WireEndpointRef,
     points: { x: number; y: number; z: number }[],
   ) => void
   onSelectionChange: (nodeId: string | null) => void
   onWireSelectionChange: (wireId: string | null) => void
+  onPlacementError?: (message: string | null) => void
 }) {
   return (
     <ReactFlowProvider>
@@ -95,6 +129,7 @@ export function StudioCanvas({
         onWireConnect={onWireConnect}
         onSelectionChange={onSelectionChange}
         onWireSelectionChange={onWireSelectionChange}
+        onPlacementError={onPlacementError}
       />
     </ReactFlowProvider>
   )
@@ -113,6 +148,7 @@ function StudioCanvasInner({
   onWireConnect,
   onSelectionChange,
   onWireSelectionChange,
+  onPlacementError,
 }: {
   project: BerryProject
   activeWireType: ComponentTypeId
@@ -121,12 +157,13 @@ function StudioCanvasInner({
   onProjectChange: (next: BerryProject) => void
   onPartDrop: (type: ComponentTypeId, x: number, y: number) => void
   onWireConnect: (
-    from: TerminalSelection,
-    to: TerminalSelection,
+    from: WireEndpointRef,
+    to: WireEndpointRef,
     points: { x: number; y: number; z: number }[],
   ) => void
   onSelectionChange: (nodeId: string | null) => void
   onWireSelectionChange: (wireId: string | null) => void
+  onPlacementError?: (message: string | null) => void
 }) {
   const { screenToFlowPosition } = useReactFlow()
   const projectRef = useRef(project)
@@ -138,19 +175,51 @@ function StudioCanvasInner({
   onWireConnectRef.current = onWireConnect
   const onPartDropRef = useRef(onPartDrop)
   onPartDropRef.current = onPartDrop
+  const onPlacementErrorRef = useRef(onPlacementError)
+  onPlacementErrorRef.current = onPlacementError
 
   const [pinLayoutVersion, setPinLayoutVersion] = useState(0)
   const [hoveredWireId, setHoveredWireId] = useState<string | null>(null)
+  const [breadboardHoverMarkers, setBreadboardHoverMarkers] = useState<
+    BreadboardHoleHoverMarker[]
+  >([])
   const [wireDraft, setWireDraft] = useState<WireDraftState | null>(null)
+  const [breadboardWireDraft, setBreadboardWireDraft] = useState<{
+    from: BreadboardHoleRef
+    startPx: { x: number; y: number }
+    cursorPx: { x: number; y: number }
+    hoverTarget: null
+    hoverTargetPx: { x: number; y: number } | null
+  } | null>(null)
   const wireDraftRef = useRef(wireDraft)
   wireDraftRef.current = wireDraft
+  const breadboardWireDraftRef = useRef(breadboardWireDraft)
+  breadboardWireDraftRef.current = breadboardWireDraft
   const wireListenersRef = useRef<{
     move: (e: PointerEvent) => void
     up: (e: PointerEvent) => void
     cancel: () => void
   } | null>(null)
+  const connectSourceRef = useRef<TerminalSelection | null>(null)
+  const connectMoveRef = useRef<((e: PointerEvent) => void) | null>(null)
+  const [reactFlowConnecting, setReactFlowConnecting] = useState(false)
 
+  const activeWireConnectors = useMemo(
+    () => getWireTemplate(activeWireType).connectors,
+    [activeWireType],
+  )
   const wirePreviewColor = wireStrokeHex(getWireTemplate(activeWireType).defaultColor)
+
+  /**
+   * Whether the active jumper template can mate both endpoints (allows end flip).
+   * @param from Wire source endpoint.
+   * @param to Wire target endpoint.
+   */
+  const canConnectWithActiveWire = useCallback(
+    (from: WireEndpointRef, to: WireEndpointRef) =>
+      wireConnectorsFitEndpoints(from, to, activeWireConnectors),
+    [activeWireConnectors],
+  )
 
   useEffect(() => {
     for (const inst of project.components) {
@@ -162,7 +231,13 @@ function StudioCanvasInner({
   }, [project.components])
 
   useEffect(() => {
-    return () => wireListenersRef.current?.cancel()
+    return () => {
+      wireListenersRef.current?.cancel()
+      if (connectMoveRef.current) {
+        window.removeEventListener('pointermove', connectMoveRef.current)
+        connectMoveRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -194,66 +269,125 @@ function StudioCanvasInner({
   const cancelWireDraft = useCallback(() => {
     clearWireListeners()
     setWireDraft(null)
+    setBreadboardWireDraft(null)
   }, [clearWireListeners])
 
-  const resolveHoverTarget = useCallback((clientX: number, clientY: number) => {
-    const draft = wireDraftRef.current
-    if (!draft) return { hoverTarget: null, hoverTargetPx: null }
-
-    const cursorPx = screenToFlowPosition({ x: clientX, y: clientY })
-    const nearest = nearestWireTarget(
-      projectRef.current,
-      cursorPx,
-      SCENE_SCALE,
-      pinLayoutsRef.current,
-      {
-        ignore: draft.from,
-        ignoreComponentId: draft.from.componentId,
-        ignoreTerminalKeys: connectedTerminalsRef.current,
-      },
-    )
-    if (nearest) {
-      return {
-        hoverTarget: nearest.target,
-        hoverTargetPx: nearest.positionPx,
-      }
-    }
-
-    const elements = document.elementsFromPoint(clientX, clientY)
-    let target: TerminalSelection | null = null
-    for (const el of elements) {
-      target = terminalFromPinElement(el)
-      if (
-        target &&
-        !sameTerminal(draft.from, target) &&
-        target.componentId !== draft.from.componentId &&
-        !isTerminalConnected(
-          connectedTerminalsRef.current,
-          target.componentId,
-          target.terminalId,
+  const endpointCanvasPosition = useCallback(
+    (endpoint: WireEndpointRef): { x: number; y: number } | null => {
+      if (isBreadboardHoleRef(endpoint)) {
+        const breadboard = projectRef.current.components.find(
+          (c) => c.id === endpoint.breadboardId,
         )
-      ) {
-        break
+        if (!breadboard || breadboard.type !== 'breadboard-full') return null
+        const bench = holeBenchPosition(breadboard, endpoint.site)
+        return { x: bench.x * SCENE_SCALE, y: bench.y * SCENE_SCALE }
       }
-      target = null
-    }
-
-    if (target) {
-      const px = terminalCanvasPosition(
+      return terminalCanvasPosition(
         projectRef.current,
-        target.componentId,
-        target.terminalId,
+        endpoint.componentId,
+        endpoint.terminalId,
         SCENE_SCALE,
         pinLayoutsRef.current,
       )
-      return { hoverTarget: target, hoverTargetPx: px }
-    }
+    },
+    [],
+  )
 
-    return {
-      hoverTarget: null,
-      hoverTargetPx: null,
-    }
-  }, [screenToFlowPosition])
+  const resolveHoverTarget = useCallback(
+    (clientX: number, clientY: number): {
+      hoverTarget: TerminalSelection | null
+      hoverTargetPx: { x: number; y: number } | null
+      hoverEndpoint: WireEndpointRef | null
+    } => {
+      const draft = wireDraftRef.current
+      if (!draft) {
+        return { hoverTarget: null, hoverTargetPx: null, hoverEndpoint: null }
+      }
+      if (isBreadboardHoleRef(draft.from)) {
+        return { hoverTarget: null, hoverTargetPx: null, hoverEndpoint: null }
+      }
+
+      const cursorPx = screenToFlowPosition({ x: clientX, y: clientY })
+      const nearest = nearestWireTarget(
+        projectRef.current,
+        cursorPx,
+        SCENE_SCALE,
+        pinLayoutsRef.current,
+        {
+          ignore: draft.from,
+          ignoreComponentId: draft.from.componentId,
+          ignoreTerminalKeys: connectedTerminalsRef.current,
+        },
+      )
+      if (nearest && canConnectWithActiveWire(draft.from, nearest.target)) {
+        return {
+          hoverTarget: nearest.target,
+          hoverTargetPx: nearest.positionPx,
+          hoverEndpoint: nearest.target,
+        }
+      }
+
+      const elements = document.elementsFromPoint(clientX, clientY)
+      let target: TerminalSelection | null = null
+      for (const el of elements) {
+        target = terminalFromPinElement(el)
+        if (
+          target &&
+          !sameTerminal(draft.from, target) &&
+          target.componentId !== draft.from.componentId &&
+          !isTerminalConnected(
+            connectedTerminalsRef.current,
+            target.componentId,
+            target.terminalId,
+          ) &&
+          canConnectWithActiveWire(draft.from, target)
+        ) {
+          break
+        }
+        target = null
+      }
+
+      if (target) {
+        const px = terminalCanvasPosition(
+          projectRef.current,
+          target.componentId,
+          target.terminalId,
+          SCENE_SCALE,
+          pinLayoutsRef.current,
+        )
+        return { hoverTarget: target, hoverTargetPx: px, hoverEndpoint: target }
+      }
+
+      const breadboardTarget = breadboardWireTargetAtPoint(
+        projectRef.current,
+        cursorPx,
+        SCENE_SCALE,
+      )
+      if (
+        breadboardTarget &&
+        !terminalOccupiesBreadboardEndpoint(
+          projectRef.current,
+          draft.from.componentId,
+          draft.from.terminalId,
+          breadboardTarget.target,
+        ) &&
+        canConnectWithActiveWire(draft.from, breadboardTarget.target)
+      ) {
+        return {
+          hoverTarget: null,
+          hoverTargetPx: breadboardTarget.positionPx,
+          hoverEndpoint: breadboardTarget.target,
+        }
+      }
+
+      return {
+        hoverTarget: null,
+        hoverTargetPx: null,
+        hoverEndpoint: null,
+      }
+    },
+    [canConnectWithActiveWire, screenToFlowPosition],
+  )
 
   const finishWireDrag = useCallback(
     (clientX: number, clientY: number) => {
@@ -261,9 +395,14 @@ function StudioCanvasInner({
 
       const draft = wireDraftRef.current
       if (!draft) return
+      if (isBreadboardHoleRef(draft.from)) return
 
-      const { hoverTarget } = resolveHoverTarget(clientX, clientY)
-      if (hoverTarget && !sameTerminal(draft.from, hoverTarget)) {
+      const { hoverEndpoint, hoverTargetPx } = resolveHoverTarget(clientX, clientY)
+      if (
+        hoverEndpoint &&
+        hoverTargetPx &&
+        canConnectWithActiveWire(draft.from, hoverEndpoint)
+      ) {
         const fromBench = terminalCanvasPosition(
           projectRef.current,
           draft.from.componentId,
@@ -271,26 +410,105 @@ function StudioCanvasInner({
           SCENE_SCALE,
           pinLayoutsRef.current,
         )
-        const toBench = terminalCanvasPosition(
-          projectRef.current,
-          hoverTarget.componentId,
-          hoverTarget.terminalId,
-          SCENE_SCALE,
-          pinLayoutsRef.current,
-        )
-        if (fromBench && toBench) {
-          const route = orthogonalWireRoute(fromBench, toBench)
+        if (fromBench) {
+          const route = orthogonalWireRoute(fromBench, hoverTargetPx)
           onWireConnectRef.current(
             draft.from,
-            hoverTarget,
+            hoverEndpoint,
             route.map((p) => position2d(p.x / SCENE_SCALE, p.y / SCENE_SCALE)),
           )
         }
       }
       setWireDraft(null)
     },
-    [clearWireListeners, resolveHoverTarget],
+    [canConnectWithActiveWire, clearWireListeners, resolveHoverTarget],
   )
+
+  const sameBreadboardEndpoint = useCallback(
+    (a: BreadboardHoleRef, b: BreadboardHoleRef): boolean =>
+      a.breadboardId === b.breadboardId &&
+      breadboardPhysicalSiteKey(a.site) === breadboardPhysicalSiteKey(b.site),
+    [],
+  )
+
+  const handleBreadboardHolePointerDown = useCallback(
+    (
+      endpoint: BreadboardHoleRef,
+      positionPx: { x: number; y: number },
+      event: ReactPointerEvent<SVGCircleElement>,
+    ) => {
+      if (isBreadboardEndpointOccupied(projectRef.current, endpoint)) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      const active = breadboardWireDraftRef.current
+      if (!active) {
+        setBreadboardWireDraft({
+          from: endpoint,
+          startPx: positionPx,
+          cursorPx: positionPx,
+          hoverTarget: null,
+          hoverTargetPx: null,
+        })
+        onSelectionChange(null)
+        onWireSelectionChange(null)
+        return
+      }
+
+      if (sameBreadboardEndpoint(active.from, endpoint)) {
+        setBreadboardWireDraft(null)
+        return
+      }
+
+      const fromPx = endpointCanvasPosition(active.from)
+      if (!fromPx) {
+        setBreadboardWireDraft(null)
+        return
+      }
+
+      if (!canConnectWithActiveWire(active.from, endpoint)) {
+        setBreadboardWireDraft(null)
+        return
+      }
+
+      const route = orthogonalWireRoute(fromPx, positionPx)
+      onWireConnectRef.current(
+        active.from,
+        endpoint,
+        route.map((p) => position2d(p.x / SCENE_SCALE, p.y / SCENE_SCALE)),
+      )
+      setBreadboardWireDraft(null)
+    },
+    [
+      canConnectWithActiveWire,
+      endpointCanvasPosition,
+      onSelectionChange,
+      onWireSelectionChange,
+      sameBreadboardEndpoint,
+    ],
+  )
+
+  useEffect(() => {
+    if (!breadboardWireDraft) return
+    const onMove = (event: PointerEvent) => {
+      const cursorPx = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      setBreadboardWireDraft((draft) =>
+        draft ? { ...draft, cursorPx, hoverTargetPx: null } : null,
+      )
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setBreadboardWireDraft(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [breadboardWireDraft, screenToFlowPosition])
 
   const isValidReactFlowConnection = useCallback((connection: Connection | Edge): boolean => {
     const { source, target } = connection
@@ -304,8 +522,11 @@ function StudioCanvasInner({
     if (isTerminalConnected(connectedTerminalsRef.current, target, targetHandle)) {
       return false
     }
-    return true
-  }, [])
+    return canConnectWithActiveWire(
+      { componentId: source, terminalId: sourceHandle },
+      { componentId: target, terminalId: targetHandle },
+    )
+  }, [canConnectWithActiveWire])
 
   const handleReactFlowConnect = useCallback(
     (connection: Connection) => {
@@ -331,6 +552,8 @@ function StudioCanvasInner({
       )
       if (!fromBench || !toBench) return
 
+      if (!canConnectWithActiveWire(from, to)) return
+
       const route = orthogonalWireRoute(fromBench, toBench)
       onWireConnectRef.current(
         from,
@@ -338,7 +561,142 @@ function StudioCanvasInner({
         route.map((p) => position2d(p.x / SCENE_SCALE, p.y / SCENE_SCALE)),
       )
     },
-    [isValidReactFlowConnection],
+    [canConnectWithActiveWire, isValidReactFlowConnection],
+  )
+
+  const clearConnectMoveListener = useCallback(() => {
+    if (connectMoveRef.current) {
+      window.removeEventListener('pointermove', connectMoveRef.current)
+      connectMoveRef.current = null
+    }
+  }, [])
+
+  const terminalFromConnectionState = useCallback(
+    (connectionState: FinalConnectionState): TerminalSelection | null => {
+      const fromHandle = connectionState.fromHandle
+      if (!fromHandle?.nodeId || !fromHandle.id) return null
+      return { componentId: fromHandle.nodeId, terminalId: fromHandle.id }
+    },
+    [],
+  )
+
+  const handleConnectStart = useCallback(
+    (_event: unknown, params: OnConnectStartParams) => {
+      setReactFlowConnecting(true)
+      connectSourceRef.current =
+        params.nodeId && params.handleId
+          ? { componentId: params.nodeId, terminalId: params.handleId }
+          : null
+
+      clearConnectMoveListener()
+      if (!connectSourceRef.current) return
+
+      const onMove = (e: PointerEvent) => {
+        const flow = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+        const sceneX = flow.x / SCENE_SCALE
+        const sceneY = flow.y / SCENE_SCALE
+        const breadboard = findBreadboardAtPoint(projectRef.current, sceneX, sceneY)
+        if (!breadboard) {
+          setBreadboardHoverMarkers([])
+          return
+        }
+        const snapped = snapPositionToBreadboardHole(
+          breadboard.transform.position.x,
+          breadboard.transform.position.y,
+          sceneX,
+          sceneY,
+        )
+        const bench = holeBenchPosition(breadboard, snapped.hole)
+        setBreadboardHoverMarkers([
+          { id: 'connect-hole-hover', x: bench.x, y: bench.y },
+        ])
+      }
+      connectMoveRef.current = onMove
+      window.addEventListener('pointermove', onMove)
+    },
+    [clearConnectMoveListener, screenToFlowPosition],
+  )
+
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
+      clearConnectMoveListener()
+      setBreadboardHoverMarkers([])
+      setReactFlowConnecting(false)
+
+      const from =
+        connectSourceRef.current ?? terminalFromConnectionState(connectionState)
+      connectSourceRef.current = null
+      if (!from) return
+      // A valid handle-to-handle drop is already handled by onConnect.
+      if (connectionState.toHandle) return
+      if (
+        isTerminalConnected(
+          connectedTerminalsRef.current,
+          from.componentId,
+          from.terminalId,
+        )
+      ) {
+        return
+      }
+
+      const point =
+        'changedTouches' in event && event.changedTouches.length > 0
+          ? event.changedTouches[0]
+          : (event as MouseEvent)
+      const flow = screenToFlowPosition({ x: point.clientX, y: point.clientY })
+      const sceneX = flow.x / SCENE_SCALE
+      const sceneY = flow.y / SCENE_SCALE
+
+      // Only plug into the breadboard when the drop is actually over one.
+      const breadboard = findBreadboardAtPoint(projectRef.current, sceneX, sceneY)
+      if (!breadboard) return
+
+      const snapped = snapPositionToBreadboardHole(
+        breadboard.transform.position.x,
+        breadboard.transform.position.y,
+        sceneX,
+        sceneY,
+      )
+      const holeRef: WireEndpointRef = {
+        breadboardId: breadboard.id,
+        site: snapped.hole,
+      }
+      if (
+        terminalOccupiesBreadboardEndpoint(
+          projectRef.current,
+          from.componentId,
+          from.terminalId,
+          holeRef,
+        )
+      ) {
+        return
+      }
+
+      const fromBench = terminalCanvasPosition(
+        projectRef.current,
+        from.componentId,
+        from.terminalId,
+        SCENE_SCALE,
+        pinLayoutsRef.current,
+      )
+      if (!fromBench) return
+      const holeScene = holeBenchPosition(breadboard, snapped.hole)
+      const toBench = { x: holeScene.x * SCENE_SCALE, y: holeScene.y * SCENE_SCALE }
+      if (!canConnectWithActiveWire(from, holeRef)) return
+
+      const route = orthogonalWireRoute(fromBench, toBench)
+      onWireConnectRef.current(
+        from,
+        holeRef,
+        route.map((p) => position2d(p.x / SCENE_SCALE, p.y / SCENE_SCALE)),
+      )
+    },
+    [
+      canConnectWithActiveWire,
+      clearConnectMoveListener,
+      screenToFlowPosition,
+      terminalFromConnectionState,
+    ],
   )
 
   const handlePinWireTarget = useCallback(
@@ -348,6 +706,7 @@ function StudioCanvasInner({
 
       const draft = wireDraftRef.current
       if (!draft) return
+      if (isBreadboardHoleRef(draft.from)) return
 
       const target = { componentId, terminalId }
       if (
@@ -374,7 +733,11 @@ function StudioCanvasInner({
         SCENE_SCALE,
         pinLayoutsRef.current,
       )
-      if (fromBench && toBench) {
+      if (
+        fromBench &&
+        toBench &&
+        canConnectWithActiveWire(draft.from, target)
+      ) {
         const route = orthogonalWireRoute(fromBench, toBench)
         onWireConnectRef.current(
           draft.from,
@@ -384,7 +747,7 @@ function StudioCanvasInner({
       }
       setWireDraft(null)
     },
-    [clearWireListeners],
+    [canConnectWithActiveWire, clearWireListeners],
   )
 
   const handlePinWireStart = useCallback(
@@ -421,7 +784,10 @@ function StudioCanvasInner({
           e.clientY - pointerStart.y,
         )
         dragged = dragged || distance >= WIRE_DRAG_THRESHOLD_PX
-        const { hoverTarget, hoverTargetPx } = resolveHoverTarget(e.clientX, e.clientY)
+        const { hoverTarget, hoverTargetPx, hoverEndpoint } = resolveHoverTarget(
+          e.clientX,
+          e.clientY,
+        )
         setWireDraft((draft) =>
           draft
             ? {
@@ -430,6 +796,7 @@ function StudioCanvasInner({
                 mode: dragged ? 'dragging' : 'armed',
                 hoverTarget: dragged ? hoverTarget : null,
                 hoverTargetPx: dragged ? hoverTargetPx : null,
+                hoverEndpoint: dragged ? hoverEndpoint : null,
               }
             : {
                 from: { componentId, terminalId },
@@ -438,6 +805,7 @@ function StudioCanvasInner({
                 mode: dragged ? 'dragging' : 'armed',
                 hoverTarget: dragged ? hoverTarget : null,
                 hoverTargetPx: dragged ? hoverTargetPx : null,
+                hoverEndpoint: dragged ? hoverEndpoint : null,
               },
         )
       }
@@ -457,6 +825,7 @@ function StudioCanvasInner({
                 mode: 'armed',
                 hoverTarget: null,
                 hoverTargetPx: null,
+                hoverEndpoint: null,
               }
             : null,
         )
@@ -483,6 +852,7 @@ function StudioCanvasInner({
         mode: 'armed',
         hoverTarget: null,
         hoverTargetPx: null,
+        hoverEndpoint: null,
       })
 
       window.addEventListener('pointermove', onMove)
@@ -500,18 +870,82 @@ function StudioCanvasInner({
 
   const handlePartDragEnd = useCallback(
     (instanceId: string, sceneX: number, sceneY: number) => {
+      setBreadboardHoverMarkers([])
+      const instance = projectRef.current.components.find((c) => c.id === instanceId)
+      if (!instance) return
+
+      const evaluation = evaluateBreadboardSnap(
+        projectRef.current,
+        instance,
+        sceneX,
+        sceneY,
+        { layout: pinLayoutsRef.current.get(instanceId) },
+      )
+      if (evaluation.conflict) {
+        onPlacementErrorRef.current?.(evaluation.conflict)
+        return
+      }
+
       try {
         const moved = moveComponent(projectRef.current, instanceId, sceneX, sceneY, {
-          snap: false,
+          pinLayout: pinLayoutsRef.current.get(instanceId),
         })
         onProjectChange(
           rerouteWiresVisual(moved, instanceId, pinLayoutsRef.current, SCENE_SCALE),
         )
-      } catch {
-        /* ignore invalid move */
+        onPlacementErrorRef.current?.(null)
+      } catch (e) {
+        onPlacementErrorRef.current?.(
+          e instanceof Error ? e.message : 'Could not move part',
+        )
       }
     },
     [onProjectChange],
+  )
+
+  const handlePartDragMove = useCallback(
+    (instanceId: string, sceneX: number, sceneY: number) => {
+      const instance = projectRef.current.components.find((c) => c.id === instanceId)
+      if (!instance) {
+        setBreadboardHoverMarkers([])
+        return
+      }
+
+      const evaluation = evaluateBreadboardSnap(
+        projectRef.current,
+        instance,
+        sceneX,
+        sceneY,
+        { layout: pinLayoutsRef.current.get(instanceId) },
+      )
+      const preview = evaluation.candidate ?? evaluation.rejected
+      if (!preview) {
+        setBreadboardHoverMarkers([])
+        if (!evaluation.conflict) {
+          onPlacementErrorRef.current?.(null)
+        }
+        return
+      }
+
+      const invalid = Boolean(evaluation.conflict)
+      const sites = Object.entries(preview.placement?.sites ?? {}).filter(
+        (entry): entry is [string, typeof preview.hole] => entry[1].kind === 'hole',
+      )
+      const hoverSites =
+        sites.length > 0 ? sites : [[preview.terminalId, preview.hole] as const]
+      setBreadboardHoverMarkers(
+        hoverSites.map(([terminalId, site]) => {
+          const bench = holeBenchPosition(preview.breadboard, site)
+          return {
+            id: `${instanceId}:${terminalId}:breadboard-hover`,
+            x: bench.x,
+            y: bench.y,
+            invalid,
+          }
+        }),
+      )
+    },
+    [],
   )
 
   const buildNodes = useCallback(
@@ -524,6 +958,8 @@ function StudioCanvasInner({
           onPinWireStart: handlePinWireStart,
           onPinWireTarget: handlePinWireTarget,
           onVisualPinLayout: handleVisualPinLayout,
+          onPartDragMove: (sceneX: number, sceneY: number) =>
+            handlePartDragMove(n.id, sceneX, sceneY),
           onPartDragEnd: (sceneX: number, sceneY: number) =>
             handlePartDragEnd(n.id, sceneX, sceneY),
         },
@@ -533,6 +969,7 @@ function StudioCanvasInner({
       handlePinWireStart,
       handlePinWireTarget,
       handleVisualPinLayout,
+      handlePartDragMove,
       handlePartDragEnd,
     ],
   )
@@ -577,7 +1014,7 @@ function StudioCanvasInner({
   )
 
   const onPaneClick = useCallback(() => {
-    if (wireDraftRef.current) {
+    if (wireDraftRef.current || breadboardWireDraftRef.current) {
       cancelWireDraft()
       return
     }
@@ -629,6 +1066,8 @@ function StudioCanvasInner({
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
         onConnect={handleReactFlowConnect}
+        onConnectStart={handleConnectStart}
+        onConnectEnd={handleConnectEnd}
         isValidConnection={isValidReactFlowConnection}
         onPaneClick={onPaneClick}
         connectionMode={ConnectionMode.Loose}
@@ -646,18 +1085,24 @@ function StudioCanvasInner({
         fitViewOptions={{ padding: 0.18 }}
         minZoom={0.4}
         maxZoom={2.5}
-        panOnDrag={!wireDraft}
+        panOnDrag={!wireDraft && !breadboardWireDraft}
         panOnScroll
         zoomOnScroll
         zoomOnPinch
         zoomOnDoubleClick
         deleteKeyCode={
-          wireDraft || selectedWireId ? null : ['Backspace', 'Delete']
+          wireDraft || breadboardWireDraft || selectedWireId
+            ? null
+            : ['Backspace', 'Delete']
         }
         className="berry-studio-flow h-full w-full rounded-2xl"
       >
         <Background gap={SCENE_SCALE * 0.02} size={1} color="rgba(28,25,23,0.08)" />
         <Controls showInteractive={false} />
+        <WireDraftOverlay
+          draft={wireDraft ?? breadboardWireDraft}
+          color={wirePreviewColor}
+        />
         <WireOverlay
           wires={wires}
           selectedWireId={selectedWireId}
@@ -665,8 +1110,16 @@ function StudioCanvasInner({
           onWireSelect={handleWireSelect}
           onWireHover={setHoveredWireId}
         />
-        {!wireDraft && (
-          <BreadboardHoleOverlay project={project} selectedId={selectedNodeId} />
+        {(!wireDraft || reactFlowConnecting) && (
+          <BreadboardHoleOverlay
+            project={project}
+            selectedId={selectedNodeId}
+            hoverMarkers={breadboardHoverMarkers}
+            wireStart={breadboardWireDraft?.from ?? null}
+            interactiveHoles={activeWireType === 'jumper-mm'}
+            elevateForWireConnect={!!breadboardWireDraft}
+            onHolePointerDown={handleBreadboardHolePointerDown}
+          />
         )}
       </ReactFlow>
     </div>

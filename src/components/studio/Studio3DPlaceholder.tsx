@@ -14,11 +14,7 @@ export function Studio3DPlaceholder() {
         style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
       >
         <p className="text-lg font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-          3D bench coming next
-        </p>
-        <p className="mt-2 max-w-sm text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Phase 7 adds a React Three Fiber view on the same project JSON. For now, build and wire
-          your circuit in 2D — nets and wires carry over when 3D ships.
+          Coming soon
         </p>
         <p className="mt-3 text-xs font-semibold" style={{ color: 'var(--accent)' }}>
           Switch back to 2D to keep editing.

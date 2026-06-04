@@ -14,7 +14,7 @@ export const BREADBOARD_ART_W = 420
 export const BREADBOARD_ART_H = 140
 
 const HOLE_ORIGIN_X = 16
-const HOLE_SPACING_X = 13.2
+const HOLE_SPACING_X = 6.6
 const ROW_Y_TOP_START = 36
 const ROW_Y_BOTTOM_START = 84
 const ROW_SPACING_Y = 5.2
@@ -22,7 +22,7 @@ const ROW_SPACING_Y = 5.2
 /**
  * Pixel center of a hole in breadboard art coordinates.
  * @param row Row letter.
- * @param column Column 1–30.
+ * @param column Column 1–60.
  */
 export function holeArtCenterPx(row: BreadboardRowId, column: number): { x: number; y: number } {
   const col = column - 1
@@ -40,7 +40,7 @@ export function holeArtCenterPx(row: BreadboardRowId, column: number): { x: numb
 /**
  * Hole center in scene units relative to breadboard top-left (0–w, 0–h).
  * @param row Row letter.
- * @param column Column 1–30.
+ * @param column Column 1–60.
  */
 export function holeSceneLocal(
   row: BreadboardRowId,
@@ -59,7 +59,7 @@ export function holeSceneLocal(
  * @param breadboardX Breadboard transform x.
  * @param breadboardY Breadboard transform y.
  * @param row Row letter.
- * @param column Column 1–30.
+ * @param column Column 1–60.
  */
 export function holeScenePosition(
   breadboardX: number,

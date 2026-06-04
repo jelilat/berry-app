@@ -1,5 +1,9 @@
+import type { BreadboardPlacement, BreadboardSite } from './breadboard'
+
 /** Schema version for Berry project JSON. */
 export const BERRY_PROJECT_VERSION = 1 as const
+
+export type { BreadboardPlacement, BreadboardSite } from './breadboard'
 
 export type BerryProjectVersion = typeof BERRY_PROJECT_VERSION
 
@@ -40,6 +44,9 @@ export type ComponentTypeId =
   | 'bme280'
   | 'servo-sg90'
   | 'lcd-1602-i2c'
+  | 'jumper-mm'
+  | 'jumper-mf'
+  | 'jumper-ff'
 
 export type TerminalKind =
   | 'power_in'
@@ -72,11 +79,27 @@ export interface TerminalDefinition {
 export type ComponentGroup =
   | 'microcontrollers'
   | 'breadboards'
+  | 'wires'
   | 'inputs'
   | 'displays'
   | 'sensors'
   | 'actuators'
   | 'passives'
+
+/** Jumper end connector style (breadboard pin vs socket). */
+export type WireConnectorGender = 'male' | 'female'
+
+/** Connector types at the start and end of a visual wire. */
+export interface WireConnectors {
+  start: WireConnectorGender
+  end: WireConnectorGender
+}
+
+/** Catalog metadata for tray wire templates (not placed as components). */
+export interface WireTemplateDefinition {
+  connectors: WireConnectors
+  defaultColor: WireColor
+}
 
 export interface ComponentDefinition {
   id: ComponentTypeId
@@ -84,6 +107,8 @@ export interface ComponentDefinition {
   /** Tray section in Studio (e.g. microcontrollers, sensors). */
   group: ComponentGroup
   terminals: TerminalDefinition[]
+  /** When set, this tray entry selects a wire style for the Connect tool. */
+  wireTemplate?: WireTemplateDefinition
 }
 
 /** One section of the component tray for Studio UI. */
@@ -101,14 +126,23 @@ export interface ComponentInstance {
   parent?: string | null
   /** Named attach point on the parent, when applicable. */
   anchor?: string | null
+  /**
+   * Breadboard hole per terminal when `parent` is a breadboard.
+   * Row/column tie groups determine shared copper on the bench.
+   */
+  placement?: BreadboardPlacement
 }
 
 /** One pin leg on a component, listed as part of a net. */
 export interface NetTerminal {
-  /** Instance id from `components[].id`. */
-  component: string
+  /** Instance id from `components[].id` (required for part pins). */
+  component?: string
   /** Terminal id from the component catalog (e.g. "IO13", "VCC", "pin1"). */
-  terminal: string
+  terminal?: string
+  /** Breadboard instance id when the endpoint is a hole/rail only (e.g. jumper). */
+  breadboard?: string
+  /** Which hole or rail on that breadboard. */
+  site?: BreadboardSite
 }
 
 /**
@@ -132,6 +166,12 @@ export type WireColor =
   | 'white'
   | string
 
+/** Component terminal endpoint for a visual wire route. */
+export interface WireEndpoint {
+  component: string
+  terminal: string
+}
+
 /**
  * Visual wire in the scene: a colored polyline for Studio rendering.
  * Must reference a `Net` id; multiple wires can share one net.
@@ -141,6 +181,11 @@ export interface Wire {
   /** Id of the `Net` this wire draws. */
   net: string
   color?: WireColor
+  /** Jumper connector styles at polyline start/end. */
+  connectors?: WireConnectors
+  /** Terminal endpoints this visual jumper connects. */
+  from?: WireEndpoint
+  to?: WireEndpoint
   /** Polyline in scene space (xyz). 2D: z = 0 on all points. */
   points: Vec3[]
 }

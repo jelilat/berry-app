@@ -10,6 +10,16 @@ Track implementation progress in **[BUILD_PLAN.md](./BUILD_PLAN.md)** — phased
 
 Project JSON format (3D-native, 2D uses xy): **[docs/project-schema.md](./docs/project-schema.md)**.
 
+## Studio (2D bench)
+
+Open **[http://localhost:3000/studio](http://localhost:3000/studio)** after `pnpm dev`.
+
+- **Component tray** — grouped catalog (`listCatalogGrouped()`); click to place a part.
+- **Canvas** — drag parts (snap ~0.02 scene units), delete selection, wire mode (terminal A → B).
+- **Project** — auto-saves to `localStorage` key `berry-studio-project`; toolbar **Save**, **Export** JSON, **Import** file.
+- **Templates** — **New** (breadboard + ESP32), **Example** (ESP32 LED blink from `public/examples/`).
+- **Undo / redo** — history on project graph mutations (`src/lib/project/mutations.ts`).
+
 ## Brand Snapshot
 
 - Name: `berry.`
@@ -41,7 +51,7 @@ Then open [http://localhost:3000](http://localhost:3000).
 
 ## Testing
 
-Unit tests use [Vitest](https://vitest.dev/) for the project model (`src/lib/project/`).
+Unit tests use [Vitest](https://vitest.dev/) for the project model (`src/lib/project/`) and Studio mutations.
 
 ```bash
 pnpm test        # watch mode

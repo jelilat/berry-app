@@ -4,6 +4,7 @@ import { listCatalog } from './catalog'
 /** Tray section order (top to bottom in Studio). */
 export const COMPONENT_GROUP_ORDER: readonly ComponentGroup[] = [
   'breadboards',
+  'wires',
   'microcontrollers',
   'sensors',
   'displays',
@@ -15,6 +16,7 @@ export const COMPONENT_GROUP_ORDER: readonly ComponentGroup[] = [
 /** Human-readable labels for tray section headers. */
 export const COMPONENT_GROUP_LABELS: Record<ComponentGroup, string> = {
   breadboards: 'Breadboards',
+  wires: 'Wires',
   microcontrollers: 'Microcontrollers',
   sensors: 'Sensors',
   displays: 'Displays',

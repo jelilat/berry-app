@@ -1,3 +1,9 @@
+import { parseBreadboardPlacement, parseBreadboardSite } from './breadboard'
+import {
+  findBreadboardTieNetConflicts,
+  findHoleOccupancyConflicts,
+  validateInstancePlacement,
+} from './breadboard-nets'
 import { getComponentDefinition } from './catalog'
 import { getBoardProfile } from './boards'
 import {
@@ -7,6 +13,7 @@ import {
   type ComponentInstance,
   type ComponentTypeId,
   type Net,
+  type NetTerminal,
   type Vec3,
   type Wire,
 } from './types'
@@ -50,7 +57,7 @@ function parseVec3(value: unknown, path: string): Vec3 {
 function parseComponent(value: unknown, index: number): ComponentInstance {
   const path = `components[${index}]`
   if (!isRecord(value)) throw new ProjectParseError(`${path} must be an object`)
-  const { id, type, transform, parent, anchor } = value
+  const { id, type, transform, parent, anchor, placement } = value
   if (typeof id !== 'string' || !id) throw new ProjectParseError(`${path}.id is required`)
   if (typeof type !== 'string') throw new ProjectParseError(`${path}.type is required`)
   if (!isRecord(transform)) throw new ProjectParseError(`${path}.transform is required`)
@@ -72,13 +79,52 @@ function parseComponent(value: unknown, index: number): ComponentInstance {
 
   getComponentDefinition(type as ComponentTypeId)
 
+  let parsedPlacement: ComponentInstance['placement']
+  if (placement !== undefined && placement !== null) {
+    parsedPlacement = parseBreadboardPlacement(placement, `${path}.placement`)
+  }
+
   return {
     id,
     type: type as ComponentTypeId,
     transform: { position, rotation, scale },
     parent: parent === null || parent === undefined ? undefined : String(parent),
     anchor: anchor === null || anchor === undefined ? undefined : String(anchor),
+    placement: parsedPlacement,
   }
+}
+
+/**
+ * Parse one net terminal (part pin, or breadboard hole/rail).
+ * @param value Raw terminal object.
+ * @param path JSON path for errors.
+ */
+function parseNetTerminal(value: unknown, path: string): NetTerminal {
+  if (!isRecord(value)) throw new ProjectParseError(`${path} must be an object`)
+  const hasComponent = typeof value.component === 'string'
+  const hasTerminal = typeof value.terminal === 'string'
+  const hasBreadboard = typeof value.breadboard === 'string'
+  const hasSite = value.site !== undefined && value.site !== null
+
+  if (hasComponent !== hasTerminal) {
+    throw new ProjectParseError(`${path} requires both component and terminal, or neither`)
+  }
+  if (!hasComponent && !(hasBreadboard && hasSite)) {
+    throw new ProjectParseError(
+      `${path} requires component+terminal or breadboard+site`,
+    )
+  }
+
+  const out: NetTerminal = {}
+  if (hasComponent && hasTerminal) {
+    out.component = value.component as string
+    out.terminal = value.terminal as string
+  }
+  if (hasBreadboard) out.breadboard = value.breadboard as string
+  if (hasSite) {
+    out.site = parseBreadboardSite(value.site, `${path}.site`)
+  }
+  return out
 }
 
 /**
@@ -93,14 +139,7 @@ function parseNet(value: unknown, index: number): Net {
   if (typeof id !== 'string' || !id) throw new ProjectParseError(`${path}.id is required`)
   if (!Array.isArray(terminals)) throw new ProjectParseError(`${path}.terminals must be an array`)
 
-  const parsed = terminals.map((t, ti) => {
-    const tp = `${path}.terminals[${ti}]`
-    if (!isRecord(t)) throw new ProjectParseError(`${tp} must be an object`)
-    if (typeof t.component !== 'string' || typeof t.terminal !== 'string') {
-      throw new ProjectParseError(`${tp} requires component and terminal strings`)
-    }
-    return { component: t.component, terminal: t.terminal }
-  })
+  const parsed = terminals.map((t, ti) => parseNetTerminal(t, `${path}.terminals[${ti}]`))
 
   return { id, terminals: parsed }
 }
@@ -113,7 +152,7 @@ function parseNet(value: unknown, index: number): Net {
 function parseWire(value: unknown, index: number): Wire {
   const path = `wires[${index}]`
   if (!isRecord(value)) throw new ProjectParseError(`${path} must be an object`)
-  const { id, net, color, points } = value
+  const { id, net, color, connectors, from, to, points } = value
   if (typeof id !== 'string' || !id) throw new ProjectParseError(`${path}.id is required`)
   if (typeof net !== 'string' || !net) throw new ProjectParseError(`${path}.net is required`)
   if (!Array.isArray(points) || points.length < 2) {
@@ -124,8 +163,53 @@ function parseWire(value: unknown, index: number): Wire {
     id,
     net,
     color: typeof color === 'string' ? color : undefined,
+    connectors: parseWireConnectors(connectors, `${path}.connectors`),
+    from: parseWireEndpoint(from, `${path}.from`),
+    to: parseWireEndpoint(to, `${path}.to`),
     points: points.map((p, pi) => parseVec3(p, `${path}.points[${pi}]`)),
   }
+}
+
+/**
+ * Parse optional visual wire endpoint metadata.
+ * @param value Raw endpoint object.
+ * @param path JSON path for errors.
+ */
+function parseWireEndpoint(
+  value: unknown,
+  path: string,
+): Wire['from'] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!isRecord(value)) throw new ProjectParseError(`${path} must be an object`)
+  const { component, terminal } = value
+  if (typeof component !== 'string' || !component) {
+    throw new ProjectParseError(`${path}.component is required`)
+  }
+  if (typeof terminal !== 'string' || !terminal) {
+    throw new ProjectParseError(`${path}.terminal is required`)
+  }
+  return { component, terminal }
+}
+
+/**
+ * Parse optional jumper connector metadata on a wire.
+ * @param value Raw connectors object.
+ * @param path JSON path for errors.
+ */
+function parseWireConnectors(
+  value: unknown,
+  path: string,
+): Wire['connectors'] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!isRecord(value)) throw new ProjectParseError(`${path} must be an object`)
+  const { start, end } = value
+  if (start !== 'male' && start !== 'female') {
+    throw new ProjectParseError(`${path}.start must be "male" or "female"`)
+  }
+  if (end !== 'male' && end !== 'female') {
+    throw new ProjectParseError(`${path}.end must be "male" or "female"`)
+  }
+  return { start, end }
 }
 
 /**
@@ -199,6 +283,27 @@ export function validateProjectGraph(project: BerryProject): void {
     if (c.parent && !componentIds.has(c.parent)) {
       throw new ProjectParseError(`Component ${c.id} references unknown parent ${c.parent}`)
     }
+    if (c.placement) {
+      const parent = c.parent
+        ? project.components.find((p) => p.id === c.parent)
+        : undefined
+      if (!parent || parent.type !== 'breadboard-full') {
+        throw new ProjectParseError(
+          `Component ${c.id} has placement but parent is not a breadboard`,
+        )
+      }
+      for (const msg of validateInstancePlacement(c)) {
+        throw new ProjectParseError(msg)
+      }
+      const holeErrors = findHoleOccupancyConflicts(project, parent.id)
+      if (holeErrors.length > 0) {
+        throw new ProjectParseError(holeErrors[0])
+      }
+    }
+  }
+
+  for (const conflict of findBreadboardTieNetConflicts(project)) {
+    throw new ProjectParseError(conflict.message)
   }
 
   const netIds = new Set(project.nets.map((n) => n.id))
@@ -208,15 +313,37 @@ export function validateProjectGraph(project: BerryProject): void {
       throw new ProjectParseError(`Net ${net.id} must connect at least 2 terminals`)
     }
     for (const t of net.terminals) {
-      if (!componentIds.has(t.component)) {
-        throw new ProjectParseError(`Net ${net.id} references unknown component ${t.component}`)
+      if (t.component) {
+        if (!componentIds.has(t.component)) {
+          throw new ProjectParseError(`Net ${net.id} references unknown component ${t.component}`)
+        }
+        if (!t.terminal) {
+          throw new ProjectParseError(`Net ${net.id}: component ${t.component} missing terminal id`)
+        }
+        const def = project.components.find((c) => c.id === t.component)!
+        const catalog = getComponentDefinition(def.type)
+        if (
+          catalog.terminals.length > 0 &&
+          !catalog.terminals.some((term) => term.id === t.terminal)
+        ) {
+          throw new ProjectParseError(
+            `Net ${net.id}: terminal ${t.terminal} is not defined on ${def.type}`,
+          )
+        }
       }
-      const def = project.components.find((c) => c.id === t.component)!
-      const catalog = getComponentDefinition(def.type)
-      if (catalog.terminals.length > 0 && !catalog.terminals.some((term) => term.id === t.terminal)) {
-        throw new ProjectParseError(
-          `Net ${net.id}: terminal ${t.terminal} is not defined on ${def.type}`,
-        )
+      if (t.breadboard) {
+        if (!componentIds.has(t.breadboard)) {
+          throw new ProjectParseError(
+            `Net ${net.id} references unknown breadboard ${t.breadboard}`,
+          )
+        }
+        const bb = project.components.find((c) => c.id === t.breadboard)!
+        if (bb.type !== 'breadboard-full') {
+          throw new ProjectParseError(`Net ${net.id}: ${t.breadboard} is not a breadboard`)
+        }
+        if (!t.site) {
+          throw new ProjectParseError(`Net ${net.id}: breadboard endpoint missing site`)
+        }
       }
     }
   }
@@ -224,6 +351,27 @@ export function validateProjectGraph(project: BerryProject): void {
   for (const wire of project.wires) {
     if (!netIds.has(wire.net)) {
       throw new ProjectParseError(`Wire ${wire.id} references unknown net ${wire.net}`)
+    }
+    for (const [label, endpoint] of [
+      ['from', wire.from],
+      ['to', wire.to],
+    ] as const) {
+      if (!endpoint) continue
+      if (!componentIds.has(endpoint.component)) {
+        throw new ProjectParseError(
+          `Wire ${wire.id}.${label} references unknown component ${endpoint.component}`,
+        )
+      }
+      const instance = project.components.find((c) => c.id === endpoint.component)!
+      const catalog = getComponentDefinition(instance.type)
+      if (
+        catalog.terminals.length > 0 &&
+        !catalog.terminals.some((term) => term.id === endpoint.terminal)
+      ) {
+        throw new ProjectParseError(
+          `Wire ${wire.id}.${label}: terminal ${endpoint.terminal} is not defined on ${instance.type}`,
+        )
+      }
     }
   }
 }

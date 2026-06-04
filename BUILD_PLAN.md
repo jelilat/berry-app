@@ -4,7 +4,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Product goal:** Talk to AI → design in Studio → validate wiring → simulate firmware → deploy the same build to a real device.
 
-**Current phase:** Phase 1 — Studio (2D)
+**Current phase:** Phase 2 — Functional wiring (validation)
 
 **Last updated:** 2026-06-03
 
@@ -36,7 +36,7 @@ flowchart TD
 |-------|------|--------|
 | — | Repo bootstrap & brand | Done |
 | 0 | Foundation | Done |
-| 1 | Studio 2D | In progress |
+| 1 | Studio 2D | Done |
 | 2 | Functional wiring / validation | Not started |
 | 3 | Codegen + compile | Not started |
 | 4 | Simulation | Not started |
@@ -76,13 +76,13 @@ flowchart TD
 
 **Outcome:** Drag-and-drop schematic editor backed by the project graph.
 
-- [ ] React Flow (or equivalent) canvas with snap-to-grid
-- [ ] Component tray from catalog
-- [ ] Place, move, delete components
-- [ ] Wire mode: connect pin A → pin B (updates graph nets)
-- [ ] Undo / redo
-- [ ] Persist project to storage (local first, cloud later)
-- [ ] Empty / loading / error states
+- [x] React Flow (or equivalent) canvas with snap-to-grid
+- [x] Component tray from catalog
+- [x] Place, move, delete components
+- [x] Wire mode: connect pin A → pin B (updates graph nets)
+- [x] Undo / redo
+- [x] Persist project to storage (local first, cloud later)
+- [x] Empty / loading / error states
 
 **Exit criteria:** User can build a schematic visually; saved file round-trips through load.
 
@@ -90,10 +90,25 @@ flowchart TD
 
 ---
 
+## Planned Studio UX (not scheduled yet)
+
+Items to ship **after** a project **folder / file menu** exists (list of project files — firmware, config, docs, generated artifacts, etc.). Same `BerryProject` JSON remains the source of truth; these are additional views and files in the tree.
+
+| Item | Description |
+|------|-------------|
+| **Project folder menu** | Sidebar or panel listing all files in the hardware project (e.g. `project.json`, sketch, `platformio.ini`, README, wiring export). Prerequisite for diagram + doc tabs. |
+| **Wiring diagram view** | Board-centric schematic (reference: ESP32 pin column in the center, peripheral cards around it, color-coded orthogonal wires, pin labels like `TRIG → GPIO27`, short part descriptions). Read-only or lightly editable renderer over `components` + `nets` + `wires` + `project.board` — not a second schema. Complements the 2D breadboard bench; good for review, AI explanation, and validation overlays (Phase 2). |
+
+**Likely placement:** Folder menu first; wiring diagram as a file/tab (e.g. `wiring.diagram` or in-app **Bench \| Diagram** toggle) once the file tree ships.
+
+---
+
 ## Phase 2 — Functional wiring (validation)
 
 **Outcome:** Know what can connect to what before simulation or deploy.
 
+- [x] Breadboard row/column placement (`placement.sites`, tie groups, snap on move)
+- [ ] **TODO:** Fix breadboard hole snapping (still flaky — see `src/lib/studio/breadboard-snap.ts`)
 - [ ] Pin type system (`power`, `ground`, `gpio`, `i2c`, `uart`, etc.)
 - [ ] Kind / voltage / protocol matching rules
 - [ ] Warnings (e.g. LED without resistor, floating inputs)
@@ -226,7 +241,7 @@ flowchart TD
 ```
 src/lib/project/       # Phase 0 — schemas, catalog (done)
 src/lib/validation/    # Phase 2 — rule engine
-src/components/studio/ # Phase 1 — canvas UI
+src/components/studio/ # Phase 1 — canvas UI; diagram view later
 src/server/tools/      # Phases 3–6 — build, sim, deploy APIs
 mcp-server/            # Phase 6 — optional MCP wrapper
 ```
@@ -239,3 +254,5 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 |------|--------|
 | 2026-06-03 | Initial build plan from product brainstorm |
 | 2026-06-03 | Phase 0: 3D-native project schema, catalog, boards, io, example |
+| 2026-06-03 | Phase 1: Studio 2D (`/studio`), mutations, React Flow, localStorage, undo/redo |
+| 2026-06-03 | Planned: project folder menu + wiring diagram view (board-centric schematic) after file tree ships |

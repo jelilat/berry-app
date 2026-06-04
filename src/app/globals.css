@@ -80,3 +80,114 @@ body {
   stroke-dashoffset: 80;
   animation: draw 1.7s ease-out forwards;
 }
+
+/* Studio bench: selection ring lives on the part, not React Flow's group rect */
+.berry-studio-flow .react-flow__nodesselection {
+  display: none;
+}
+
+.berry-studio-flow .react-flow__node-berryComponent {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+
+.berry-studio-flow .react-flow__node-berryComponent .react-flow__handle {
+  pointer-events: auto;
+}
+
+.berry-studio-flow .react-flow__node-berryComponent .berry-part-drag {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.berry-studio-flow .react-flow__node-berryComponent .berry-part-drag:active {
+  cursor: grabbing;
+}
+
+/* Above .react-flow__renderer (z-index 4) so wires paint on top of parts */
+.berry-studio-flow .berry-wire-layer-host {
+  z-index: 5;
+}
+
+.berry-studio-flow .berry-wire-hit {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.berry-studio-flow .react-flow__node-berryComponent.selectable.selected,
+.berry-studio-flow .react-flow__node-berryComponent.selectable:focus,
+.berry-studio-flow .react-flow__node-berryComponent.selectable:focus-visible {
+  box-shadow: none !important;
+  outline: none;
+}
+
+.berry-studio-flow .react-flow__handle.pin-state-marker {
+  background: transparent;
+  border: 0;
+  opacity: 1;
+}
+
+.berry-studio-flow .react-flow__handle.pin-state-marker::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  width: 5px;
+  height: 5px;
+  opacity: 0;
+  background: #d1c479;
+  border: 0;
+  box-shadow: none;
+  transition:
+    background-color 100ms,
+    box-shadow 100ms,
+    opacity 100ms,
+    width 100ms,
+    height 100ms;
+}
+
+.berry-studio-flow .react-flow__handle.pin-state-marker[data-pin-state='hover']::after,
+.berry-studio-flow .react-flow__handle.pin-state-marker:not([data-pin-state='connected']):hover::after,
+.berry-studio-flow .react-flow__handle.pin-state-marker.connectingfrom::after,
+.berry-studio-flow .react-flow__handle.pin-state-marker.connectingto::after {
+  width: 6px;
+  height: 6px;
+  opacity: 0.95;
+  background: #28e070;
+  box-shadow: none;
+}
+
+.berry-studio-flow .react-flow__handle.pin-state-marker.connectingfrom::after,
+.berry-studio-flow .react-flow__handle.pin-state-marker.connectingto::after {
+  width: 7px;
+  height: 7px;
+}
+
+.berry-studio-flow .react-flow__handle.pin-state-marker[data-pin-state='connected']::after {
+  width: 6px;
+  height: 6px;
+  opacity: 0.95;
+  background: #ef4444;
+  box-shadow: none;
+}
+
+.berry-studio-flow .react-flow__handle.pin-flow-target {
+  background: transparent;
+  border: 0;
+}
+
+.berry-studio-flow .react-flow__edge.berry-wire-edge {
+  pointer-events: none;
+}
+
+.berry-studio-flow .react-flow__edge.berry-wire-edge .react-flow__edge-path {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 0 rgba(28, 25, 23, 0.16));
+}

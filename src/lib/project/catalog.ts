@@ -1,4 +1,4 @@
-import type { ComponentDefinition, ComponentTypeId } from './types'
+import type { ComponentDefinition, ComponentTypeId, WireTemplateDefinition } from './types'
 
 export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
   'breadboard-full': {
@@ -6,6 +6,36 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
     name: 'Full breadboard',
     group: 'breadboards',
     terminals: [],
+  },
+  'jumper-mm': {
+    id: 'jumper-mm',
+    name: 'Jumper M–M',
+    group: 'wires',
+    terminals: [],
+    wireTemplate: {
+      connectors: { start: 'male', end: 'male' },
+      defaultColor: 'orange',
+    },
+  },
+  'jumper-mf': {
+    id: 'jumper-mf',
+    name: 'Jumper M–F',
+    group: 'wires',
+    terminals: [],
+    wireTemplate: {
+      connectors: { start: 'male', end: 'female' },
+      defaultColor: 'yellow',
+    },
+  },
+  'jumper-ff': {
+    id: 'jumper-ff',
+    name: 'Jumper F–F',
+    group: 'wires',
+    terminals: [],
+    wireTemplate: {
+      connectors: { start: 'female', end: 'female' },
+      defaultColor: 'green',
+    },
   },
   'esp32-devkit-v1': {
     id: 'esp32-devkit-v1',
@@ -143,4 +173,25 @@ export function getComponentDefinition(type: ComponentTypeId): ComponentDefiniti
  */
 export function listCatalog(): ComponentDefinition[] {
   return Object.values(componentCatalog)
+}
+
+/**
+ * Whether a catalog id is a wire template (Connect tool only, not placed on bench).
+ * @param type Catalog component id.
+ */
+export function isWireTemplate(type: ComponentTypeId): boolean {
+  return componentCatalog[type].wireTemplate !== undefined
+}
+
+/**
+ * Return wire template metadata for a jumper catalog id.
+ * @param type Jumper wire catalog id.
+ * @throws When the type is not a wire template.
+ */
+export function getWireTemplate(type: ComponentTypeId): WireTemplateDefinition {
+  const template = componentCatalog[type].wireTemplate
+  if (!template) {
+    throw new Error(`${type} is not a wire template`)
+  }
+  return template
 }

@@ -70,12 +70,19 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href="#brand-system"
+                href="/studio"
                 className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold text-white transition-transform hover:-translate-y-0.5"
                 style={{ background: 'linear-gradient(135deg, #D6336C 0%, #A61E4D 100%)', boxShadow: '0 18px 40px rgba(214,51,108,0.28)' }}
               >
-                View brand system
+                Open Studio
                 <ArrowRight size={16} />
+              </a>
+              <a
+                href="#brand-system"
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold"
+                style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+              >
+                View brand system
               </a>
               <a
                 href="#what-berry-does"

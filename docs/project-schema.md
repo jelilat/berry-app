@@ -57,8 +57,34 @@ Berry projects are **3D-native JSON**: every position, wire point, and rotation 
 | `transform` | yes | `position` required; `rotation` / `scale` optional |
 | `parent` | no | Parent component id (e.g. part snapped to breadboard) |
 | `anchor` | no | Named attach point on parent (layout-specific) |
+| `placement` | no | Breadboard hole per terminal when `parent` is a breadboard (see below) |
 
-Electrical connectivity is **not** stored on the component body — use `nets`.
+### Breadboard placement
+
+When a part sits on a `breadboard-full`, `placement.sites` maps each **terminal id** to a hole or rail:
+
+```json
+"placement": {
+  "sites": {
+    "pin1": { "kind": "hole", "block": "top", "row": "e", "column": 18 },
+    "pin2": { "kind": "hole", "block": "top", "row": "f", "column": 18 }
+  }
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `kind` | `"hole"` (main grid) or `"rail"` (power strip) |
+| `block` | `"top"` (rows a–e) or `"bottom"` (rows f–j) |
+| `row` | Row letter `a`–`j` (hole only) |
+| `column` | Column `1`–`30` |
+| `edge` / `polarity` | For rails: `top`/`bottom` edge, `positive`/`negative` |
+
+**Tie groups:** On a standard board, holes in the same row letter and same 5-column group (cols 1–5, 6–10, …) share copper. Studio snaps moves to the nearest hole and infers placement for 2-pin passives.
+
+> **TODO:** Hole snapping in Studio is provisional and still flaky (`src/lib/studio/breadboard-snap.ts`). Placement in JSON is authoritative until snap is polished.
+
+Electrical connectivity is still stored in `nets`; placement records **where** legs sit on the breadboard.
 
 ## Net (electrical)
 
@@ -72,11 +98,17 @@ A net is one equipotential node shared by multiple terminals.
 {
   "id": "net_power_3v3",
   "terminals": [
-    { "component": "esp32_1", "terminal": "3V3" },
+    {
+      "component": "esp32_1",
+      "terminal": "3V3",
+      "site": { "kind": "hole", "block": "top", "row": "e", "column": 5 }
+    },
     { "component": "sensor_1", "terminal": "VCC" }
   ]
 }
 ```
+
+Net terminals may include optional `site` when the pin is in a breadboard hole. Jumper-only endpoints can use `{ "breadboard": "breadboard_1", "site": { ... } }` without a component.
 
 Validation, simulation, and codegen read **nets**, not wire geometry.
 
@@ -102,6 +134,7 @@ Wires are 3D polylines for rendering. Each wire belongs to exactly one net.
 | `id` | yes | Unique wire id |
 | `net` | yes | References `nets[].id` |
 | `color` | no | Studio palette name or hex |
+| `connectors` | no | Jumper ends: `{ "start": "male"|"female", "end": "male"|"female" }` |
 | `points` | yes | At least 2 points; path in scene space |
 
 2D routing: vary `x`/`y` along the polyline; keep all `z` at `0`.
@@ -115,6 +148,7 @@ Each part has a **`group`** for the Studio tray (not the same as `project.board`
 | Group | Examples |
 |-------|----------|
 | `breadboards` | Full breadboard |
+| `wires` | Jumper M–M, M–F, F–F (Connect tool templates) |
 | `microcontrollers` | ESP32 DevKit, Arduino UNO |
 | `sensors` | HC-SR04, BME280 |
 | `displays` | LCD 1602 I2C |
@@ -144,7 +178,7 @@ Pin maps and voltage live in `src/lib/project/boards.ts`. The same id may appear
 | Phase | Uses |
 |-------|------|
 | 0 | This schema + catalog + import/export |
-| 1 | 2D Studio edits `transform.position.x/y`, `wires[].points` |
+| 1 | 2D Studio edits `transform.position.x/y`, `placement`, `wires[].points` |
 | 2 | Rules engine reads `nets` + catalog terminal kinds |
 | 3–5 | Codegen / sim / deploy from `board` + `nets` |
 | 7 | 3D view uses full `transform` + wire `z` without schema changes |

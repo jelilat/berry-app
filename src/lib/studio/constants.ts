@@ -1,6 +1,9 @@
 /** localStorage key for persisted Studio projects. */
 export const STUDIO_STORAGE_KEY = 'berry-studio-project'
 
+/** localStorage key for the active browser-edited firmware source file. */
+export const FIRMWARE_SOURCE_STORAGE_KEY = 'berry-studio-firmware-src-main-cpp'
+
 /** Scene units → React Flow pixel scale. */
 export const SCENE_SCALE = 640
 

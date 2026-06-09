@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { countValidationErrors } from '@/lib/validation'
 import type { ValidationResult } from '@/lib/validation'
-import { ViewModeToggle } from './ViewModeToggle'
+import { ViewModeToggle, type StudioViewMode } from './ViewModeToggle'
 
 /**
  * Studio top toolbar: project actions, view mode, active wire type, undo/redo.
@@ -42,8 +42,8 @@ export function StudioToolbar({
   onDeploy,
 }: {
   projectName: string
-  viewMode: '2d' | '3d'
-  onViewModeChange: (mode: '2d' | '3d') => void
+  viewMode: StudioViewMode
+  onViewModeChange: (mode: StudioViewMode) => void
   activeWireLabel: string
   onNew: () => void
   onLoadExample: () => void
@@ -130,6 +130,10 @@ export function StudioToolbar({
   )
 }
 
+/**
+ * Icon button used by the Studio toolbar.
+ * @param props Button label, icon, action, and disabled state.
+ */
 function ToolbarButton({
   label,
   icon: Icon,

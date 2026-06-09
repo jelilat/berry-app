@@ -21,6 +21,10 @@ import {
 import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
 import { getComponentDefinition, getWireTemplate } from '@/lib/project/catalog'
 import type { BerryProject, BreadboardSite, ComponentTypeId } from '@/lib/project/types'
+import {
+  createDefaultFirmwareSource,
+  createEsp32BlinkFirmwareSource,
+} from '@/lib/firmware/source'
 import { brand } from '@/lib/brand'
 import { hasValidationErrors, validate, type ValidationResult } from '@/lib/validation'
 import { useProjectHistory } from '@/lib/studio/history'
@@ -29,19 +33,22 @@ import type { ValidationSubject } from '@/lib/validation'
 import {
   clearProjectStorage,
   downloadProjectJson,
+  loadFirmwareSourceFromStorage,
   loadProjectFromStorage,
+  saveFirmwareSourceToStorage,
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
 import { ComponentTray } from './ComponentTray'
+import { FirmwareEditorPanel } from './FirmwareEditorPanel'
 import { Studio3DPlaceholder } from './Studio3DPlaceholder'
 import { StudioCanvas } from './StudioCanvas'
 import { StudioToolbar } from './StudioToolbar'
 import { ValidationPanel } from './ValidationPanel'
+import type { StudioViewMode } from './ViewModeToggle'
 import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
-type ViewMode = '2d' | '3d'
 
 /**
  * Stable key for comparing validation findings before and after a tentative edit.
@@ -88,11 +95,14 @@ function newValidationErrors(
 export function StudioApp() {
   const [status, setStatus] = useState<StudioStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>('2d')
+  const [viewMode, setViewMode] = useState<StudioViewMode>('2d')
   const [activeWireType, setActiveWireType] = useState<ComponentTypeId>('jumper-mm')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
   const [pipelineNotice, setPipelineNotice] = useState<string | null>(null)
+  const [firmwareSource, setFirmwareSource] = useState<string>(() =>
+    createDefaultFirmwareSource('esp32-devkit-v1'),
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -123,6 +133,10 @@ export function StudioApp() {
     if (stored) {
       resetProject(stored)
     }
+    setFirmwareSource(
+      loadFirmwareSourceFromStorage() ??
+        createDefaultFirmwareSource(stored?.board ?? 'esp32-devkit-v1'),
+    )
     setStatus('ready')
   }, [resetProject])
 
@@ -131,8 +145,15 @@ export function StudioApp() {
     saveProjectToStorage(project)
   }, [project, status])
 
+  useEffect(() => {
+    if (status !== 'ready') return
+    saveFirmwareSourceToStorage(firmwareSource)
+  }, [firmwareSource, status])
+
   const handleNew = useCallback(() => {
-    resetProject(createStarterProject())
+    const nextProject = createStarterProject()
+    resetProject(nextProject)
+    setFirmwareSource(createDefaultFirmwareSource(nextProject.board))
     setSelectedNodeId(null)
     setSelectedWireId(null)
     setErrorMessage(null)
@@ -148,6 +169,7 @@ export function StudioApp() {
       const json = await res.text()
       const parsed = loadBerryProjectFromJson(json)
       resetProject(replaceProject(parsed))
+      setFirmwareSource(createEsp32BlinkFirmwareSource())
       setViewMode('2d')
       setStatus('ready')
     } catch (e) {
@@ -158,7 +180,12 @@ export function StudioApp() {
 
   const handleSave = useCallback(() => {
     saveProjectToStorage(project)
-  }, [project])
+    saveFirmwareSourceToStorage(firmwareSource)
+  }, [firmwareSource, project])
+
+  const handleResetFirmwareSource = useCallback(() => {
+    setFirmwareSource(createDefaultFirmwareSource(project.board))
+  }, [project.board])
 
   const handleExport = useCallback(() => {
     const slug = project.metadata.name.replace(/\s+/g, '-').toLowerCase() || 'project'
@@ -173,6 +200,7 @@ export function StudioApp() {
           const json = String(reader.result ?? '')
           const parsed = loadBerryProjectFromJson(json)
           resetProject(replaceProject(parsed))
+          setFirmwareSource(createDefaultFirmwareSource(parsed.board))
           setErrorMessage(null)
           setViewMode('2d')
           setStatus('ready')
@@ -410,7 +438,7 @@ export function StudioApp() {
           {brand.name}
         </Link>
         <span className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--accent)' }}>
-          Studio · {viewMode === '2d' ? '2D bench' : '3D bench'}
+          Studio · {viewMode === '2d' ? '2D bench' : viewMode === 'code' ? 'Code' : '3D bench'}
         </span>
       </nav>
 
@@ -480,94 +508,115 @@ export function StudioApp() {
         )}
 
         <div className="flex min-h-0 flex-1 gap-3">
-          <ComponentTray
-            onAddPart={handleAddPart}
-            onSelectWire={handleSelectWire}
-            activeWireType={activeWireType}
-          />
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl">
-            {isEmpty ? (
-              <EmptyBench onNew={handleNew} onLoadExample={handleLoadExample} />
-            ) : (
-              <>
-                {viewMode === '2d' ? (
-                  <StudioCanvas
-                    project={project}
-                    activeWireType={activeWireType}
-                    selectedNodeId={selectedNodeId}
-                    selectedWireId={selectedWireId}
-                    validationResults={validationResults}
-                    onProjectChange={setProject}
-                    onPartDrop={handleDropPart}
-                    onWireConnect={handleWireConnect}
-                    onSelectionChange={handleSelectionChange}
-                    onWireSelectionChange={handleWireSelectionChange}
-                    onPlacementError={setErrorMessage}
-                  />
+          {viewMode === 'code' ? (
+            <>
+              <div className="min-h-0 flex-1 overflow-hidden rounded-2xl">
+                <FirmwareEditorPanel
+                  board={project.board}
+                  source={firmwareSource}
+                  onChange={setFirmwareSource}
+                  onReset={handleResetFirmwareSource}
+                />
+              </div>
+              {!isEmpty && (
+                <ValidationPanel
+                  results={validationResults}
+                  onSelectSubject={handleValidationSelectSubject}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <ComponentTray
+                onAddPart={handleAddPart}
+                onSelectWire={handleSelectWire}
+                activeWireType={activeWireType}
+              />
+              <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl">
+                {isEmpty ? (
+                  <EmptyBench onNew={handleNew} onLoadExample={handleLoadExample} />
                 ) : (
-                  <div className="relative h-full min-h-0">
-                    <StudioCanvas
-                      project={project}
-                      activeWireType={activeWireType}
-                      selectedNodeId={selectedNodeId}
-                      selectedWireId={selectedWireId}
-                      validationResults={validationResults}
-                      onProjectChange={setProject}
-                      onPartDrop={handleDropPart}
-                      onWireConnect={() => {}}
-                      onSelectionChange={handleSelectionChange}
-                      onWireSelectionChange={handleWireSelectionChange}
-                      onPlacementError={setErrorMessage}
-                    />
-                    <Studio3DPlaceholder />
-                  </div>
+                  <>
+                    {viewMode === '2d' ? (
+                      <StudioCanvas
+                        project={project}
+                        activeWireType={activeWireType}
+                        selectedNodeId={selectedNodeId}
+                        selectedWireId={selectedWireId}
+                        validationResults={validationResults}
+                        onProjectChange={setProject}
+                        onPartDrop={handleDropPart}
+                        onWireConnect={handleWireConnect}
+                        onSelectionChange={handleSelectionChange}
+                        onWireSelectionChange={handleWireSelectionChange}
+                        onPlacementError={setErrorMessage}
+                      />
+                    ) : (
+                      <div className="relative h-full min-h-0">
+                        <StudioCanvas
+                          project={project}
+                          activeWireType={activeWireType}
+                          selectedNodeId={selectedNodeId}
+                          selectedWireId={selectedWireId}
+                          validationResults={validationResults}
+                          onProjectChange={setProject}
+                          onPartDrop={handleDropPart}
+                          onWireConnect={() => {}}
+                          onSelectionChange={handleSelectionChange}
+                          onWireSelectionChange={handleWireSelectionChange}
+                          onPlacementError={setErrorMessage}
+                        />
+                        <Studio3DPlaceholder />
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </div>
-          {!isEmpty && (
-            <ValidationPanel
-              results={validationResults}
-              onSelectSubject={handleValidationSelectSubject}
-            />
-          )}
-          {selectedNodeId && !isEmpty && (
-            <ComponentInspectorPanel
-              project={project}
-              componentId={selectedNodeId}
-              onClose={() => setSelectedNodeId(null)}
-              onRotate={handleRotateSelected}
-              onPositionChange={handlePositionChange}
-              onPinSiteChange={handlePinSiteChange}
-            />
-          )}
-          {selectedWireId && !selectedNodeId && !isEmpty && (
-            <WireInspectorPanel
-              project={project}
-              wireId={selectedWireId}
-              onClose={() => setSelectedWireId(null)}
-              onEndpointHoleChange={handleWireEndpointHoleChange}
-              onResetRoute={
-                project.wires.some(
-                  (wire) =>
-                    wire.id === selectedWireId &&
-                    (wire.from?.breadboard || wire.to?.breadboard),
-                )
-                  ? () => {
-                      try {
-                        setProject(resetWireRoute(project, selectedWireId))
-                        setErrorMessage(null)
-                      } catch (error) {
-                        setErrorMessage(
-                          error instanceof Error
-                            ? error.message
-                            : 'Could not reset wire route',
-                        )
-                      }
-                    }
-                  : undefined
-              }
-            />
+              </div>
+              {!isEmpty && (
+                <ValidationPanel
+                  results={validationResults}
+                  onSelectSubject={handleValidationSelectSubject}
+                />
+              )}
+              {selectedNodeId && !isEmpty && (
+                <ComponentInspectorPanel
+                  project={project}
+                  componentId={selectedNodeId}
+                  onClose={() => setSelectedNodeId(null)}
+                  onRotate={handleRotateSelected}
+                  onPositionChange={handlePositionChange}
+                  onPinSiteChange={handlePinSiteChange}
+                />
+              )}
+              {selectedWireId && !selectedNodeId && !isEmpty && (
+                <WireInspectorPanel
+                  project={project}
+                  wireId={selectedWireId}
+                  onClose={() => setSelectedWireId(null)}
+                  onEndpointHoleChange={handleWireEndpointHoleChange}
+                  onResetRoute={
+                    project.wires.some(
+                      (wire) =>
+                        wire.id === selectedWireId &&
+                        (wire.from?.breadboard || wire.to?.breadboard),
+                    )
+                      ? () => {
+                          try {
+                            setProject(resetWireRoute(project, selectedWireId))
+                            setErrorMessage(null)
+                          } catch (error) {
+                            setErrorMessage(
+                              error instanceof Error
+                                ? error.message
+                                : 'Could not reset wire route',
+                            )
+                          }
+                        }
+                      : undefined
+                  }
+                />
+              )}
+            </>
           )}
         </div>
 

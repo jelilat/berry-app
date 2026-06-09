@@ -1,6 +1,7 @@
 import { loadBerryProjectFromJson, serializeBerryProject } from '@/lib/project/io'
 import type { BerryProject } from '@/lib/project/types'
 import {
+  FIRMWARE_SOURCE_STORAGE_KEY,
   INSPECTOR_WIDTH_DEFAULT,
   INSPECTOR_WIDTH_MAX,
   INSPECTOR_WIDTH_MIN,
@@ -37,6 +38,31 @@ export function loadProjectFromStorage(): BerryProject | null {
 export function clearProjectStorage(): void {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(STUDIO_STORAGE_KEY)
+}
+
+/**
+ * Persist browser-edited firmware source to `localStorage`.
+ * @param source Source text for `src/main.cpp`.
+ */
+export function saveFirmwareSourceToStorage(source: string): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(FIRMWARE_SOURCE_STORAGE_KEY, source)
+}
+
+/**
+ * Load browser-edited firmware source from `localStorage`, or null if missing.
+ */
+export function loadFirmwareSourceFromStorage(): string | null {
+  if (typeof window === 'undefined') return null
+  return window.localStorage.getItem(FIRMWARE_SOURCE_STORAGE_KEY)
+}
+
+/**
+ * Remove browser-edited firmware source from storage.
+ */
+export function clearFirmwareSourceStorage(): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(FIRMWARE_SOURCE_STORAGE_KEY)
 }
 
 /**

@@ -2,17 +2,19 @@
 
 import type { ReactNode } from 'react'
 
+export type StudioViewMode = '2d' | 'code' | '3d'
+
 /**
- * 2D / 3D bench view switcher. 3D is reserved for a later phase.
+ * Studio workspace view switcher. 3D is reserved for a later phase.
  * @param viewMode Active view.
- * @param onChange Called when the user picks 2D or 3D.
+ * @param onChange Called when the user picks a workspace view.
  */
 export function ViewModeToggle({
   viewMode,
   onChange,
 }: {
-  viewMode: '2d' | '3d'
-  onChange: (mode: '2d' | '3d') => void
+  viewMode: StudioViewMode
+  onChange: (mode: StudioViewMode) => void
 }) {
   return (
     <div
@@ -24,6 +26,9 @@ export function ViewModeToggle({
       <ViewButton active={viewMode === '2d'} onClick={() => onChange('2d')}>
         2D
       </ViewButton>
+      <ViewButton active={viewMode === 'code'} onClick={() => onChange('code')}>
+        Code
+      </ViewButton>
       <ViewButton active={viewMode === '3d'} onClick={() => onChange('3d')}>
         3D
       </ViewButton>
@@ -31,6 +36,10 @@ export function ViewModeToggle({
   )
 }
 
+/**
+ * Segmented-control button for one Studio workspace view.
+ * @param props Active state and button content.
+ */
 function ViewButton({
   active,
   onClick,

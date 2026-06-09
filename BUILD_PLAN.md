@@ -4,9 +4,9 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Product goal:** Talk to AI → design in Studio → validate wiring → simulate firmware → deploy the same build to a real device.
 
-**Current phase:** Phase 2 — Functional wiring (validation)
+**Current phase:** Phase 3 — Codegen + compile
 
-**Last updated:** 2026-06-05
+**Last updated:** 2026-06-09
 
 ---
 
@@ -37,7 +37,7 @@ flowchart TD
 | — | Repo bootstrap & brand | Done |
 | 0 | Foundation | Done |
 | 1 | Studio 2D | Done |
-| 2 | Functional wiring / validation | Done (MVP) |
+| 2 | Functional wiring / validation | Done |
 | 3 | Codegen + compile | Not started |
 | 4 | Simulation | Not started |
 | 5 | Deploy to device | Not started |
@@ -112,9 +112,12 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 - [x] Pin type system (`power`, `ground`, `gpio`, `i2c`, `uart`, etc.) — catalog + validation context
 - [x] Kind / voltage matching rules (`net-power`: shorts, voltage mismatch)
 - [x] Warnings (LED without resistor; more rules deferred)
+- [x] I2C / UART pairing checks, conservative pin-kind compatibility, unpowered module warnings, and floating button input warnings
 - [x] `ValidationResult[]` with `error | warning | info` + stable codes
 - [x] Inline errors on wires and pins in Studio
 - [x] Block “Run” / “Deploy” when errors exist
+- [x] Connect-time feedback when a new wire would introduce a validation error
+- [x] Clickable validation rows for net-level findings
 - [x] API: `validate(project)` for AI and UI (`POST /api/validate`)
 
 **Exit criteria:** Invalid wiring surfaces immediately in Studio; validation API is testable without LLM.
@@ -257,3 +260,4 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | 2026-06-03 | Phase 1: Studio 2D (`/studio`), mutations, React Flow, localStorage, undo/redo |
 | 2026-06-03 | Planned: project folder menu + wiring diagram view (board-centric schematic) after file tree ships |
 | 2026-06-05 | Phase 2 MVP: `src/lib/validation/`, Studio panel + overlays, Run/Deploy gate, `/api/validate` |
+| 2026-06-09 | Phase 2 hardening: protocol pairing, pin compatibility, power/floating warnings, connect preflight, net-row selection, API route tests |

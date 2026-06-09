@@ -1,6 +1,6 @@
 import type { BerryProject } from '@/lib/project/types'
 import { buildValidationContext } from './context'
-import { checkComponents, checkNetPower } from './rules'
+import { checkComponents, checkConnectivity, checkNetPower } from './rules'
 import type { ValidationResult, ValidationSeverity } from './types'
 
 const SEVERITY_RANK: Record<ValidationSeverity, number> = {
@@ -31,6 +31,7 @@ export function validate(project: BerryProject): ValidationResult[] {
   const ctx = buildValidationContext(project)
   const results: ValidationResult[] = []
   results.push(...checkNetPower(ctx))
+  results.push(...checkConnectivity(ctx))
   results.push(...checkComponents(ctx))
   return sortResults(results)
 }

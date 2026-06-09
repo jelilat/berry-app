@@ -43,7 +43,7 @@ describe('wireConnectorsFitEndpoints', () => {
   })
 
   it('accepts M–F between breadboard and pin in either drag order', () => {
-    const mf = { start: 'male', end: 'female' }
+    const mf = { start: 'male', end: 'female' } as const
     expect(wireConnectorsFitEndpoints(hole, pin, mf)).toBe(true)
     expect(wireConnectorsFitEndpoints(pin, hole, mf)).toBe(true)
   })

@@ -245,7 +245,7 @@ function ValidationIssueRow({
  */
 function hasSelectableSubject(subject: ValidationSubject | undefined): boolean {
   if (!subject) return false
-  return !!(subject.wireId || subject.componentId)
+  return !!(subject.wireId || subject.componentId || subject.netId)
 }
 
 /**

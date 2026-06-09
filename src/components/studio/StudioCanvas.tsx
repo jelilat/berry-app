@@ -992,6 +992,7 @@ function StudioCanvasInner({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes())
   const wires = useMemo(() => {
+    void pinLayoutVersion
     const overrides = scenePositionOverridesFromNodes(project, nodes, SCENE_SCALE)
     return projectToLiveWireOverlay(
       project,

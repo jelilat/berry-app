@@ -22,7 +22,7 @@ import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
 import { getComponentDefinition, getWireTemplate } from '@/lib/project/catalog'
 import type { BerryProject, BreadboardSite, ComponentTypeId } from '@/lib/project/types'
 import { brand } from '@/lib/brand'
-import { hasValidationErrors } from '@/lib/validation'
+import { hasValidationErrors, validate, type ValidationResult } from '@/lib/validation'
 import { useProjectHistory } from '@/lib/studio/history'
 import { useValidation } from '@/lib/studio/use-validation'
 import type { ValidationSubject } from '@/lib/validation'
@@ -42,6 +42,45 @@ import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
 type ViewMode = '2d' | '3d'
+
+/**
+ * Stable key for comparing validation findings before and after a tentative edit.
+ * @param result Validation finding.
+ */
+function validationResultKey(result: ValidationResult): string {
+  const subject = result.subject
+  return [
+    result.severity,
+    result.code,
+    result.message,
+    subject?.netId,
+    subject?.wireId,
+    subject?.componentId,
+    subject?.terminalId,
+  ]
+    .filter(Boolean)
+    .join(':')
+}
+
+/**
+ * Error findings that exist after an edit but not before it.
+ * @param before Current validation results.
+ * @param after Validation results from a tentative project.
+ */
+function newValidationErrors(
+  before: ValidationResult[],
+  after: ValidationResult[],
+): ValidationResult[] {
+  const existing = new Set(
+    before
+      .filter((result) => result.severity === 'error')
+      .map(validationResultKey),
+  )
+  return after.filter(
+    (result) =>
+      result.severity === 'error' && !existing.has(validationResultKey(result)),
+  )
+}
 
 /**
  * Client Studio shell: visual tray, 2D canvas, persistence, undo/redo.
@@ -195,19 +234,23 @@ export function StudioApp() {
     ) => {
       try {
         const wireTemplate = getWireTemplate(activeWireType)
-        setProject(
-          connectTerminals(project, from, to, {
-            color: wireTemplate.defaultColor,
-            connectors: wireTemplate.connectors,
-            points,
-          }),
-        )
+        const next = connectTerminals(project, from, to, {
+          color: wireTemplate.defaultColor,
+          connectors: wireTemplate.connectors,
+          points,
+        })
+        const newErrors = newValidationErrors(validationResults, validate(next))
+        if (newErrors.length > 0) {
+          setErrorMessage(newErrors[0]?.message ?? 'That wire would create a validation error')
+          return
+        }
+        setProject(next)
         setErrorMessage(null)
       } catch (e) {
         setErrorMessage(e instanceof Error ? e.message : 'Could not connect terminals')
       }
     },
-    [activeWireType, project, setProject],
+    [activeWireType, project, setProject, validationResults],
   )
 
   const handleSelectionChange = useCallback((nodeId: string | null) => {
@@ -234,8 +277,17 @@ export function StudioApp() {
     if (subject.componentId) {
       setSelectedNodeId(subject.componentId)
       setSelectedWireId(null)
+      return
     }
-  }, [])
+    if (subject.netId) {
+      const wire = project.wires.find((candidate) => candidate.net === subject.netId)
+      if (wire) {
+        setSelectedWireId(wire.id)
+        setSelectedNodeId(null)
+        return
+      }
+    }
+  }, [project.wires])
 
   const handleDeleteSelected = useCallback(() => {
     try {

@@ -22,7 +22,10 @@ import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
 import { getComponentDefinition, getWireTemplate } from '@/lib/project/catalog'
 import type { BerryProject, BreadboardSite, ComponentTypeId } from '@/lib/project/types'
 import { brand } from '@/lib/brand'
+import { hasValidationErrors } from '@/lib/validation'
 import { useProjectHistory } from '@/lib/studio/history'
+import { useValidation } from '@/lib/studio/use-validation'
+import type { ValidationSubject } from '@/lib/validation'
 import {
   clearProjectStorage,
   downloadProjectJson,
@@ -34,6 +37,7 @@ import { ComponentTray } from './ComponentTray'
 import { Studio3DPlaceholder } from './Studio3DPlaceholder'
 import { StudioCanvas } from './StudioCanvas'
 import { StudioToolbar } from './StudioToolbar'
+import { ValidationPanel } from './ValidationPanel'
 import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
@@ -49,6 +53,7 @@ export function StudioApp() {
   const [activeWireType, setActiveWireType] = useState<ComponentTypeId>('jumper-mm')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
+  const [pipelineNotice, setPipelineNotice] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -60,6 +65,19 @@ export function StudioApp() {
     canUndo,
     canRedo,
   } = useProjectHistory(createStarterProject())
+
+  const validationResults = useValidation(project)
+  const validationHasErrors = hasValidationErrors(validationResults)
+
+  useEffect(() => {
+    if (!pipelineNotice) return
+    const timer = window.setTimeout(() => setPipelineNotice(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [pipelineNotice])
+
+  const handlePipelinePlaceholder = useCallback(() => {
+    setPipelineNotice('Build pipeline coming in Phase 3')
+  }, [])
 
   useEffect(() => {
     const stored = loadProjectFromStorage()
@@ -200,6 +218,23 @@ export function StudioApp() {
   const handleWireSelectionChange = useCallback((wireId: string | null) => {
     setSelectedWireId(wireId)
     if (wireId) setSelectedNodeId(null)
+  }, [])
+
+  /**
+   * Focus Studio selection from a validation finding subject.
+   *
+   * @param subject Graph ids attached to the clicked row.
+   */
+  const handleValidationSelectSubject = useCallback((subject: ValidationSubject) => {
+    if (subject.wireId) {
+      setSelectedWireId(subject.wireId)
+      setSelectedNodeId(null)
+      return
+    }
+    if (subject.componentId) {
+      setSelectedNodeId(subject.componentId)
+      setSelectedWireId(null)
+    }
   }, [])
 
   const handleDeleteSelected = useCallback(() => {
@@ -344,6 +379,10 @@ export function StudioApp() {
           canRedo={canRedo}
           onDeleteSelected={handleDeleteSelected}
           hasSelection={!!selectedNodeId || !!selectedWireId}
+          validationResults={validationResults}
+          hasValidationErrors={validationHasErrors}
+          onRun={handlePipelinePlaceholder}
+          onDeploy={handlePipelinePlaceholder}
         />
 
         <input
@@ -357,6 +396,16 @@ export function StudioApp() {
             e.target.value = ''
           }}
         />
+
+        {pipelineNotice && (
+          <div
+            className="rounded-xl px-4 py-3 text-sm font-semibold"
+            style={{ background: 'rgba(15,168,134,0.12)', color: 'var(--leaf)' }}
+            role="status"
+          >
+            {pipelineNotice}
+          </div>
+        )}
 
         {errorMessage && (status === 'ready' || status === 'error') && (
           <div
@@ -395,6 +444,7 @@ export function StudioApp() {
                     activeWireType={activeWireType}
                     selectedNodeId={selectedNodeId}
                     selectedWireId={selectedWireId}
+                    validationResults={validationResults}
                     onProjectChange={setProject}
                     onPartDrop={handleDropPart}
                     onWireConnect={handleWireConnect}
@@ -409,6 +459,7 @@ export function StudioApp() {
                       activeWireType={activeWireType}
                       selectedNodeId={selectedNodeId}
                       selectedWireId={selectedWireId}
+                      validationResults={validationResults}
                       onProjectChange={setProject}
                       onPartDrop={handleDropPart}
                       onWireConnect={() => {}}
@@ -422,6 +473,12 @@ export function StudioApp() {
               </>
             )}
           </div>
+          {!isEmpty && (
+            <ValidationPanel
+              results={validationResults}
+              onSelectSubject={handleValidationSelectSubject}
+            />
+          )}
           {selectedNodeId && !isEmpty && (
             <ComponentInspectorPanel
               project={project}

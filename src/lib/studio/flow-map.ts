@@ -9,6 +9,8 @@ import type {
   Wire,
   WireEndpoint,
 } from "@/lib/project/types";
+import type { ValidationResult } from "@/lib/validation/types";
+import type { ValidationIndex } from "./validation-index";
 import { xy } from "@/lib/project/vec3";
 import { COMPONENT_NODE_TYPE, SCENE_SCALE } from "./constants";
 import { WIRE_STROKE_HEX, wireStrokeHex } from "./wire-colors";
@@ -170,6 +172,9 @@ export interface ComponentNodeData {
   terminals: { id: string; label: string; kind: string }[];
   terminalLayout: Record<string, { x: number; y: number }>;
   connectedTerminalIds: string[];
+  /** Terminal ids with validation findings (berry-red pin ring). */
+  errorTerminalIds?: string[];
+  terminalValidation?: Map<string, ValidationResult[]>;
   width: number;
   height: number;
   baseWidth: number;
@@ -205,10 +210,12 @@ export interface TerminalSelection {
  * Build React Flow nodes from project components.
  * @param project Berry project.
  * @param selectedNodeId Selected bench part id.
+ * @param validation Optional validation index for inline pin highlights.
  */
 export function projectToFlowNodes(
   project: BerryProject,
   selectedNodeId: string | null,
+  validation?: ValidationIndex,
 ): Node<ComponentNodeData>[] {
   const sorted = [...project.components].sort(
     (a, b) => componentNodeZIndex(a) - componentNodeZIndex(b),
@@ -245,6 +252,19 @@ export function projectToFlowNodes(
       ) ??
       catalogTerminalLayout(instance);
 
+    const terminalValidation = new Map<string, ValidationResult[]>()
+    const errorTerminalIds: string[] = []
+    if (validation) {
+      for (const terminal of def.terminals) {
+        const findings = validation.byTerminalKey.get(
+          terminalKey(instance.id, terminal.id),
+        )
+        if (!findings?.length) continue
+        terminalValidation.set(terminal.id, findings)
+        errorTerminalIds.push(terminal.id)
+      }
+    }
+
     return {
       id: instance.id,
       type: COMPONENT_NODE_TYPE,
@@ -262,6 +282,9 @@ export function projectToFlowNodes(
         connectedTerminalIds: def.terminals
           .filter((t) => connected.has(terminalKey(instance.id, t.id)))
           .map((t) => t.id),
+        errorTerminalIds,
+        terminalValidation:
+          terminalValidation.size > 0 ? terminalValidation : undefined,
         width,
         height,
         baseWidth,

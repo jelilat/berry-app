@@ -3,6 +3,11 @@
 import { useCallback } from 'react'
 import { useViewport } from '@xyflow/react'
 import type { WireOverlayItem } from '@/lib/studio/flow-map'
+import type { ValidationResult } from '@/lib/validation/types'
+import {
+  validationTooltip,
+  validationWireStroke,
+} from '@/lib/studio/validation-index'
 
 const WIRE_HIT_STROKE = 18
 const WIRE_STROKE = 1.4
@@ -21,12 +26,14 @@ export function WireOverlay({
   wires,
   selectedWireId,
   hoveredWireId,
+  wireValidation,
   onWireSelect,
   onWireHover,
 }: {
   wires: WireOverlayItem[]
   selectedWireId: string | null
   hoveredWireId: string | null
+  wireValidation?: Map<string, ValidationResult[]>
   onWireSelect: (wireId: string) => void
   onWireHover: (wireId: string | null) => void
 }) {
@@ -56,10 +63,17 @@ export function WireOverlay({
             const angleEnd = endpointAngle(wire.points, 'end')
             const selected = wire.id === selectedWireId
             const hovered = wire.id === hoveredWireId
-            const strokeColor = selected || hovered ? 'var(--accent)' : wire.color
+            const findings = wireValidation?.get(wire.id) ?? []
+            const validationStroke = validationWireStroke(findings)
+            const strokeColor =
+              selected || hovered
+                ? 'var(--accent)'
+                : validationStroke ?? wire.color
+            const tooltip = findings.length > 0 ? validationTooltip(findings) : undefined
 
             return (
               <g key={wire.id}>
+                {tooltip ? <title>{tooltip}</title> : null}
                 <path
                   d={d}
                   fill="none"

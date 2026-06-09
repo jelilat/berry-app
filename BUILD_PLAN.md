@@ -6,7 +6,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Current phase:** Phase 2 — Functional wiring (validation)
 
-**Last updated:** 2026-06-04
+**Last updated:** 2026-06-05
 
 ---
 
@@ -37,7 +37,7 @@ flowchart TD
 | — | Repo bootstrap & brand | Done |
 | 0 | Foundation | Done |
 | 1 | Studio 2D | Done |
-| 2 | Functional wiring / validation | Not started |
+| 2 | Functional wiring / validation | Done (MVP) |
 | 3 | Codegen + compile | Not started |
 | 4 | Simulation | Not started |
 | 5 | Deploy to device | Not started |
@@ -109,13 +109,13 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 - [x] Breadboard row/column placement (`placement.sites`, tie groups, snap on move)
 - [x] Fix breadboard hole snapping with per-terminal placement and selected-hole overlays
-- [ ] Pin type system (`power`, `ground`, `gpio`, `i2c`, `uart`, etc.)
-- [ ] Kind / voltage / protocol matching rules
-- [ ] Warnings (e.g. LED without resistor, floating inputs)
-- [ ] `ValidationResult[]` with `error | warning | info` + stable codes
-- [ ] Inline errors on wires and pins in Studio
-- [ ] Block “Run” / “Deploy” when errors exist
-- [ ] API: `validate(project)` for AI and UI
+- [x] Pin type system (`power`, `ground`, `gpio`, `i2c`, `uart`, etc.) — catalog + validation context
+- [x] Kind / voltage matching rules (`net-power`: shorts, voltage mismatch)
+- [x] Warnings (LED without resistor; more rules deferred)
+- [x] `ValidationResult[]` with `error | warning | info` + stable codes
+- [x] Inline errors on wires and pins in Studio
+- [x] Block “Run” / “Deploy” when errors exist
+- [x] API: `validate(project)` for AI and UI (`POST /api/validate`)
 
 **Exit criteria:** Invalid wiring surfaces immediately in Studio; validation API is testable without LLM.
 
@@ -256,3 +256,4 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | 2026-06-03 | Phase 0: 3D-native project schema, catalog, boards, io, example |
 | 2026-06-03 | Phase 1: Studio 2D (`/studio`), mutations, React Flow, localStorage, undo/redo |
 | 2026-06-03 | Planned: project folder menu + wiring diagram view (board-centric schematic) after file tree ships |
+| 2026-06-05 | Phase 2 MVP: `src/lib/validation/`, Studio panel + overlays, Run/Deploy gate, `/api/validate` |

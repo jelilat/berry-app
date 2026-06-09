@@ -9,12 +9,13 @@ import { getWokwiVisual } from '@/lib/studio/wokwi-map'
 import { usePartDrag } from './use-part-drag'
 import { FallbackPartArt } from './FallbackPartArt'
 import { WokwiPart } from './WokwiPart'
+import { validationTooltip } from '@/lib/studio/validation-index'
 
 /** Invisible hit target (px) centered on the Wokwi SVG pin. */
 const PIN_HIT_DEFAULT = 24
 const PIN_HIT_BOARD = 14
 
-type PinVisualState = 'idle' | 'hover' | 'source' | 'target' | 'connected'
+type PinVisualState = 'idle' | 'hover' | 'source' | 'target' | 'connected' | 'error'
 
 /**
  * Resolve the compact pin color state.
@@ -24,9 +25,11 @@ type PinVisualState = 'idle' | 'hover' | 'source' | 'target' | 'connected'
  */
 function pinVisualState(
   connected: boolean,
+  hasError: boolean,
   highlight: 'source' | 'target' | null,
   hovered: boolean,
 ): PinVisualState {
+  if (hasError) return 'error'
   if (connected) return 'connected'
   if (highlight === 'source') return 'source'
   if (highlight === 'target') return 'target'
@@ -44,6 +47,8 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
     terminals,
     terminalLayout,
     connectedTerminalIds,
+    errorTerminalIds,
+    terminalValidation,
     width,
     height,
     baseWidth,
@@ -89,6 +94,10 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
   const connectedTerminals = useMemo(
     () => new Set(connectedTerminalIds),
     [connectedTerminalIds],
+  )
+  const errorTerminals = useMemo(
+    () => new Set(errorTerminalIds ?? []),
+    [errorTerminalIds],
   )
   const isBreadboard = typeId === 'breadboard-full'
   const isBoard = typeId === 'esp32-devkit-v1' || typeId === 'arduino-uno'
@@ -183,11 +192,16 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
           const left = rel.x * baseWidth
           const top = rel.y * baseHeight
           const connected = connectedTerminals.has(term.id)
+          const pinFindings = terminalValidation?.get(term.id) ?? []
+          const hasError = errorTerminals.has(term.id) || pinFindings.length > 0
           const pinState = pinVisualState(
             connected,
+            hasError,
             null,
             hoveredPin === term.id,
           )
+          const pinTitle =
+            pinFindings.length > 0 ? validationTooltip(pinFindings) : undefined
 
           return (
             <div key={term.id}>
@@ -196,6 +210,7 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
                 position={Position.Top}
                 id={term.id}
                 aria-label={`${term.label} pin`}
+                title={pinTitle}
                 className="pin-state-marker nopan nodrag"
                 isConnectable={!connected}
                 isConnectableStart={!connected}

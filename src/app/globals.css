@@ -177,6 +177,15 @@ body {
   box-shadow: none;
 }
 
+.berry-studio-flow .react-flow__handle.pin-state-marker[data-pin-state='error']::after {
+  width: 6px;
+  height: 6px;
+  opacity: 1;
+  background: transparent;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 2px rgba(214, 51, 108, 0.25);
+}
+
 .berry-studio-flow .react-flow__handle.pin-flow-target {
   background: transparent;
   border: 0;

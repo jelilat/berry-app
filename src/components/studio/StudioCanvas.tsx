@@ -83,6 +83,8 @@ import {
 import { ComponentNode } from './ComponentNode'
 import { WireDraftOverlay } from './WireDraftOverlay'
 import { WireOverlay } from './WireOverlay'
+import type { ValidationResult } from '@/lib/validation/types'
+import { buildValidationIndex } from '@/lib/studio/validation-index'
 
 const nodeTypes = { [COMPONENT_NODE_TYPE]: ComponentNode }
 const WIRE_DRAG_THRESHOLD_PX = 6
@@ -95,6 +97,7 @@ export function StudioCanvas({
   activeWireType,
   selectedNodeId,
   selectedWireId,
+  validationResults,
   onProjectChange,
   onPartDrop,
   onWireConnect,
@@ -106,6 +109,7 @@ export function StudioCanvas({
   activeWireType: ComponentTypeId
   selectedNodeId: string | null
   selectedWireId: string | null
+  validationResults?: ValidationResult[]
   onProjectChange: (next: BerryProject) => void
   onPartDrop: (type: ComponentTypeId, x: number, y: number) => void
   onWireConnect: (
@@ -124,6 +128,7 @@ export function StudioCanvas({
         activeWireType={activeWireType}
         selectedNodeId={selectedNodeId}
         selectedWireId={selectedWireId}
+        validationResults={validationResults}
         onProjectChange={onProjectChange}
         onPartDrop={onPartDrop}
         onWireConnect={onWireConnect}
@@ -143,6 +148,7 @@ function StudioCanvasInner({
   activeWireType,
   selectedNodeId,
   selectedWireId,
+  validationResults,
   onProjectChange,
   onPartDrop,
   onWireConnect,
@@ -154,6 +160,7 @@ function StudioCanvasInner({
   activeWireType: ComponentTypeId
   selectedNodeId: string | null
   selectedWireId: string | null
+  validationResults?: ValidationResult[]
   onProjectChange: (next: BerryProject) => void
   onPartDrop: (type: ComponentTypeId, x: number, y: number) => void
   onWireConnect: (
@@ -948,9 +955,17 @@ function StudioCanvasInner({
     [],
   )
 
+  const validationIndex = useMemo(
+    () =>
+      validationResults
+        ? buildValidationIndex(project, validationResults)
+        : undefined,
+    [project, validationResults],
+  )
+
   const buildNodes = useCallback(
     (): Node<ComponentNodeData>[] =>
-      projectToFlowNodes(projectRef.current, selectedNodeId).map((n) => ({
+      projectToFlowNodes(projectRef.current, selectedNodeId, validationIndex).map((n) => ({
         ...n,
         selected: n.id === selectedNodeId,
         data: {
@@ -966,6 +981,7 @@ function StudioCanvasInner({
       })),
     [
       selectedNodeId,
+      validationIndex,
       handlePinWireStart,
       handlePinWireTarget,
       handleVisualPinLayout,
@@ -1107,6 +1123,7 @@ function StudioCanvasInner({
           wires={wires}
           selectedWireId={selectedWireId}
           hoveredWireId={hoveredWireId}
+          wireValidation={validationIndex?.byWireId}
           onWireSelect={handleWireSelect}
           onWireHover={setHoveredWireId}
         />

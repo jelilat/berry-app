@@ -4,13 +4,17 @@ import {
   Cable,
   Download,
   FolderOpen,
+  Play,
   Redo2,
+  Rocket,
   Save,
   Sparkles,
   Trash2,
   Undo2,
   Upload,
 } from 'lucide-react'
+import { countValidationErrors } from '@/lib/validation'
+import type { ValidationResult } from '@/lib/validation'
 import { ViewModeToggle } from './ViewModeToggle'
 
 /**
@@ -32,6 +36,10 @@ export function StudioToolbar({
   canRedo,
   onDeleteSelected,
   hasSelection,
+  validationResults,
+  hasValidationErrors: hasErrors,
+  onRun,
+  onDeploy,
 }: {
   projectName: string
   viewMode: '2d' | '3d'
@@ -48,7 +56,16 @@ export function StudioToolbar({
   canRedo: boolean
   onDeleteSelected: () => void
   hasSelection: boolean
+  validationResults: ValidationResult[]
+  hasValidationErrors: boolean
+  onRun: () => void
+  onDeploy: () => void
 }) {
+  const errorCount = countValidationErrors(validationResults)
+  const blockedTitle =
+    hasErrors && errorCount > 0
+      ? `Fix ${errorCount} wiring error${errorCount === 1 ? '' : 's'} before running`
+      : undefined
   return (
     <header
       className="flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2"
@@ -72,6 +89,23 @@ export function StudioToolbar({
       <span className="mx-1 h-6 w-px" style={{ background: 'var(--border)' }} />
 
       <ViewModeToggle viewMode={viewMode} onChange={onViewModeChange} />
+
+      <span className="mx-1 h-6 w-px" style={{ background: 'var(--border)' }} />
+
+      <ToolbarButton
+        label="Run"
+        icon={Play}
+        onClick={onRun}
+        disabled={hasErrors}
+        title={blockedTitle}
+      />
+      <ToolbarButton
+        label="Deploy"
+        icon={Rocket}
+        onClick={onDeploy}
+        disabled={hasErrors}
+        title={blockedTitle}
+      />
 
       <span
         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"

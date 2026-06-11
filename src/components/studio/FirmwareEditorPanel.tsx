@@ -4,7 +4,6 @@ import CodeMirror from '@uiw/react-codemirror'
 import { cpp } from '@codemirror/lang-cpp'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { RotateCcw } from 'lucide-react'
-import { DEFAULT_FIRMWARE_PATH } from '@/lib/firmware/source'
 import type { BoardId } from '@/lib/project/types'
 
 /**
@@ -17,19 +16,23 @@ function countLines(source: string): number {
 }
 
 /**
- * Browser firmware editor for the active `src/main.cpp` source file.
+ * Browser firmware editor for a worktree file in the Code workspace.
  * @param props Editor state and event handlers.
  */
 export function FirmwareEditorPanel({
   board,
+  filePath,
   source,
+  readOnly = false,
   onChange,
   onReset,
 }: {
   board: BoardId
+  filePath: string
   source: string
+  readOnly?: boolean
   onChange: (source: string) => void
-  onReset: () => void
+  onReset?: () => void
 }) {
   const lineCount = countLines(source)
 
@@ -45,36 +48,40 @@ export function FirmwareEditorPanel({
       >
         <div className="min-w-0">
           <p className="truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
-            {DEFAULT_FIRMWARE_PATH}
+            {filePath}
           </p>
           <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
-            {board} · Arduino C++
+            {board} · {readOnly ? 'Generated · read only' : 'Arduino C++'}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span
             className="rounded-lg px-2.5 py-1 text-xs font-bold"
             style={{
-              background: 'rgba(15,168,134,0.1)',
-              border: '1px solid rgba(15,168,134,0.28)',
-              color: 'var(--leaf)',
+              background: readOnly ? 'rgba(214, 51, 108, 0.1)' : 'rgba(15,168,134,0.1)',
+              border: readOnly
+                ? '1px solid rgba(214, 51, 108, 0.28)'
+                : '1px solid rgba(15,168,134,0.28)',
+              color: readOnly ? 'var(--accent)' : 'var(--leaf)',
             }}
           >
-            {lineCount} line{lineCount === 1 ? '' : 's'}
+            {readOnly ? 'Generated' : `${lineCount} line${lineCount === 1 ? '' : 's'}`}
           </span>
-          <button
-            type="button"
-            onClick={onReset}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-            style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <RotateCcw size={14} />
-            Reset
-          </button>
+          {!readOnly && onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <RotateCcw size={14} />
+              Reset
+            </button>
+          )}
         </div>
       </header>
 
@@ -85,16 +92,17 @@ export function FirmwareEditorPanel({
           minHeight="520px"
           extensions={[cpp()]}
           theme={oneDark}
+          editable={!readOnly}
           basicSetup={{
-            autocompletion: true,
+            autocompletion: !readOnly,
             bracketMatching: true,
             foldGutter: true,
-            highlightActiveLine: true,
+            highlightActiveLine: !readOnly,
             highlightSelectionMatches: true,
             lineNumbers: true,
             searchKeymap: true,
           }}
-          onChange={onChange}
+          onChange={readOnly ? undefined : onChange}
         />
       </div>
     </section>

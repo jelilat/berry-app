@@ -49,6 +49,40 @@ pnpm dev
 
 Then open [http://localhost:3000](http://localhost:3000).
 
+## Firmware build (Phase 3)
+
+Studio **Generate** maps wiring → `src/main.cpp` pin constants and blink logic. **Build** compiles via PlatformIO (`BERRY_BUILD_BACKEND=local` by default). Successful builds cache firmware under the OS temp dir and expose **Download** in Studio.
+
+Supported boards: `esp32-devkit-v1` (`.bin`) and `arduino-uno` (`.hex`).
+
+### Install PlatformIO
+
+```bash
+pip3 install --user platformio
+# or: pipx install platformio
+```
+
+On macOS, pip often installs `pio` to `~/Library/Python/3.9/bin`. Berry augments PATH for common install locations automatically; if Build still cannot find PlatformIO, restart `pnpm dev` or set:
+
+```bash
+export BERRY_PLATFORMIO_BIN="$HOME/Library/Python/3.9/bin/pio"
+```
+
+### Mock backend (no PlatformIO)
+
+For UI development and tests without a local compiler:
+
+```bash
+# .env.local
+BERRY_BUILD_BACKEND=mock
+```
+
+### Build timing
+
+- **First ESP32 build:** often 5–15 minutes while PlatformIO downloads toolchains
+- **Later builds:** usually under a minute for small sketches
+- **Wiring validation** must pass before Generate or Build
+
 ## Testing
 
 Unit tests use [Vitest](https://vitest.dev/) for the project model (`src/lib/project/`) and Studio mutations.

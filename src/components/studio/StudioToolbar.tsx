@@ -4,6 +4,7 @@ import {
   Cable,
   Download,
   FolderOpen,
+  Hammer,
   Play,
   Redo2,
   Rocket,
@@ -12,6 +13,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  Wand2,
 } from 'lucide-react'
 import { countValidationErrors } from '@/lib/validation'
 import type { ValidationResult } from '@/lib/validation'
@@ -39,7 +41,11 @@ export function StudioToolbar({
   validationResults,
   hasValidationErrors: hasErrors,
   onRun,
+  onBuild,
+  onGenerate,
   onDeploy,
+  buildDisabled,
+  showCodegen,
 }: {
   projectName: string
   viewMode: StudioViewMode
@@ -59,7 +65,11 @@ export function StudioToolbar({
   validationResults: ValidationResult[]
   hasValidationErrors: boolean
   onRun: () => void
+  onBuild: () => void
+  onGenerate: () => void
   onDeploy: () => void
+  buildDisabled?: boolean
+  showCodegen?: boolean
 }) {
   const errorCount = countValidationErrors(validationResults)
   const blockedTitle =
@@ -92,6 +102,26 @@ export function StudioToolbar({
 
       <span className="mx-1 h-6 w-px" style={{ background: 'var(--border)' }} />
 
+      <ToolbarButton
+        label="Build"
+        icon={Hammer}
+        onClick={onBuild}
+        disabled={hasErrors || buildDisabled}
+        title={
+          buildDisabled
+            ? 'Build in progress…'
+            : blockedTitle ?? 'Compile firmware with PlatformIO'
+        }
+      />
+      {showCodegen && (
+        <ToolbarButton
+          label="Generate"
+          icon={Wand2}
+          onClick={onGenerate}
+          disabled={hasErrors}
+          title={blockedTitle ?? 'Generate src/main.cpp from wiring graph'}
+        />
+      )}
       <ToolbarButton
         label="Run"
         icon={Play}

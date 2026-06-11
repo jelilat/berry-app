@@ -4,9 +4,9 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Product goal:** Talk to AI → design in Studio → validate wiring → simulate firmware → deploy the same build to a real device.
 
-**Current phase:** Phase 3 — Codegen + compile
+**Current phase:** Phase 4 — Simulation (Phase 3 compile/codegen complete)
 
-**Last updated:** 2026-06-09
+**Last updated:** 2026-06-10
 
 ---
 
@@ -38,7 +38,7 @@ flowchart TD
 | 0 | Foundation | Done |
 | 1 | Studio 2D | Done |
 | 2 | Functional wiring / validation | Done |
-| 3 | Codegen + compile | Not started |
+| 3 | Codegen + compile | Done |
 | 4 | Simulation | Not started |
 | 5 | Deploy to device | Not started |
 | 6 | AI build loop | Not started |
@@ -128,13 +128,14 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 **Outcome:** Graph → firmware for a chosen board; compiler errors surfaced in app.
 
-- [ ] Pick first target board (decision: ESP32 devkit **or** Arduino UNO)
-- [ ] Graph → sketch / PlatformIO / ESP-IDF tree
-- [ ] Pin map from graph to board pins in generated code
-- [ ] Compile pipeline (cloud worker, WASM, or `arduino-cli` / local agent)
-- [ ] Show compiler errors in panel + chat-friendly format
-- [ ] Build artifact: `.bin` / `.hex` + metadata hash
-- [ ] API: `build(project)` → artifact or errors
+- [x] Pick first target board (ESP32 devkit + Arduino UNO in compile pipeline)
+- [x] Browser firmware editor for `src/main.cpp`
+- [x] Graph → sketch / PlatformIO tree (`generateFirmwareFromProject`, toolbar **Generate**)
+- [x] Pin map from graph to board pins in generated code (`buildProjectPinMap`)
+- [x] Compile pipeline (`BERRY_BUILD_BACKEND`: PlatformIO local, mock, remote stub)
+- [x] Show compiler errors in build output panel
+- [x] Build artifact: `.bin` / `.hex` + metadata hash + download cache
+- [x] API: `POST /api/build`, `POST /api/codegen`, `GET /api/build/artifact`
 
 **Exit criteria:** Valid project compiles for target board; failures are actionable.
 

@@ -24,7 +24,15 @@ import type { BerryProject, BreadboardSite, ComponentTypeId } from '@/lib/projec
 import {
   createDefaultFirmwareSource,
   createEsp32BlinkFirmwareSource,
+  DEFAULT_FIRMWARE_PATH,
 } from '@/lib/firmware/source'
+import type { BuildResult } from '@/lib/build/types'
+import { generateFirmwareFromProject } from '@/lib/codegen/generate'
+import {
+  isEditableFirmwareWorktreePath,
+  isPreviewFirmwareWorktreePath,
+  resolveFirmwareWorktreeFileContent,
+} from '@/lib/firmware/worktree'
 import { brand } from '@/lib/brand'
 import { hasValidationErrors, validate, type ValidationResult } from '@/lib/validation'
 import { useProjectHistory } from '@/lib/studio/history'
@@ -39,8 +47,10 @@ import {
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
+import { BuildOutputPanel } from './BuildOutputPanel'
 import { ComponentTray } from './ComponentTray'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
+import { FirmwareWorktreePanel } from './FirmwareWorktreePanel'
 import { Studio3DPlaceholder } from './Studio3DPlaceholder'
 import { StudioCanvas } from './StudioCanvas'
 import { StudioToolbar } from './StudioToolbar'
@@ -100,9 +110,12 @@ export function StudioApp() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
   const [pipelineNotice, setPipelineNotice] = useState<string | null>(null)
+  const [buildLoading, setBuildLoading] = useState(false)
+  const [buildResult, setBuildResult] = useState<BuildResult | null>(null)
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
     createDefaultFirmwareSource('esp32-devkit-v1'),
   )
+  const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -117,6 +130,16 @@ export function StudioApp() {
 
   const validationResults = useValidation(project)
   const validationHasErrors = hasValidationErrors(validationResults)
+  const selectedFirmwareContent =
+    resolveFirmwareWorktreeFileContent(
+      selectedFirmwarePath,
+      project.board,
+      firmwareSource,
+      buildResult,
+    ) ?? firmwareSource
+  const selectedFirmwareReadOnly =
+    !isEditableFirmwareWorktreePath(selectedFirmwarePath) ||
+    isPreviewFirmwareWorktreePath(selectedFirmwarePath)
 
   useEffect(() => {
     if (!pipelineNotice) return
@@ -125,8 +148,55 @@ export function StudioApp() {
   }, [pipelineNotice])
 
   const handlePipelinePlaceholder = useCallback(() => {
-    setPipelineNotice('Build pipeline coming in Phase 3')
+    setPipelineNotice('Simulation and deploy ship in later phases')
   }, [])
+
+  const handleGenerate = useCallback(() => {
+    const result = generateFirmwareFromProject(project)
+    setFirmwareSource(result.source)
+    setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+    setViewMode('code')
+    setPipelineNotice(result.notes[0] ?? 'Generated firmware from wiring graph')
+  }, [project])
+
+  const handleBuild = useCallback(async () => {
+    if (validationHasErrors || buildLoading) return
+    setBuildLoading(true)
+    setBuildResult(null)
+    setErrorMessage(null)
+    try {
+      const response = await fetch('/api/build', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          project,
+          files: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+        }),
+      })
+      const json = await response.json()
+
+      if (response.status === 400 && Array.isArray(json.validationResults)) {
+        setErrorMessage('Fix wiring errors before building')
+        setBuildResult({
+          ok: false,
+          backend: json.backend ?? 'local',
+          diagnostics: json.diagnostics ?? [],
+        })
+        return
+      }
+
+      if (!response.ok) {
+        setErrorMessage(json.error ?? 'Build request failed')
+        return
+      }
+
+      setBuildResult(json as BuildResult)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Build request failed')
+    } finally {
+      setBuildLoading(false)
+    }
+  }, [buildLoading, firmwareSource, project, validationHasErrors])
 
   useEffect(() => {
     const stored = loadProjectFromStorage()
@@ -438,7 +508,7 @@ export function StudioApp() {
           {brand.name}
         </Link>
         <span className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--accent)' }}>
-          Studio · {viewMode === '2d' ? '2D bench' : viewMode === 'code' ? 'Code' : '3D bench'}
+          Studio · {viewMode === '2d' ? '2D bench' : viewMode === 'code' ? 'Code + worktree' : '3D bench'}
         </span>
       </nav>
 
@@ -462,7 +532,11 @@ export function StudioApp() {
           validationResults={validationResults}
           hasValidationErrors={validationHasErrors}
           onRun={handlePipelinePlaceholder}
+          onBuild={handleBuild}
+          onGenerate={handleGenerate}
           onDeploy={handlePipelinePlaceholder}
+          buildDisabled={buildLoading}
+          showCodegen
         />
 
         <input
@@ -485,6 +559,14 @@ export function StudioApp() {
           >
             {pipelineNotice}
           </div>
+        )}
+
+        {(buildLoading || buildResult) && (
+          <BuildOutputPanel
+            result={buildResult}
+            loading={buildLoading}
+            onDismiss={() => setBuildResult(null)}
+          />
         )}
 
         {errorMessage && (status === 'ready' || status === 'error') && (
@@ -510,12 +592,23 @@ export function StudioApp() {
         <div className="flex min-h-0 flex-1 gap-3">
           {viewMode === 'code' ? (
             <>
+              <FirmwareWorktreePanel
+                board={project.board}
+                projectName={project.metadata.name}
+                buildResult={buildResult}
+                selectedPath={selectedFirmwarePath}
+                onSelectPath={setSelectedFirmwarePath}
+              />
               <div className="min-h-0 flex-1 overflow-hidden rounded-2xl">
                 <FirmwareEditorPanel
                   board={project.board}
-                  source={firmwareSource}
+                  filePath={selectedFirmwarePath}
+                  source={selectedFirmwareContent}
+                  readOnly={selectedFirmwareReadOnly}
                   onChange={setFirmwareSource}
-                  onReset={handleResetFirmwareSource}
+                  onReset={
+                    selectedFirmwareReadOnly ? undefined : handleResetFirmwareSource
+                  }
                 />
               </div>
               {!isEmpty && (

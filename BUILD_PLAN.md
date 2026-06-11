@@ -6,7 +6,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Current phase:** Phase 4 — Simulation (Phase 3 compile/codegen complete)
 
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-11
 
 ---
 
@@ -39,7 +39,7 @@ flowchart TD
 | 1 | Studio 2D | Done |
 | 2 | Functional wiring / validation | Done |
 | 3 | Codegen + compile | Done |
-| 4 | Simulation | Not started |
+| 4 | Simulation | In progress (mock contract shipped) |
 | 5 | Deploy to device | Not started |
 | 6 | AI build loop | Not started |
 | 7 | 3D + advanced sim (optional) | Not started |
@@ -154,15 +154,17 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 | L3 | Emulated GPIO + mocked peripherals + serial logs |
 | L4 | Richer per-component behavior models |
 
-- [ ] Define simulation pass/fail contract (`status`, `logs`, `errors`, `firmwareHash`)
-- [ ] Implement L2 + L3 for **one** board + **one** demo circuit (e.g. blink LED, read mock sensor)
-- [ ] Serial / monitor output in Studio UI
-- [ ] API: `simulate(project, artifact)` → result
-- [ ] Document what is emulated vs mocked vs not simulated
+- [x] Define simulation pass/fail contract (`status`, `logs`, `errors`, `firmwareHash`)
+- [x] Implement L2 + L3 mock for **one** board + **one** demo circuit (ESP32 LED blink)
+- [x] Serial / monitor output in Studio UI
+- [x] API: `simulate(project, artifact)` → result (`POST /api/simulate`)
+- [x] Document what is emulated vs mocked vs not simulated (see note below)
 
 **Exit criteria:** Demo circuit passes sim with expected serial output; same artifact hash used for deploy.
 
 **Note:** Full in-browser ESP32 emulation is hard; prefer mocked peripherals + compile-verify early. Evaluate Wokwi-style integration vs custom emulator as a deliberate decision.
+
+**Current simulator (2026-06-11):** Mock-heavy contract only — `simulateProject` requires a successful build `firmwareHash`, returns deterministic serial logs and GPIO traces for the ESP32 LED blink example, and reports `unsupported` for other circuits. Real GPIO/peripheral behavior models and bytecode execution remain TODO before deploy can rely on rich emulation.
 
 ---
 
@@ -262,3 +264,4 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | 2026-06-03 | Planned: project folder menu + wiring diagram view (board-centric schematic) after file tree ships |
 | 2026-06-05 | Phase 2 MVP: `src/lib/validation/`, Studio panel + overlays, Build/Deploy gate, `/api/validate` |
 | 2026-06-09 | Phase 2 hardening: protocol pairing, pin compatibility, power/floating warnings, connect preflight, net-row selection, API route tests |
+| 2026-06-11 | Phase 4 mock simulation: `src/lib/simulation/`, `POST /api/simulate`, Studio Simulate toolbar + panel |

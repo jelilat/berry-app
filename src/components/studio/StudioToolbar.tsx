@@ -2,6 +2,7 @@
 
 import {
   Cable,
+  Cpu,
   Download,
   FolderOpen,
   Hammer,
@@ -40,9 +41,11 @@ export function StudioToolbar({
   validationResults,
   hasValidationErrors: hasErrors,
   onBuild,
+  onSimulate,
   onGenerate,
   onDeploy,
   buildDisabled,
+  simulateDisabled,
   showCodegen,
 }: {
   projectName: string
@@ -63,9 +66,11 @@ export function StudioToolbar({
   validationResults: ValidationResult[]
   hasValidationErrors: boolean
   onBuild: () => void
+  onSimulate: () => void
   onGenerate: () => void
   onDeploy: () => void
   buildDisabled?: boolean
+  simulateDisabled?: boolean
   showCodegen?: boolean
 }) {
   const errorCount = countValidationErrors(validationResults)
@@ -108,6 +113,19 @@ export function StudioToolbar({
           buildDisabled
             ? 'Build in progress…'
             : blockedTitle ?? 'Compile firmware with PlatformIO'
+        }
+      />
+      <ToolbarButton
+        label="Simulate"
+        icon={Cpu}
+        onClick={onSimulate}
+        disabled={hasErrors || simulateDisabled}
+        title={
+          simulateDisabled
+            ? hasErrors
+              ? blockedTitle
+              : 'Build firmware before simulating'
+            : blockedTitle ?? 'Run mock firmware simulation against wiring graph'
         }
       />
       {showCodegen && (

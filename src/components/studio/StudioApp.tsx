@@ -27,6 +27,7 @@ import {
   DEFAULT_FIRMWARE_PATH,
 } from '@/lib/firmware/source'
 import type { BuildResult } from '@/lib/build/types'
+import type { SimulationResult } from '@/lib/simulation'
 import { generateFirmwareFromProject } from '@/lib/codegen/generate'
 import {
   isEditableFirmwareWorktreePath,
@@ -48,6 +49,7 @@ import {
 } from '@/lib/studio/storage'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
 import { BuildOutputPanel } from './BuildOutputPanel'
+import { SimulationOutputPanel } from './SimulationOutputPanel'
 import { ComponentTray } from './ComponentTray'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
 import { FirmwareWorktreePanel } from './FirmwareWorktreePanel'
@@ -112,6 +114,8 @@ export function StudioApp() {
   const [pipelineNotice, setPipelineNotice] = useState<string | null>(null)
   const [buildLoading, setBuildLoading] = useState(false)
   const [buildResult, setBuildResult] = useState<BuildResult | null>(null)
+  const [simulateLoading, setSimulateLoading] = useState(false)
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
     createDefaultFirmwareSource('esp32-devkit-v1'),
   )
@@ -148,8 +152,59 @@ export function StudioApp() {
   }, [pipelineNotice])
 
   const handlePipelinePlaceholder = useCallback(() => {
-    setPipelineNotice('Simulation and deploy ship in later phases')
+    setPipelineNotice('Deploy ships in Phase 5 — use a passed simulation hash first')
   }, [])
+
+  const hasSuccessfulBuildArtifact =
+    buildResult?.ok === true && !!buildResult.artifact?.firmwareHash
+
+  useEffect(() => {
+    setBuildResult(null)
+    setSimulationResult(null)
+  }, [project, firmwareSource])
+
+  const handleSimulate = useCallback(async () => {
+    if (validationHasErrors || simulateLoading || !hasSuccessfulBuildArtifact) return
+    const firmwareHash = buildResult!.artifact!.firmwareHash
+    setSimulateLoading(true)
+    setSimulationResult(null)
+    setErrorMessage(null)
+    try {
+      const response = await fetch('/api/simulate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          project,
+          artifact: { firmwareHash },
+          files: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+        }),
+      })
+      const json = await response.json()
+
+      if (response.status === 400 && Array.isArray(json.validationResults)) {
+        setErrorMessage('Fix wiring errors before simulating')
+        return
+      }
+
+      if (!response.ok) {
+        setErrorMessage(json.error ?? 'Simulation request failed')
+        return
+      }
+
+      setSimulationResult(json.result as SimulationResult)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Simulation request failed')
+    } finally {
+      setSimulateLoading(false)
+    }
+  }, [
+    buildResult,
+    firmwareSource,
+    hasSuccessfulBuildArtifact,
+    project,
+    simulateLoading,
+    validationHasErrors,
+  ])
 
   const handleGenerate = useCallback(() => {
     const result = generateFirmwareFromProject(project)
@@ -163,6 +218,7 @@ export function StudioApp() {
     if (validationHasErrors || buildLoading) return
     setBuildLoading(true)
     setBuildResult(null)
+    setSimulationResult(null)
     setErrorMessage(null)
     try {
       const response = await fetch('/api/build', {
@@ -532,9 +588,11 @@ export function StudioApp() {
           validationResults={validationResults}
           hasValidationErrors={validationHasErrors}
           onBuild={handleBuild}
+          onSimulate={handleSimulate}
           onGenerate={handleGenerate}
           onDeploy={handlePipelinePlaceholder}
           buildDisabled={buildLoading}
+          simulateDisabled={simulateLoading || !hasSuccessfulBuildArtifact}
           showCodegen
         />
 
@@ -565,6 +623,14 @@ export function StudioApp() {
             result={buildResult}
             loading={buildLoading}
             onDismiss={() => setBuildResult(null)}
+          />
+        )}
+
+        {(simulateLoading || simulationResult) && (
+          <SimulationOutputPanel
+            result={simulationResult}
+            loading={simulateLoading}
+            onDismiss={() => setSimulationResult(null)}
           />
         )}
 

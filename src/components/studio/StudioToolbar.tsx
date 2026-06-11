@@ -5,7 +5,6 @@ import {
   Download,
   FolderOpen,
   Hammer,
-  Play,
   Redo2,
   Rocket,
   Save,
@@ -40,7 +39,6 @@ export function StudioToolbar({
   hasSelection,
   validationResults,
   hasValidationErrors: hasErrors,
-  onRun,
   onBuild,
   onGenerate,
   onDeploy,
@@ -64,7 +62,6 @@ export function StudioToolbar({
   hasSelection: boolean
   validationResults: ValidationResult[]
   hasValidationErrors: boolean
-  onRun: () => void
   onBuild: () => void
   onGenerate: () => void
   onDeploy: () => void
@@ -74,7 +71,7 @@ export function StudioToolbar({
   const errorCount = countValidationErrors(validationResults)
   const blockedTitle =
     hasErrors && errorCount > 0
-      ? `Fix ${errorCount} wiring error${errorCount === 1 ? '' : 's'} before running`
+      ? `Fix ${errorCount} wiring error${errorCount === 1 ? '' : 's'} before building`
       : undefined
   return (
     <header
@@ -122,13 +119,6 @@ export function StudioToolbar({
           title={blockedTitle ?? 'Generate src/main.cpp from wiring graph'}
         />
       )}
-      <ToolbarButton
-        label="Run"
-        icon={Play}
-        onClick={onRun}
-        disabled={hasErrors}
-        title={blockedTitle}
-      />
       <ToolbarButton
         label="Deploy"
         icon={Rocket}

@@ -531,7 +531,6 @@ export function StudioApp() {
           hasSelection={!!selectedNodeId || !!selectedWireId}
           validationResults={validationResults}
           hasValidationErrors={validationHasErrors}
-          onRun={handlePipelinePlaceholder}
           onBuild={handleBuild}
           onGenerate={handleGenerate}
           onDeploy={handlePipelinePlaceholder}

@@ -37,7 +37,7 @@ export function validate(project: BerryProject): ValidationResult[] {
 }
 
 /**
- * True when any finding is an error (blocks Run / Deploy).
+ * True when any finding is an error (blocks Build / Deploy).
  * @param results Validation output from {@link validate}.
  */
 export function hasValidationErrors(results: ValidationResult[]): boolean {

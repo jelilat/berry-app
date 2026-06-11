@@ -115,7 +115,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 - [x] I2C / UART pairing checks, conservative pin-kind compatibility, unpowered module warnings, and floating button input warnings
 - [x] `ValidationResult[]` with `error | warning | info` + stable codes
 - [x] Inline errors on wires and pins in Studio
-- [x] Block “Run” / “Deploy” when errors exist
+- [x] Block “Build” / “Deploy” when errors exist
 - [x] Connect-time feedback when a new wire would introduce a validation error
 - [x] Clickable validation rows for net-level findings
 - [x] API: `validate(project)` for AI and UI (`POST /api/validate`)
@@ -260,5 +260,5 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | 2026-06-03 | Phase 0: 3D-native project schema, catalog, boards, io, example |
 | 2026-06-03 | Phase 1: Studio 2D (`/studio`), mutations, React Flow, localStorage, undo/redo |
 | 2026-06-03 | Planned: project folder menu + wiring diagram view (board-centric schematic) after file tree ships |
-| 2026-06-05 | Phase 2 MVP: `src/lib/validation/`, Studio panel + overlays, Run/Deploy gate, `/api/validate` |
+| 2026-06-05 | Phase 2 MVP: `src/lib/validation/`, Studio panel + overlays, Build/Deploy gate, `/api/validate` |
 | 2026-06-09 | Phase 2 hardening: protocol pairing, pin compatibility, power/floating warnings, connect preflight, net-row selection, API route tests |

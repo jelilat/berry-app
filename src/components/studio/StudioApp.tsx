@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { loadBerryProjectFromJson, ProjectParseError } from '@/lib/project/io'
+import { loadBerryProjectFromJson } from '@/lib/project/io'
 import {
   addComponent,
   connectTerminals,
@@ -28,35 +26,32 @@ import {
 } from '@/lib/firmware/source'
 import type { BuildResult } from '@/lib/build/types'
 import type { SimulationResult } from '@/lib/simulation'
-import { generateFirmwareFromProject } from '@/lib/codegen/generate'
+import type { AgentRunResult } from '@/lib/agent/types'
 import {
   isEditableFirmwareWorktreePath,
   isPreviewFirmwareWorktreePath,
   resolveFirmwareWorktreeFileContent,
 } from '@/lib/firmware/worktree'
-import { brand } from '@/lib/brand'
 import { hasValidationErrors, validate, type ValidationResult } from '@/lib/validation'
 import { useProjectHistory } from '@/lib/studio/history'
 import { useValidation } from '@/lib/studio/use-validation'
 import type { ValidationSubject } from '@/lib/validation'
 import {
-  clearProjectStorage,
-  downloadProjectJson,
   loadFirmwareSourceFromStorage,
   loadProjectFromStorage,
   saveFirmwareSourceToStorage,
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
-import { BuildOutputPanel } from './BuildOutputPanel'
-import { SimulationOutputPanel } from './SimulationOutputPanel'
+import { AIAssistantPanel } from './AIAssistantPanel'
 import { ComponentTray } from './ComponentTray'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
 import { FirmwareWorktreePanel } from './FirmwareWorktreePanel'
+import { PipelineTerminalPanel } from './PipelineTerminalPanel'
 import { Studio3DPlaceholder } from './Studio3DPlaceholder'
 import { StudioCanvas } from './StudioCanvas'
 import { StudioToolbar } from './StudioToolbar'
-import { ValidationPanel } from './ValidationPanel'
+import { ValidationFlyout } from './ValidationFlyout'
 import type { StudioViewMode } from './ViewModeToggle'
 import { WireInspectorPanel } from './WireInspectorPanel'
 
@@ -116,11 +111,15 @@ export function StudioApp() {
   const [buildResult, setBuildResult] = useState<BuildResult | null>(null)
   const [simulateLoading, setSimulateLoading] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
+  const [agentLoading, setAgentLoading] = useState(false)
+  const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
+  const [validationFlyoutOpen, setValidationFlyoutOpen] = useState(false)
+  const [terminalOpen, setTerminalOpen] = useState(false)
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
     createDefaultFirmwareSource('esp32-devkit-v1'),
   )
   const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const skipNextPipelineResetRef = useRef(false)
 
   const {
     project,
@@ -152,16 +151,26 @@ export function StudioApp() {
   }, [pipelineNotice])
 
   const handlePipelinePlaceholder = useCallback(() => {
-    setPipelineNotice('Deploy ships in Phase 5 — use a passed simulation hash first')
+    setPipelineNotice('Deploy is coming soon — for now, run Build and Simulate for the demo path')
   }, [])
 
   const hasSuccessfulBuildArtifact =
     buildResult?.ok === true && !!buildResult.artifact?.firmwareHash
 
   useEffect(() => {
+    if (skipNextPipelineResetRef.current) {
+      skipNextPipelineResetRef.current = false
+      return
+    }
     setBuildResult(null)
     setSimulationResult(null)
   }, [project, firmwareSource])
+
+  useEffect(() => {
+    if (buildLoading || simulateLoading || buildResult || simulationResult) {
+      setTerminalOpen(true)
+    }
+  }, [buildLoading, buildResult, simulateLoading, simulationResult])
 
   const handleSimulate = useCallback(async () => {
     if (validationHasErrors || simulateLoading || !hasSuccessfulBuildArtifact) return
@@ -206,14 +215,6 @@ export function StudioApp() {
     validationHasErrors,
   ])
 
-  const handleGenerate = useCallback(() => {
-    const result = generateFirmwareFromProject(project)
-    setFirmwareSource(result.source)
-    setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
-    setViewMode('code')
-    setPipelineNotice(result.notes[0] ?? 'Generated firmware from wiring graph')
-  }, [project])
-
   const handleBuild = useCallback(async () => {
     if (validationHasErrors || buildLoading) return
     setBuildLoading(true)
@@ -253,6 +254,49 @@ export function StudioApp() {
       setBuildLoading(false)
     }
   }, [buildLoading, firmwareSource, project, validationHasErrors])
+
+  const handleAgentRun = useCallback(async (prompt: string) => {
+    if (agentLoading || prompt.trim().length === 0) return
+    setAgentLoading(true)
+    setAgentResult(null)
+    setErrorMessage(null)
+    try {
+      const response = await fetch('/api/agent/run', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt, project }),
+      })
+      const json = await response.json()
+      if (json.state) {
+        const result = json as AgentRunResult
+        setAgentResult(result)
+        if (result.status === 'completed') {
+          skipNextPipelineResetRef.current = true
+          resetProject(replaceProject(result.state.project))
+          const source = result.state.firmwareFiles[DEFAULT_FIRMWARE_PATH]
+          if (source) {
+            setFirmwareSource(source)
+            setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+          }
+          setBuildResult(result.state.buildResult ?? null)
+          setSimulationResult(result.state.simulationResult ?? null)
+          setViewMode('2d')
+          setPipelineNotice('AI build loop completed')
+        }
+        if (result.status === 'failed') {
+          setErrorMessage(result.error ?? 'Agent workflow failed')
+        }
+        return
+      }
+      if (!response.ok) {
+        setErrorMessage(json.error ?? 'Agent request failed')
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Agent request failed')
+    } finally {
+      setAgentLoading(false)
+    }
+  }, [agentLoading, project, resetProject])
 
   useEffect(() => {
     const stored = loadProjectFromStorage()
@@ -313,39 +357,6 @@ export function StudioApp() {
     setFirmwareSource(createDefaultFirmwareSource(project.board))
   }, [project.board])
 
-  const handleExport = useCallback(() => {
-    const slug = project.metadata.name.replace(/\s+/g, '-').toLowerCase() || 'project'
-    downloadProjectJson(project, `${slug}.project.json`)
-  }, [project])
-
-  const handleImportFile = useCallback(
-    (file: File) => {
-      const reader = new FileReader()
-      reader.onload = () => {
-        try {
-          const json = String(reader.result ?? '')
-          const parsed = loadBerryProjectFromJson(json)
-          resetProject(replaceProject(parsed))
-          setFirmwareSource(createDefaultFirmwareSource(parsed.board))
-          setErrorMessage(null)
-          setViewMode('2d')
-          setStatus('ready')
-        } catch (e) {
-          const msg =
-            e instanceof ProjectParseError
-              ? e.message
-              : e instanceof Error
-                ? e.message
-                : 'Invalid project file'
-          setErrorMessage(msg)
-          setStatus('error')
-        }
-      }
-      reader.readAsText(file)
-    },
-    [resetProject],
-  )
-
   const handleAddPart = useCallback(
     (type: ComponentTypeId) => {
       const offset = project.components.length * 0.04
@@ -375,10 +386,6 @@ export function StudioApp() {
     },
     [project, setProject],
   )
-
-  const handleSelectWire = useCallback((type: ComponentTypeId) => {
-    setActiveWireType(type)
-  }, [])
 
   const handleWireConnect = useCallback(
     (
@@ -554,31 +561,15 @@ export function StudioApp() {
   }
 
   return (
-    <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden" style={{ background: 'var(--bg-base)' }}>
-      <nav
-        className="flex w-full shrink-0 items-center justify-between px-4 py-3"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
-        <Link href="/" className="flex items-center gap-2 text-sm font-bold">
-          <Image src={brand.assets.icon} alt="" width={28} height={28} />
-          {brand.name}
-        </Link>
-        <span className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--accent)' }}>
-          Studio · {viewMode === '2d' ? '2D bench' : viewMode === 'code' ? 'Code + worktree' : '3D bench'}
-        </span>
-      </nav>
-
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-3 p-3">
+    <div className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+      <div className="flex min-h-0 w-full flex-1 flex-col">
         <StudioToolbar
           projectName={project.metadata.name}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          activeWireLabel={getComponentDefinition(activeWireType).name}
           onNew={handleNew}
           onLoadExample={handleLoadExample}
           onSave={handleSave}
-          onExport={handleExport}
-          onImportClick={() => fileInputRef.current?.click()}
           onUndo={undo}
           onRedo={redo}
           canUndo={canUndo}
@@ -586,31 +577,28 @@ export function StudioApp() {
           onDeleteSelected={handleDeleteSelected}
           hasSelection={!!selectedNodeId || !!selectedWireId}
           validationResults={validationResults}
+          onValidationClick={() => setValidationFlyoutOpen((open) => !open)}
           hasValidationErrors={validationHasErrors}
           onBuild={handleBuild}
           onSimulate={handleSimulate}
-          onGenerate={handleGenerate}
           onDeploy={handlePipelinePlaceholder}
           buildDisabled={buildLoading}
           simulateDisabled={simulateLoading || !hasSuccessfulBuildArtifact}
-          showCodegen
         />
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) handleImportFile(file)
-            e.target.value = ''
+        <ValidationFlyout
+          open={validationFlyoutOpen}
+          results={validationResults}
+          onClose={() => setValidationFlyoutOpen(false)}
+          onSelectSubject={(subject) => {
+            handleValidationSelectSubject(subject)
+            setValidationFlyoutOpen(false)
           }}
         />
 
         {pipelineNotice && (
           <div
-            className="rounded-xl px-4 py-3 text-sm font-semibold"
+            className="mx-3 mt-3 rounded-xl px-4 py-3 text-sm font-semibold"
             style={{ background: 'rgba(15,168,134,0.12)', color: 'var(--leaf)' }}
             role="status"
           >
@@ -618,25 +606,9 @@ export function StudioApp() {
           </div>
         )}
 
-        {(buildLoading || buildResult) && (
-          <BuildOutputPanel
-            result={buildResult}
-            loading={buildLoading}
-            onDismiss={() => setBuildResult(null)}
-          />
-        )}
-
-        {(simulateLoading || simulationResult) && (
-          <SimulationOutputPanel
-            result={simulationResult}
-            loading={simulateLoading}
-            onDismiss={() => setSimulationResult(null)}
-          />
-        )}
-
         {errorMessage && (status === 'ready' || status === 'error') && (
           <div
-            className="rounded-xl px-4 py-3 text-sm font-semibold"
+            className="mx-3 mt-3 rounded-xl px-4 py-3 text-sm font-semibold"
             style={{ background: 'rgba(214,51,108,0.12)', color: 'var(--accent)' }}
             role="status"
           >
@@ -654,63 +626,42 @@ export function StudioApp() {
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 gap-3">
-          {viewMode === 'code' ? (
-            <>
-              <FirmwareWorktreePanel
-                board={project.board}
-                projectName={project.metadata.name}
-                buildResult={buildResult}
-                selectedPath={selectedFirmwarePath}
-                onSelectPath={setSelectedFirmwarePath}
-              />
-              <div className="min-h-0 flex-1 overflow-hidden rounded-2xl">
-                <FirmwareEditorPanel
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 flex-1 gap-0">
+            {viewMode === 'code' ? (
+              <>
+                <FirmwareWorktreePanel
                   board={project.board}
-                  filePath={selectedFirmwarePath}
-                  source={selectedFirmwareContent}
-                  readOnly={selectedFirmwareReadOnly}
-                  onChange={setFirmwareSource}
-                  onReset={
-                    selectedFirmwareReadOnly ? undefined : handleResetFirmwareSource
-                  }
+                  projectName={project.metadata.name}
+                  buildResult={buildResult}
+                  selectedPath={selectedFirmwarePath}
+                  onSelectPath={setSelectedFirmwarePath}
                 />
-              </div>
-              {!isEmpty && (
-                <ValidationPanel
-                  results={validationResults}
-                  onSelectSubject={handleValidationSelectSubject}
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <FirmwareEditorPanel
+                    board={project.board}
+                    filePath={selectedFirmwarePath}
+                    source={selectedFirmwareContent}
+                    readOnly={selectedFirmwareReadOnly}
+                    onChange={setFirmwareSource}
+                    onReset={
+                      selectedFirmwareReadOnly ? undefined : handleResetFirmwareSource
+                    }
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <ComponentTray
+                  onAddPart={handleAddPart}
+                  activeWireType={activeWireType}
                 />
-              )}
-            </>
-          ) : (
-            <>
-              <ComponentTray
-                onAddPart={handleAddPart}
-                onSelectWire={handleSelectWire}
-                activeWireType={activeWireType}
-              />
-              <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl">
-                {isEmpty ? (
-                  <EmptyBench onNew={handleNew} onLoadExample={handleLoadExample} />
-                ) : (
-                  <>
-                    {viewMode === '2d' ? (
-                      <StudioCanvas
-                        project={project}
-                        activeWireType={activeWireType}
-                        selectedNodeId={selectedNodeId}
-                        selectedWireId={selectedWireId}
-                        validationResults={validationResults}
-                        onProjectChange={setProject}
-                        onPartDrop={handleDropPart}
-                        onWireConnect={handleWireConnect}
-                        onSelectionChange={handleSelectionChange}
-                        onWireSelectionChange={handleWireSelectionChange}
-                        onPlacementError={setErrorMessage}
-                      />
-                    ) : (
-                      <div className="relative h-full min-h-0">
+                <div className="relative min-h-0 flex-1 overflow-hidden">
+                  {isEmpty ? (
+                    <EmptyBench onNew={handleNew} onLoadExample={handleLoadExample} />
+                  ) : (
+                    <>
+                      {viewMode === '2d' ? (
                         <StudioCanvas
                           project={project}
                           activeWireType={activeWireType}
@@ -719,66 +670,92 @@ export function StudioApp() {
                           validationResults={validationResults}
                           onProjectChange={setProject}
                           onPartDrop={handleDropPart}
-                          onWireConnect={() => {}}
+                          onWireConnect={handleWireConnect}
                           onSelectionChange={handleSelectionChange}
                           onWireSelectionChange={handleWireSelectionChange}
                           onPlacementError={setErrorMessage}
                         />
-                        <Studio3DPlaceholder />
-                      </div>
-                    )}
-                  </>
+                      ) : (
+                        <div className="relative h-full min-h-0">
+                          <StudioCanvas
+                            project={project}
+                            activeWireType={activeWireType}
+                            selectedNodeId={selectedNodeId}
+                            selectedWireId={selectedWireId}
+                            validationResults={validationResults}
+                            onProjectChange={setProject}
+                            onPartDrop={handleDropPart}
+                            onWireConnect={() => {}}
+                            onSelectionChange={handleSelectionChange}
+                            onWireSelectionChange={handleWireSelectionChange}
+                            onPlacementError={setErrorMessage}
+                          />
+                          <Studio3DPlaceholder />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                {selectedNodeId && !isEmpty && (
+                  <ComponentInspectorPanel
+                    project={project}
+                    componentId={selectedNodeId}
+                    onClose={() => setSelectedNodeId(null)}
+                    onRotate={handleRotateSelected}
+                    onPositionChange={handlePositionChange}
+                    onPinSiteChange={handlePinSiteChange}
+                  />
                 )}
-              </div>
-              {!isEmpty && (
-                <ValidationPanel
-                  results={validationResults}
-                  onSelectSubject={handleValidationSelectSubject}
-                />
-              )}
-              {selectedNodeId && !isEmpty && (
-                <ComponentInspectorPanel
-                  project={project}
-                  componentId={selectedNodeId}
-                  onClose={() => setSelectedNodeId(null)}
-                  onRotate={handleRotateSelected}
-                  onPositionChange={handlePositionChange}
-                  onPinSiteChange={handlePinSiteChange}
-                />
-              )}
-              {selectedWireId && !selectedNodeId && !isEmpty && (
-                <WireInspectorPanel
-                  project={project}
-                  wireId={selectedWireId}
-                  onClose={() => setSelectedWireId(null)}
-                  onEndpointHoleChange={handleWireEndpointHoleChange}
-                  onResetRoute={
-                    project.wires.some(
-                      (wire) =>
-                        wire.id === selectedWireId &&
-                        (wire.from?.breadboard || wire.to?.breadboard),
-                    )
-                      ? () => {
-                          try {
-                            setProject(resetWireRoute(project, selectedWireId))
-                            setErrorMessage(null)
-                          } catch (error) {
-                            setErrorMessage(
-                              error instanceof Error
-                                ? error.message
-                                : 'Could not reset wire route',
-                            )
+                {selectedWireId && !selectedNodeId && !isEmpty && (
+                  <WireInspectorPanel
+                    project={project}
+                    wireId={selectedWireId}
+                    onClose={() => setSelectedWireId(null)}
+                    onEndpointHoleChange={handleWireEndpointHoleChange}
+                    onResetRoute={
+                      project.wires.some(
+                        (wire) =>
+                          wire.id === selectedWireId &&
+                          (wire.from?.breadboard || wire.to?.breadboard),
+                      )
+                        ? () => {
+                            try {
+                              setProject(resetWireRoute(project, selectedWireId))
+                              setErrorMessage(null)
+                            } catch (error) {
+                              setErrorMessage(
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Could not reset wire route',
+                              )
+                            }
                           }
-                        }
-                      : undefined
-                  }
-                />
-              )}
-            </>
-          )}
+                        : undefined
+                    }
+                  />
+                )}
+              </>
+            )}
+          </div>
+          <AIAssistantPanel
+            loading={agentLoading}
+            result={agentResult}
+            onSubmit={handleAgentRun}
+          />
         </div>
 
-        {viewMode === '2d' && !isEmpty && (
+        <PipelineTerminalPanel
+          buildResult={buildResult}
+          buildLoading={buildLoading}
+          simulationResult={simulationResult}
+          simulationLoading={simulateLoading}
+          open={terminalOpen}
+          onOpenChange={setTerminalOpen}
+          onClearBuild={() => setBuildResult(null)}
+          onClearSimulation={() => setSimulationResult(null)}
+        />
+
+        {/* {viewMode === '2d' && !isEmpty && (
           <div
             className="rounded-xl px-4 py-2.5 text-center text-xs font-semibold"
             style={{ background: 'rgba(15,168,134,0.08)', color: 'var(--leaf)' }}
@@ -795,7 +772,7 @@ export function StudioApp() {
             </kbd>{' '}
             to cancel wire placement.
           </div>
-        )}
+        )} */}
       </div>
     </div>
   )

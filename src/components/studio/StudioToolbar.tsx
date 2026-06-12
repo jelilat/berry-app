@@ -1,37 +1,30 @@
 'use client'
 
 import {
-  Cable,
   Cpu,
-  Download,
   FolderOpen,
   Hammer,
-  Redo2,
+  Play,
   Rocket,
   Save,
   Sparkles,
   Trash2,
   Undo2,
-  Upload,
-  Wand2,
+  Redo2,
 } from 'lucide-react'
-import { countValidationErrors } from '@/lib/validation'
-import type { ValidationResult } from '@/lib/validation'
 import { ViewModeToggle, type StudioViewMode } from './ViewModeToggle'
+import type { ValidationResult } from '@/lib/validation'
 
 /**
- * Studio top toolbar: project actions, view mode, active wire type, undo/redo.
+ * Product-style Studio top bar with project status and pipeline actions.
  */
 export function StudioToolbar({
   projectName,
   viewMode,
   onViewModeChange,
-  activeWireLabel,
   onNew,
   onLoadExample,
   onSave,
-  onExport,
-  onImportClick,
   onUndo,
   onRedo,
   canUndo,
@@ -39,24 +32,20 @@ export function StudioToolbar({
   onDeleteSelected,
   hasSelection,
   validationResults,
-  hasValidationErrors: hasErrors,
+  onValidationClick,
+  hasValidationErrors,
   onBuild,
   onSimulate,
-  onGenerate,
   onDeploy,
   buildDisabled,
   simulateDisabled,
-  showCodegen,
 }: {
   projectName: string
   viewMode: StudioViewMode
   onViewModeChange: (mode: StudioViewMode) => void
-  activeWireLabel: string
   onNew: () => void
   onLoadExample: () => void
   onSave: () => void
-  onExport: () => void
-  onImportClick: () => void
   onUndo: () => void
   onRedo: () => void
   canUndo: boolean
@@ -64,126 +53,112 @@ export function StudioToolbar({
   onDeleteSelected: () => void
   hasSelection: boolean
   validationResults: ValidationResult[]
+  onValidationClick: () => void
   hasValidationErrors: boolean
   onBuild: () => void
   onSimulate: () => void
-  onGenerate: () => void
   onDeploy: () => void
   buildDisabled?: boolean
   simulateDisabled?: boolean
-  showCodegen?: boolean
 }) {
-  const errorCount = countValidationErrors(validationResults)
-  const blockedTitle =
-    hasErrors && errorCount > 0
-      ? `Fix ${errorCount} wiring error${errorCount === 1 ? '' : 's'} before building`
-      : undefined
+  const warningCount = validationResults.filter((result) => result.severity !== 'info').length
+  const blockedTitle = hasValidationErrors
+    ? 'Open pre-flight checks before building'
+    : 'Compile firmware'
+
   return (
     <header
-      className="flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2"
-      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+      className="flex h-[58px] shrink-0 items-center gap-3 border-b px-4"
+      style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
-      <span className="mr-1 text-sm font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-        {projectName}
-      </span>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <h1 className="truncate text-sm font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+          {projectName}
+        </h1>
+        <button
+          type="button"
+          onClick={onValidationClick}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-bold"
+          style={{
+            color: warningCount > 0 ? '#f59e0b' : 'var(--leaf)',
+            background: warningCount > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(15,168,134,0.09)',
+            border: warningCount > 0 ? '1px solid rgba(245,158,11,0.28)' : '1px solid rgba(15,168,134,0.24)',
+          }}
+          title="Open pre-flight checks"
+        >
+          {warningCount > 0 ? `${warningCount} warning${warningCount === 1 ? '' : 's'}` : 'Ready'}
+        </button>
+      </div>
 
-      <ToolbarButton label="New" icon={Sparkles} onClick={onNew} />
-      <ToolbarButton label="Example" icon={FolderOpen} onClick={onLoadExample} />
-      <ToolbarButton label="Save" icon={Save} onClick={onSave} />
-      <ToolbarButton label="Export" icon={Download} onClick={onExport} />
-      <ToolbarButton label="Import" icon={Upload} onClick={onImportClick} />
+      <div className="flex items-center gap-1">
+        <IconButton label="New chat-ready project" icon={Sparkles} onClick={onNew} />
+        <IconButton label="Load example" icon={FolderOpen} onClick={onLoadExample} />
+        <IconButton label="Save" icon={Save} onClick={onSave} />
+        <IconButton label="Undo" icon={Undo2} onClick={onUndo} disabled={!canUndo} />
+        <IconButton label="Redo" icon={Redo2} onClick={onRedo} disabled={!canRedo} />
+        <IconButton label="Delete selected" icon={Trash2} onClick={onDeleteSelected} disabled={!hasSelection} />
+      </div>
 
-      <span className="mx-1 h-6 w-px" style={{ background: 'var(--border)' }} />
-
-      <ToolbarButton label="Undo" icon={Undo2} onClick={onUndo} disabled={!canUndo} />
-      <ToolbarButton label="Redo" icon={Redo2} onClick={onRedo} disabled={!canRedo} />
-
-      <span className="mx-1 h-6 w-px" style={{ background: 'var(--border)' }} />
-
+      <span className="h-6 w-px" style={{ background: 'var(--border)' }} />
       <ViewModeToggle viewMode={viewMode} onChange={onViewModeChange} />
+      <span className="h-6 w-px" style={{ background: 'var(--border)' }} />
 
-      <span className="mx-1 h-6 w-px" style={{ background: 'var(--border)' }} />
-
-      <ToolbarButton
-        label="Build"
-        icon={Hammer}
-        onClick={onBuild}
-        disabled={hasErrors || buildDisabled}
-        title={
-          buildDisabled
-            ? 'Build in progress…'
-            : blockedTitle ?? 'Compile firmware with PlatformIO'
-        }
-      />
-      <ToolbarButton
-        label="Simulate"
-        icon={Cpu}
-        onClick={onSimulate}
-        disabled={hasErrors || simulateDisabled}
-        title={
-          simulateDisabled
-            ? hasErrors
-              ? blockedTitle
-              : 'Build firmware before simulating'
-            : blockedTitle ?? 'Run mock firmware simulation against wiring graph'
-        }
-      />
-      {showCodegen && (
-        <ToolbarButton
-          label="Generate"
-          icon={Wand2}
-          onClick={onGenerate}
-          disabled={hasErrors}
-          title={blockedTitle ?? 'Generate src/main.cpp from wiring graph'}
-        />
-      )}
-      <ToolbarButton
-        label="Deploy"
-        icon={Rocket}
-        onClick={onDeploy}
-        disabled={hasErrors}
-        title={blockedTitle}
-      />
-
-      <span
-        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-        style={{
-          background: 'rgba(15,168,134,0.12)',
-          border: '1px solid rgba(15,168,134,0.35)',
-          color: 'var(--leaf)',
-        }}
-        title="Choose jumper type in the left palette"
-      >
-        <Cable size={14} />
-        {activeWireLabel}
-      </span>
-
-      <ToolbarButton
-        label="Delete"
-        icon={Trash2}
-        onClick={onDeleteSelected}
-        disabled={!hasSelection}
-      />
+      <TextButton label="Build" icon={Hammer} onClick={onBuild} disabled={hasValidationErrors || buildDisabled} title={blockedTitle} />
+      <TextButton label="Simulate" icon={Play} onClick={onSimulate} disabled={hasValidationErrors || simulateDisabled} title="Run simulation" primary />
+      <IconButton label="Deploy coming soon" icon={Rocket} onClick={onDeploy} disabled={hasValidationErrors} />
+      <IconButton label="Simulation engine" icon={Cpu} onClick={() => {}} disabled />
     </header>
   )
 }
 
 /**
- * Icon button used by the Studio toolbar.
- * @param props Button label, icon, action, and disabled state.
+ * Compact icon-only toolbar button.
+ * @param props Button label, icon, callback, and state.
  */
-function ToolbarButton({
+function IconButton({
+  label,
+  icon: Icon,
+  onClick,
+  disabled,
+}: {
+  label: string
+  icon: typeof Save
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-lg disabled:cursor-not-allowed disabled:opacity-35"
+      style={{ color: 'var(--text-secondary)' }}
+    >
+      <Icon size={16} />
+    </button>
+  )
+}
+
+/**
+ * Pipeline action button.
+ * @param props Button label, icon, callback, and visual state.
+ */
+function TextButton({
   label,
   icon: Icon,
   onClick,
   disabled,
   title,
+  primary,
 }: {
   label: string
   icon: typeof Save
   onClick: () => void
   disabled?: boolean
   title?: string
+  primary?: boolean
 }) {
   return (
     <button
@@ -191,14 +166,14 @@ function ToolbarButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold disabled:opacity-40"
+      className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-extrabold disabled:cursor-not-allowed disabled:opacity-40"
       style={{
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        color: 'var(--text-primary)',
+        color: primary ? 'var(--leaf)' : 'var(--text-secondary)',
+        background: primary ? 'rgba(15,168,134,0.1)' : 'transparent',
+        border: primary ? '1px solid rgba(15,168,134,0.25)' : '1px solid transparent',
       }}
     >
-      <Icon size={14} />
+      <Icon size={15} />
       {label}
     </button>
   )

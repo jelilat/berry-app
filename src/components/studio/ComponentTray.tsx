@@ -2,30 +2,25 @@
 
 import { useState } from 'react'
 import { Search } from 'lucide-react'
-import { getWireTemplate, isWireTemplate } from '@/lib/project/catalog'
 import { listCatalogGrouped } from '@/lib/project/catalog-groups'
 import { hasWokwiVisual } from '@/lib/studio/wokwi-map'
 import type { ComponentTypeId } from '@/lib/project/types'
 import { FallbackPartArt } from './FallbackPartArt'
-import { JumperWireArt, wirePreviewColor } from './JumperWireArt'
 import { WokwiPart } from './WokwiPart'
 
 /**
  * Grouped visual component palette — click a part to place it, or a wire to pick jumper style.
  * @param onAddPart Callback when a placeable part is chosen.
- * @param onSelectWire Callback when a jumper wire template is chosen.
  * @param activeWireType Currently selected wire template, if any.
  */
 export function ComponentTray({
   onAddPart,
-  onSelectWire,
   activeWireType,
 }: {
   onAddPart: (type: ComponentTypeId) => void
-  onSelectWire: (type: ComponentTypeId) => void
   activeWireType: ComponentTypeId | null
 }) {
-  const sections = listCatalogGrouped()
+  const sections = listCatalogGrouped().filter((section) => section.group !== 'wires')
   const totalParts = sections.reduce((n, s) => n + s.parts.length, 0)
   const [query, setQuery] = useState('')
 
@@ -40,8 +35,8 @@ export function ComponentTray({
 
   return (
     <aside
-      className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-2xl"
-      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+      className="flex w-[296px] shrink-0 flex-col overflow-hidden border-r"
+      style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
     >
       <div className="border-b px-3 py-3" style={{ borderColor: 'var(--border)' }}>
         <div className="mb-2 flex items-center justify-between">
@@ -86,16 +81,15 @@ export function ComponentTray({
                   key={part.id}
                   type={part.id}
                   name={part.name}
-                  isWire={isWireTemplate(part.id)}
+                  isWire={false}
                   isActiveWire={activeWireType === part.id}
                   onDragStart={(event) => {
-                    if (isWireTemplate(part.id)) return
                     event.dataTransfer.setData('application/x-berry-component', part.id)
                     event.dataTransfer.setData('text/plain', part.id)
                     event.dataTransfer.effectAllowed = 'copy'
                   }}
                   onClick={() =>
-                    isWireTemplate(part.id) ? onSelectWire(part.id) : onAddPart(part.id)
+                    onAddPart(part.id)
                   }
                 />
               ))}
@@ -126,7 +120,6 @@ function PartCard({
   onClick: () => void
 }) {
   const hasWokwi = hasWokwiVisual(type)
-  const wireTemplate = isWire ? getWireTemplate(type) : null
 
   return (
     <button
@@ -141,20 +134,13 @@ function PartCard({
           ? '1px solid rgba(15,168,134,0.45)'
           : '1px solid var(--border)',
       }}
-      title={isWire ? `Use ${name} with Connect` : `Add ${name}`}
+      title={`Add ${name}`}
     >
       <div
         className="flex h-[72px] w-full items-center justify-center overflow-hidden rounded-lg"
         style={{ background: 'linear-gradient(180deg, #faf9f7 0%, #f0ede8 100%)' }}
       >
-        {wireTemplate ? (
-          <JumperWireArt
-            connectors={wireTemplate.connectors}
-            color={wirePreviewColor(wireTemplate.defaultColor)}
-            width={88}
-            height={48}
-          />
-        ) : hasWokwi ? (
+        {hasWokwi ? (
           <WokwiPart type={type} width={88} height={64} fit />
         ) : (
           <FallbackPartArt type={type} size={72} />

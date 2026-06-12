@@ -86,8 +86,16 @@ function describeUnsupportedCircuit(project: BerryProject): SimulationDiagnostic
  */
 function sourceLooksLikeBlinkFirmware(source: string, gpioPin: number): boolean {
   const escapedPin = String(gpioPin).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const pinTokenPattern = `(?:${escapedPin}|LED_PIN)`
-  const declaresPinAlias = new RegExp(`\\bLED_PIN\\s*=\\s*${escapedPin}\\b`).test(source)
+  const aliasMatches = [
+    ...source.matchAll(
+      new RegExp(`\\b(?:constexpr\\s+)?(?:int|const\\s+int)\\s+([A-Z0-9_]*LED[A-Z0-9_]*PIN)\\s*=\\s*${escapedPin}\\b`, 'g'),
+    ),
+  ]
+  const pinAliases = aliasMatches
+    .map((match) => match[1])
+    .filter((alias): alias is string => Boolean(alias))
+  const pinTokenPattern = `(?:${escapedPin}|${pinAliases.join('|') || 'LED_PIN'})`
+  const declaresPinAlias = pinAliases.length > 0
   const allowsDirectPin = new RegExp(`\\b(?:pinMode|digitalWrite)\\s*\\(\\s*${escapedPin}\\b`).test(source)
   const usesSupportedPin = declaresPinAlias || allowsDirectPin
 

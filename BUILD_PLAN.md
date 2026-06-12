@@ -4,9 +4,9 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Product goal:** Talk to AI → design in Studio → validate wiring → simulate firmware → deploy the same build to a real device.
 
-**Current phase:** Phase 4 — Simulation (Phase 3 compile/codegen complete)
+**Current phase:** Phase 6 — AI build loop demo (Phase 5 deploy intentionally deferred)
 
-**Last updated:** 2026-06-11
+**Last updated:** 2026-06-12
 
 ---
 
@@ -39,9 +39,9 @@ flowchart TD
 | 1 | Studio 2D | Done |
 | 2 | Functional wiring / validation | Done |
 | 3 | Codegen + compile | Done |
-| 4 | Simulation | In progress (mock contract shipped) |
-| 5 | Deploy to device | Not started |
-| 6 | AI build loop | Not started |
+| 4 | Simulation | Demo-ready (mock contract shipped) |
+| 5 | Deploy to device | Deferred (show coming soon) |
+| 6 | AI build loop | In progress (video-first demo) |
 | 7 | 3D + advanced sim (optional) | Not started |
 
 ---
@@ -172,6 +172,8 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 **Outcome:** Flash the **same** artifact that passed simulation.
 
+**Status:** Deferred until after the AI integration video. In Studio, Deploy should remain visible but show a clear “coming soon” message when clicked.
+
 - [ ] Deploy uses identical build artifact as sim (`firmwareHash` match)
 - [ ] Web Serial: connect, monitor logs in Studio
 - [ ] Flash path for chosen board (Web Serial bootloader and/or thin `berry-cli` agent)
@@ -185,17 +187,20 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 ## Phase 6 — AI build loop
 
-**Outcome:** User talks to AI; agents mutate project via tools, then validate → build → sim → deploy.
+**Outcome:** User talks to AI; agents mutate project via tools, then validate → build → simulate. Deploy remains a coming-soon handoff until Phase 5 resumes.
 
-- [ ] Tool-first APIs (all mutations through versioned tools, not raw JSON edits)
-- [ ] Core tools: `studio.add_component`, `studio.wire_pins`, `validate`, `build`, `simulate`, `deploy`
-- [ ] Orchestration backend (e.g. LangGraph): router, wiring, firmware, debug agents
-- [ ] Guardrails: schema validation on every tool input/output
-- [ ] MCP server exposing same tools (optional, for Cursor / external agents)
-- [ ] Skills / `AGENTS.md` document how agents use tools safely
-- [ ] Demo flow: natural language → working hardware on reference circuit
+**Design:** See [docs/agent-architecture.md](./docs/agent-architecture.md) for the multi-agent workflow, clarification loop, tool boundaries, and wiring-guide handoff.
 
-**Exit criteria:** One scripted “talk → build → sim → deploy” demo without manual canvas edits.
+- [x] Demo prompt box in Studio for “build me an ESP32 LED blink”
+- [x] Scripted AI plan output: choose board, place parts, wire LED + resistor, generate firmware
+- [x] Tool-first mutation layer for demo actions, not raw JSON edits
+- [x] Core demo tools: `studio.add_component`, `studio.wire_pins`, `validate`, `codegen`, `build`, `simulate`
+- [x] Guardrails: schema validation on every tool input/output
+- [x] Timeline UI showing AI steps, tool calls, validation/build/sim status, and serial logs
+- [x] Demo flow: natural language → wired project → generated firmware → build → passed simulation
+- [x] Keep Deploy button visible as coming soon for the video
+
+**Exit criteria:** One polished scripted “talk → design → build → simulate” demo without manual canvas edits, suitable for a short product video.
 
 ---
 
@@ -265,3 +270,6 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | 2026-06-05 | Phase 2 MVP: `src/lib/validation/`, Studio panel + overlays, Build/Deploy gate, `/api/validate` |
 | 2026-06-09 | Phase 2 hardening: protocol pairing, pin compatibility, power/floating warnings, connect preflight, net-row selection, API route tests |
 | 2026-06-11 | Phase 4 mock simulation: `src/lib/simulation/`, `POST /api/simulate`, Studio Simulate toolbar + panel |
+| 2026-06-12 | Deferred Phase 5 deploy for video push; Phase 6 AI build loop becomes active demo track |
+| 2026-06-12 | Phase 6 foundation: model registry, deterministic agent workflow, `/api/agent/run`, Studio AI panel, wiring guide |
+| 2026-06-12 | Real AI provider path: OpenAI structured model client, agent schemas/prompts, model-backed clarifier/planner/circuit intent/wiring guide |

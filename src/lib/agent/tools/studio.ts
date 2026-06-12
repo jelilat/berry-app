@@ -248,6 +248,117 @@ export function studioCreateEsp32LedBlinkProject(): StudioToolResult {
 }
 
 /**
+ * Create the Arduino Uno reference circuit as a validated Studio project.
+ * Mirrors the ESP32 blink reference: D13 -> 220 ohm resistor -> LED anode,
+ * LED cathode -> GND. Coordinates stay 2D-native with z = 0.
+ */
+export function studioCreateArduinoUnoLedBlinkProject(): StudioToolResult {
+  const project: BerryProject = {
+    version: BERRY_PROJECT_VERSION,
+    board: 'arduino-uno',
+    metadata: {
+      name: 'Arduino Uno LED blink',
+      description: 'AI-generated reference circuit for the Phase 6 build loop.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    components: [
+      {
+        id: 'breadboard_1',
+        type: 'breadboard-full',
+        transform: {
+          position: { x: 0, y: 0, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: 1,
+        },
+      },
+      {
+        id: 'arduino_1',
+        type: 'arduino-uno',
+        transform: {
+          position: { x: 0.04, y: 0.03, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: 1,
+        },
+      },
+      {
+        id: 'resistor_1',
+        type: 'resistor-220',
+        transform: {
+          position: { x: 0.14, y: 0.05, z: 0 },
+          rotation: { x: 0, y: 0, z: 90 },
+          scale: 1,
+        },
+      },
+      {
+        id: 'led_1',
+        type: 'led-5mm',
+        transform: {
+          position: { x: 0.18, y: 0.05, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: 1,
+        },
+      },
+    ],
+    nets: [
+      {
+        id: 'net_gnd',
+        terminals: [
+          { component: 'arduino_1', terminal: 'GND' },
+          { component: 'led_1', terminal: 'cathode' },
+        ],
+      },
+      {
+        id: 'net_gpio_led',
+        terminals: [
+          { component: 'arduino_1', terminal: 'D13' },
+          { component: 'resistor_1', terminal: 'pin1' },
+        ],
+      },
+      {
+        id: 'net_led_anode',
+        terminals: [
+          { component: 'resistor_1', terminal: 'pin2' },
+          { component: 'led_1', terminal: 'anode' },
+        ],
+      },
+    ],
+    wires: [
+      {
+        id: 'wire_gnd',
+        net: 'net_gnd',
+        color: 'black',
+        points: [
+          { x: 0.08, y: 0.04, z: 0 },
+          { x: 0.16, y: 0.04, z: 0 },
+          { x: 0.18, y: 0.05, z: 0 },
+        ],
+      },
+      {
+        id: 'wire_signal',
+        net: 'net_gpio_led',
+        color: 'yellow',
+        points: [
+          { x: 0.08, y: 0.06, z: 0 },
+          { x: 0.14, y: 0.05, z: 0 },
+        ],
+      },
+      {
+        id: 'wire_led',
+        net: 'net_led_anode',
+        color: 'red',
+        points: [
+          { x: 0.15, y: 0.05, z: 0 },
+          { x: 0.18, y: 0.05, z: 0 },
+        ],
+      },
+    ],
+  }
+  validateProjectGraph(project)
+  return { project, summary: 'Created the Arduino Uno + resistor + LED reference circuit.' }
+}
+
+/**
  * Assert that a project remains parseable after agent tool calls.
  * @param project Project graph to validate.
  */

@@ -6,6 +6,8 @@ This guide is the practical hardware context for Berry's AI agents. The architec
 
 - Do not edit `project.json` directly.
 - Use Berry tools for all project mutations.
+- Circuit designer output must include executable `toolCalls`, not only prose in `toolPlan`.
+- Every `toolCalls[]` item must include all schema fields; set unused fields to `null`.
 - Use catalog ids and terminal ids exactly as defined by the app.
 - Keep 2D Studio coordinates `z: 0`.
 - Always include current-limiting resistors for LEDs.
@@ -13,13 +15,23 @@ This guide is the practical hardware context for Berry's AI agents. The architec
 - Generate wiring instructions from the final validated graph.
 - Deploy is coming soon; do not claim hardware flashing is available.
 
-## Supported first flow
+## Supported flows
 
-The first production AI flow is:
+Berry can build an LED blink on two first-class boards:
 
 ```txt
 ESP32 DevKit V1 + 220 ohm resistor + 5mm LED blink
+Arduino Uno    + 220 ohm resistor + 5mm LED blink
 ```
+
+### Board selection rules
+
+- If the user names ESP32, use `esp32-devkit-v1`.
+- If the user names Arduino Uno, use `arduino-uno`.
+- If no board is specified for a simple LED blink, default to `esp32-devkit-v1` and record the assumption.
+- If the request depends on board-specific capabilities (analog channels, wireless, 3.3 V vs 5 V logic), ask which board to use.
+
+### ESP32 DevKit V1 LED blink
 
 Use:
 
@@ -30,16 +42,40 @@ Use:
 - resistor: `resistor-220`
 - signal GPIO: `IO13`
 - ground: `GND_R`
+- serial baud: `115200`
 
 Safe connection pattern:
 
 ```txt
+Add esp32_1 before breadboard_1 so the dev board stays beside the breadboard.
 esp32_1.IO13 -> resistor_1.pin1
 resistor_1.pin2 -> led_1.anode
 led_1.cathode -> esp32_1.GND_R
 ```
 
-Firmware behavior:
+### Arduino Uno LED blink
+
+Use:
+
+- board: `arduino-uno`
+- MCU component: `arduino-uno`
+- breadboard: `breadboard-full`
+- LED: `led-5mm`
+- resistor: `resistor-220`
+- safe signal pin: `D13` (Arduino digital pin 13, also the onboard LED pin)
+- ground: `GND`
+- serial baud: `9600`
+
+Safe connection pattern:
+
+```txt
+Add arduino_1 before breadboard_1 so the dev board stays beside the breadboard.
+arduino_1.D13 -> resistor_1.pin1
+resistor_1.pin2 -> led_1.anode
+led_1.cathode -> arduino_1.GND
+```
+
+Firmware behavior (both boards):
 
 - configure the mapped LED GPIO as `OUTPUT`
 - write `HIGH`

@@ -14,13 +14,25 @@ function agentRunRequest(body: unknown): Request {
 }
 
 describe('POST /api/agent/run', () => {
-  it('runs the deterministic LED blink agent workflow', async () => {
+  it('runs the deterministic ESP32 LED blink agent workflow', async () => {
     const response = await POST(agentRunRequest({ prompt: 'Build me an ESP32 blinking LED' }))
     const json = await response.json()
 
     expect(response.status).toBe(200)
     expect(json.ok).toBe(true)
     expect(json.status).toBe('completed')
+    expect(json.state.project.board).toBe('esp32-devkit-v1')
+    expect(json.state.simulationResult.status).toBe('passed')
+  })
+
+  it('runs the deterministic Arduino Uno LED blink agent workflow', async () => {
+    const response = await POST(agentRunRequest({ prompt: 'Build me an Arduino Uno blinking LED' }))
+    const json = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(json.ok).toBe(true)
+    expect(json.status).toBe('completed')
+    expect(json.state.project.board).toBe('arduino-uno')
     expect(json.state.simulationResult.status).toBe('passed')
   })
 

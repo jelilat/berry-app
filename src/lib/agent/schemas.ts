@@ -1,10 +1,13 @@
 import type { JSONSchema, StructuredOutputSchema } from '@/lib/ai/model-client'
+import { parseBreadboardSite } from '@/lib/project/breadboard'
+import type { BoardId, ComponentTypeId, WireColor } from '@/lib/project/types'
 import type {
   AgentBuildPlan,
   AgentCircuitIntent,
   ClarificationResult,
   WiringGuideDraft,
 } from './types'
+import type { StudioToolCall, StudioToolEndpoint } from './tools/calls'
 
 const COMPONENT_TYPES = [
   'breadboard-full',
@@ -20,6 +23,73 @@ const COMPONENT_TYPES = [
   'servo-sg90',
   'lcd-1602-i2c',
 ] as const
+
+const WIRE_COLORS = ['red', 'black', 'yellow', 'green', 'blue', 'white', 'orange'] as const
+
+const STUDIO_TOOL_ENDPOINT_SCHEMA = {
+  type: ['object', 'null'],
+  additionalProperties: false,
+  properties: {
+    componentId: { type: ['string', 'null'] },
+    terminalId: { type: ['string', 'null'] },
+    breadboardId: { type: ['string', 'null'] },
+    site: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        kind: { type: ['string', 'null'], enum: ['hole', 'rail', null] },
+        block: { type: ['string', 'null'], enum: ['top', 'bottom', null] },
+        row: {
+          type: ['string', 'null'],
+          enum: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', null],
+        },
+        edge: { type: ['string', 'null'], enum: ['top', 'bottom', null] },
+        polarity: { type: ['string', 'null'], enum: ['positive', 'negative', null] },
+        column: { type: ['number', 'null'] },
+      },
+      required: ['kind', 'block', 'row', 'edge', 'polarity', 'column'],
+    },
+  },
+  required: ['componentId', 'terminalId', 'breadboardId', 'site'],
+} satisfies JSONSchema
+
+const STUDIO_TOOL_CALL_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    tool: {
+      type: 'string',
+      enum: [
+        'studio.set_board',
+        'studio.add_component',
+        'studio.move_component',
+        'studio.connect_terminals',
+        'project.validate',
+      ],
+    },
+    board: { type: ['string', 'null'], enum: ['esp32-devkit-v1', 'arduino-uno', null] },
+    componentType: { type: ['string', 'null'], enum: [...COMPONENT_TYPES, null] },
+    id: { type: ['string', 'null'] },
+    x: { type: ['number', 'null'] },
+    y: { type: ['number', 'null'] },
+    rotationZ: { type: ['number', 'null'] },
+    from: STUDIO_TOOL_ENDPOINT_SCHEMA,
+    to: STUDIO_TOOL_ENDPOINT_SCHEMA,
+    color: { type: ['string', 'null'], enum: [...WIRE_COLORS, null] },
+  },
+  required: [
+    'tool',
+    'board',
+    'componentType',
+    'id',
+    'x',
+    'y',
+    'rotationZ',
+    'from',
+    'to',
+    'color',
+  ],
+} satisfies JSONSchema
 
 /** JSON schema for clarifier agent output. */
 export const ClarificationResultStructuredSchema: StructuredOutputSchema<ClarificationResult> = {
@@ -99,11 +169,15 @@ export const AgentCircuitIntentStructuredSchema: StructuredOutputSchema<AgentCir
     type: 'object',
     additionalProperties: false,
     properties: {
-      referenceCircuit: { type: 'string', enum: ['esp32_led_blink', 'unsupported'] },
+      referenceCircuit: {
+        type: 'string',
+        enum: ['esp32_led_blink', 'arduino_uno_led_blink', 'unsupported'],
+      },
       rationale: { type: 'string' },
       toolPlan: { type: 'array', items: { type: 'string' } },
+      toolCalls: { type: 'array', items: STUDIO_TOOL_CALL_SCHEMA },
     },
-    required: ['referenceCircuit', 'rationale', 'toolPlan'],
+    required: ['referenceCircuit', 'rationale', 'toolPlan', 'toolCalls'],
   },
   validate: validateAgentCircuitIntent,
 }
@@ -213,14 +287,123 @@ function validateAgentBuildPlan(value: unknown): AgentBuildPlan {
 function validateAgentCircuitIntent(value: unknown): AgentCircuitIntent {
   const object = requireRecord(value, 'circuitIntent')
   const referenceCircuit = requireString(object.referenceCircuit, 'circuitIntent.referenceCircuit')
-  if (referenceCircuit !== 'esp32_led_blink' && referenceCircuit !== 'unsupported') {
+  if (
+    referenceCircuit !== 'esp32_led_blink' &&
+    referenceCircuit !== 'arduino_uno_led_blink' &&
+    referenceCircuit !== 'unsupported'
+  ) {
     throw new Error(`Unsupported reference circuit: ${referenceCircuit}`)
   }
   return {
     referenceCircuit,
     rationale: requireString(object.rationale, 'circuitIntent.rationale'),
     toolPlan: requireStringArray(object.toolPlan, 'circuitIntent.toolPlan'),
+    toolCalls: requireArray(object.toolCalls, 'circuitIntent.toolCalls').map((call, index) =>
+      validateStudioToolCall(call, `circuitIntent.toolCalls[${index}]`),
+    ),
   }
+}
+
+/**
+ * Validate one model-emitted Studio tool call.
+ * @param value Raw tool call object.
+ * @param path Error path.
+ */
+function validateStudioToolCall(value: unknown, path: string): StudioToolCall {
+  const object = requireRecord(value, path)
+  const tool = requireString(object.tool, `${path}.tool`)
+
+  if (tool === 'studio.set_board') {
+    return { tool, board: requireBoardId(object.board, `${path}.board`) }
+  }
+  if (tool === 'studio.add_component') {
+    return {
+      tool,
+      componentType: requireComponentType(object.componentType, `${path}.componentType`),
+      id: requireString(object.id, `${path}.id`),
+      x: requireNumber(object.x, `${path}.x`),
+      y: requireNumber(object.y, `${path}.y`),
+      rotationZ: typeof object.rotationZ === 'number' ? object.rotationZ : undefined,
+    }
+  }
+  if (tool === 'studio.move_component') {
+    return {
+      tool,
+      id: requireString(object.id, `${path}.id`),
+      x: requireNumber(object.x, `${path}.x`),
+      y: requireNumber(object.y, `${path}.y`),
+    }
+  }
+  if (tool === 'studio.connect_terminals') {
+    return {
+      tool,
+      from: validateStudioEndpoint(object.from, `${path}.from`),
+      to: validateStudioEndpoint(object.to, `${path}.to`),
+      color: typeof object.color === 'string' ? requireWireColor(object.color, `${path}.color`) : undefined,
+    }
+  }
+  if (tool === 'project.validate') {
+    return { tool }
+  }
+  throw new Error(`Unsupported Studio tool: ${tool}`)
+}
+
+/**
+ * Validate one tool-call endpoint.
+ * @param value Raw endpoint object.
+ * @param path Error path.
+ */
+function validateStudioEndpoint(value: unknown, path: string): StudioToolEndpoint {
+  const object = requireRecord(value, path)
+  const componentId = optionalStringOrNull(object.componentId)
+  const terminalId = optionalStringOrNull(object.terminalId)
+  const breadboardId = optionalStringOrNull(object.breadboardId)
+
+  if (componentId && terminalId && !breadboardId) {
+    return { componentId, terminalId }
+  }
+  if (breadboardId && !componentId && !terminalId) {
+    return { breadboardId, site: parseBreadboardSite(object.site, `${path}.site`) }
+  }
+  throw new Error(`${path} must be either componentId+terminalId or breadboardId+site`)
+}
+
+/**
+ * Require a supported board id.
+ * @param value Raw value.
+ * @param path Error path.
+ */
+function requireBoardId(value: unknown, path: string): BoardId {
+  const board = requireString(value, path)
+  if (board !== 'esp32-devkit-v1' && board !== 'arduino-uno') {
+    throw new Error(`Unsupported board: ${board}`)
+  }
+  return board
+}
+
+/**
+ * Require a catalog component type.
+ * @param value Raw value.
+ * @param path Error path.
+ */
+function requireComponentType(value: unknown, path: string): ComponentTypeId {
+  const type = requireString(value, path)
+  if (!(COMPONENT_TYPES as readonly string[]).includes(type)) {
+    throw new Error(`Unsupported component type: ${type}`)
+  }
+  return type as ComponentTypeId
+}
+
+/**
+ * Require a supported wire color.
+ * @param value Raw value.
+ * @param path Error path.
+ */
+function requireWireColor(value: unknown, path: string): WireColor {
+  if (typeof value !== 'string' || !(WIRE_COLORS as readonly string[]).includes(value)) {
+    throw new Error(`${path} must be a supported wire color`)
+  }
+  return value as WireColor
 }
 
 /**
@@ -261,11 +444,31 @@ function requireString(value: unknown, path: string): string {
 }
 
 /**
+ * Require a number.
+ * @param value Raw value.
+ * @param path Error path.
+ */
+function requireNumber(value: unknown, path: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${path} must be a finite number`)
+  }
+  return value
+}
+
+/**
  * Return a string or empty value for optional fields.
  * @param value Raw value.
  */
 function optionalString(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+/**
+ * Return a string for optional nullable fields.
+ * @param value Raw value.
+ */
+function optionalStringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 /**

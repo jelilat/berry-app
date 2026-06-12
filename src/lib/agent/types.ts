@@ -3,6 +3,7 @@ import type { CodegenResult } from '@/lib/codegen/types'
 import type { BerryProject, BoardId, ComponentTypeId } from '@/lib/project/types'
 import type { SimulationResult } from '@/lib/simulation'
 import type { ValidationResult } from '@/lib/validation'
+import type { StudioToolCall } from './tools/calls'
 
 /** Agent workflow status returned to Studio. */
 export type AgentRunStatus = 'completed' | 'needs_clarification' | 'failed'
@@ -62,11 +63,18 @@ export interface AgentBuildPlan {
   constraints: string[]
 }
 
+/** Board-aware reference circuit the AI build loop can execute today. */
+export type AgentReferenceCircuit =
+  | 'esp32_led_blink'
+  | 'arduino_uno_led_blink'
+  | 'unsupported'
+
 /** Bounded circuit implementation intent selected by the circuit design agent. */
 export interface AgentCircuitIntent {
-  referenceCircuit: 'esp32_led_blink' | 'unsupported'
+  referenceCircuit: AgentReferenceCircuit
   rationale: string
   toolPlan: string[]
+  toolCalls: StudioToolCall[]
 }
 
 /** Model-authored wiring guide draft. */

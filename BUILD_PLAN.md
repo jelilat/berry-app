@@ -164,7 +164,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 **Note:** Full in-browser ESP32 emulation is hard; prefer mocked peripherals + compile-verify early. Evaluate Wokwi-style integration vs custom emulator as a deliberate decision.
 
-**Current simulator (2026-06-11):** Mock-heavy contract only — `simulateProject` requires a successful build `firmwareHash`, returns deterministic serial logs and GPIO traces for the ESP32 LED blink example, and reports `unsupported` for other circuits. Real GPIO/peripheral behavior models and bytecode execution remain TODO before deploy can rely on rich emulation.
+**Current simulator (2026-06-12):** Mock-heavy contract only — `simulateProject` requires a successful build `firmwareHash`, returns deterministic serial logs and GPIO traces for the **ESP32 and Arduino Uno** LED blink circuits, and reports `unsupported` for other circuits. Real GPIO/peripheral behavior models and bytecode execution remain TODO before deploy can rely on rich emulation.
 
 ---
 
@@ -199,6 +199,9 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 - [x] Timeline UI showing AI steps, tool calls, validation/build/sim status, and serial logs
 - [x] Demo flow: natural language → wired project → generated firmware → build → passed simulation
 - [x] Keep Deploy button visible as coming soon for the video
+- [x] Board-aware AI build loop: ESP32 DevKit V1 **and** Arduino Uno LED blink as first-class targets
+- [x] Board-aware reference intents (`esp32_led_blink`, `arduino_uno_led_blink`, `unsupported`)
+- [x] Typed structured tool-call executor (`studio.set_board`, `studio.add_component`, `studio.connect_terminals`, `studio.move_component`, `project.validate`) with post-batch validation; no raw `project.json` edits
 
 **Exit criteria:** One polished scripted “talk → design → build → simulate” demo without manual canvas edits, suitable for a short product video.
 
@@ -229,7 +232,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 | Decision | Options | Status |
 |----------|---------|--------|
-| First target board | ESP32 devkit vs Arduino UNO | **Open** |
+| First target board | ESP32 devkit vs Arduino UNO | **Resolved** — both supported (ESP32 default for unspecified LED blink) |
 | Compile location | Cloud worker vs WASM vs local CLI | **Open** |
 | Simulation strategy | Custom emulator vs integrate (e.g. Wokwi-inspired) vs mock-heavy MVP | **Open** |
 | Deploy without native agent | Web Serial only vs `berry-cli` helper | **Open** |
@@ -273,3 +276,4 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | 2026-06-12 | Deferred Phase 5 deploy for video push; Phase 6 AI build loop becomes active demo track |
 | 2026-06-12 | Phase 6 foundation: model registry, deterministic agent workflow, `/api/agent/run`, Studio AI panel, wiring guide |
 | 2026-06-12 | Real AI provider path: OpenAI structured model client, agent schemas/prompts, model-backed clarifier/planner/circuit intent/wiring guide |
+| 2026-06-12 | Phase 6 multi-board: ESP32 + Arduino Uno LED blink AI targets, board-aware reference intents, Arduino reference circuit + codegen + mock sim, typed tool-call executor with post-batch validation |

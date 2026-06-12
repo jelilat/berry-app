@@ -1,5 +1,5 @@
-import type { BerryProject } from '@/lib/project/types'
-import { detectEsp32LedBlinkCircuit } from './circuits'
+import type { BerryProject, BoardId } from '@/lib/project/types'
+import { detectLedBlinkCircuit } from './circuits'
 import type {
   SimulateProjectInput,
   SimulationDiagnostic,
@@ -16,13 +16,9 @@ export class SimulationInputError extends Error {
   }
 }
 
-/**
- * Build deterministic ESP32 boot + blink serial lines for the mock simulator.
- * @param gpioPin Arduino GPIO number driving the LED.
- */
-function buildEsp32BlinkSerialLogs(gpioPin: number): SimulationLogLine[] {
+/** Common ESP32 ROM bootloader banner lines for the mock serial log. */
+function esp32BootSerialLines(): SimulationLogLine[] {
   return [
-    { offsetMs: 0, source: 'sim', text: 'berry. mock simulator — ESP32 LED blink profile' },
     { offsetMs: 5, source: 'serial', text: 'ets Jun  8 2016 00:22:57' },
     { offsetMs: 12, source: 'serial', text: 'rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)' },
     { offsetMs: 28, source: 'serial', text: 'configsip: 0, SPIWP:0xee' },
@@ -31,6 +27,36 @@ function buildEsp32BlinkSerialLogs(gpioPin: number): SimulationLogLine[] {
     { offsetMs: 72, source: 'serial', text: 'load:0x3fff0018,len:4' },
     { offsetMs: 90, source: 'serial', text: 'load:0x40078000,len:0' },
     { offsetMs: 110, source: 'serial', text: 'entry 0x400805b4' },
+  ]
+}
+
+/** Common Arduino Uno (ATmega328P) boot banner lines for the mock serial log. */
+function arduinoUnoBootSerialLines(): SimulationLogLine[] {
+  return [
+    { offsetMs: 5, source: 'serial', text: 'avr mega bootloader — ATmega328P' },
+    { offsetMs: 12, source: 'serial', text: 'reset:external, fuses lfuse:0xFF hfuse:0xDE efuse:0xFD' },
+    { offsetMs: 28, source: 'serial', text: 'sketch start, F_CPU 16000000 Hz' },
+  ]
+}
+
+/**
+ * Human-facing board label used in mock simulator banners.
+ * @param board Target board id.
+ */
+function blinkProfileLabel(board: BoardId): string {
+  return board === 'arduino-uno' ? 'Arduino Uno LED blink profile' : 'ESP32 LED blink profile'
+}
+
+/**
+ * Build deterministic boot + blink serial lines for the mock simulator.
+ * @param board Target board id.
+ * @param gpioPin Arduino GPIO number driving the LED.
+ */
+function buildBlinkSerialLogs(board: BoardId, gpioPin: number): SimulationLogLine[] {
+  const boot = board === 'arduino-uno' ? arduinoUnoBootSerialLines() : esp32BootSerialLines()
+  return [
+    { offsetMs: 0, source: 'sim', text: `berry. mock simulator — ${blinkProfileLabel(board)}` },
+    ...boot,
     { offsetMs: 150, source: 'serial', text: `GPIO${gpioPin} configured OUTPUT` },
     { offsetMs: 500, source: 'serial', text: `GPIO${gpioPin} HIGH — LED on` },
     { offsetMs: 1000, source: 'serial', text: `GPIO${gpioPin} LOW — LED off` },
@@ -44,7 +70,7 @@ function buildEsp32BlinkSerialLogs(gpioPin: number): SimulationLogLine[] {
  * TODO: Replace with real peripheral timing once GPIO behavior models ship.
  * @param gpioPin Arduino GPIO number driving the LED.
  */
-function buildEsp32BlinkTraces(gpioPin: number): SimulationTrace[] {
+function buildBlinkTraces(gpioPin: number): SimulationTrace[] {
   return [
     { kind: 'gpio', pin: gpioPin, value: 'HIGH', offsetMs: 500 },
     { kind: 'gpio', pin: gpioPin, value: 'LOW', offsetMs: 1000 },
@@ -53,17 +79,20 @@ function buildEsp32BlinkTraces(gpioPin: number): SimulationTrace[] {
   ]
 }
 
+/** Boards the mock simulator can run an LED blink profile on. */
+const SIMULATABLE_BOARDS: BoardId[] = ['esp32-devkit-v1', 'arduino-uno']
+
 /**
  * Summarize why a project is not yet supported by the mock simulator.
  * @param project Parsed Berry project graph.
  */
 function describeUnsupportedCircuit(project: BerryProject): SimulationDiagnostic[] {
-  if (project.board !== 'esp32-devkit-v1') {
+  if (!SIMULATABLE_BOARDS.includes(project.board)) {
     return [
       {
         code: 'sim.unsupported_board',
         severity: 'error',
-        message: `Mock simulation currently supports esp32-devkit-v1 only (project board: ${project.board}).`,
+        message: `Mock simulation currently supports ${SIMULATABLE_BOARDS.join(' and ')} (project board: ${project.board}).`,
       },
     ]
   }
@@ -73,7 +102,7 @@ function describeUnsupportedCircuit(project: BerryProject): SimulationDiagnostic
       code: 'sim.unsupported_circuit',
       severity: 'error',
       message:
-        'Mock simulation supports the ESP32 LED blink demo (ESP32 + resistor + LED on GPIO). Add or adjust wiring to match the example circuit.',
+        'Mock simulation supports the LED blink demo (MCU + resistor + LED on GPIO) for ESP32 DevKit V1 and Arduino Uno. Add or adjust wiring to match the example circuit.',
     },
   ]
 }
@@ -120,7 +149,7 @@ export function simulateProject(input: SimulateProjectInput): SimulationResult {
     throw new SimulationInputError('Simulation requires a firmwareHash from a successful build.')
   }
 
-  const circuit = detectEsp32LedBlinkCircuit(input.project)
+  const circuit = detectLedBlinkCircuit(input.project)
 
   if (!circuit) {
     const errors = describeUnsupportedCircuit(input.project)
@@ -174,8 +203,8 @@ export function simulateProject(input: SimulateProjectInput): SimulationResult {
   // TODO: Model UART, I2C, and ADC peripherals from firmware source and graph.
   // TODO: Execute compiled firmware bytecode instead of scripted GPIO blink traces.
 
-  const logs = buildEsp32BlinkSerialLogs(circuit.gpioPin)
-  const traces = buildEsp32BlinkTraces(circuit.gpioPin)
+  const logs = buildBlinkSerialLogs(circuit.board, circuit.gpioPin)
+  const traces = buildBlinkTraces(circuit.gpioPin)
 
   return {
     status: 'passed',

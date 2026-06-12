@@ -5,7 +5,9 @@ import { loadBerryProjectFromJson } from '@/lib/project/io'
 import { createStarterProject } from '@/lib/project/mutations'
 import { computeFirmwareHash } from '@/lib/build/hash'
 import { createEsp32BlinkFirmwareSource } from '@/lib/firmware/source'
-import { detectEsp32LedBlinkCircuit } from './circuits'
+import { generateFirmwareFromProject } from '@/lib/codegen/generate'
+import { studioCreateArduinoUnoLedBlinkProject } from '@/lib/agent/tools/studio'
+import { detectEsp32LedBlinkCircuit, detectLedBlinkCircuit } from './circuits'
 import { SimulationInputError, simulateProject } from './mock'
 import type { SimulationResult } from './types'
 
@@ -71,6 +73,36 @@ describe('detectEsp32LedBlinkCircuit', () => {
 
   it('returns null for the starter bench without LED wiring', () => {
     expect(detectEsp32LedBlinkCircuit(createStarterProject())).toBeNull()
+  })
+
+  it('detects the Arduino Uno LED blink reference circuit', () => {
+    const { project } = studioCreateArduinoUnoLedBlinkProject()
+    const circuit = detectLedBlinkCircuit(project)
+
+    expect(circuit?.profile).toBe('arduino-uno-led-blink')
+    expect(circuit?.board).toBe('arduino-uno')
+    expect(circuit?.gpioPin).toBe(13)
+    // The ESP32-specific detector should not match an Arduino project.
+    expect(detectEsp32LedBlinkCircuit(project)).toBeNull()
+  })
+})
+
+describe('simulateProject (Arduino Uno)', () => {
+  it('passes mock blink simulation for the Arduino Uno reference circuit', () => {
+    const { project } = studioCreateArduinoUnoLedBlinkProject()
+    const files = { 'src/main.cpp': generateFirmwareFromProject(project).source }
+    const firmwareHash = computeFirmwareHash(project, files)
+
+    const result = simulateProject({
+      project,
+      artifact: { firmwareHash },
+      files,
+    })
+
+    expect(result.status).toBe('passed')
+    expect(result.logs.some((line) => line.text.includes('Arduino Uno LED blink profile'))).toBe(true)
+    expect(result.logs.some((line) => line.text.includes('GPIO13 HIGH'))).toBe(true)
+    expect(result.traces?.length).toBeGreaterThan(0)
   })
 })
 

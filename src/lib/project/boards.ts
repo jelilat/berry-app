@@ -46,6 +46,10 @@ export const boardProfiles: Record<BoardId, BoardProfile> = {
     i2c: { sda: 'A4', scl: 'A5' },
     pins: [
       { id: 'D13', label: 'D13', kind: 'gpio', gpio: 13 },
+      { id: 'D2', label: 'D2', kind: 'gpio', gpio: 2 },
+      { id: 'D3', label: 'D3', kind: 'gpio', gpio: 3, notes: 'PWM' },
+      { id: 'D4', label: 'D4', kind: 'gpio', gpio: 4 },
+      { id: 'D5', label: 'D5', kind: 'gpio', gpio: 5, notes: 'PWM' },
       { id: 'A4', label: 'A4', kind: 'gpio', gpio: 18, notes: 'I2C SDA' },
       { id: 'A5', label: 'A5', kind: 'gpio', gpio: 19, notes: 'I2C SCL' },
       { id: '5V', label: '5V', kind: 'power_out' },

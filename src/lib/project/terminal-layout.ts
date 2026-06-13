@@ -1,16 +1,18 @@
-import type { ComponentTypeId, TerminalDefinition } from './types'
-import { buildComponentSceneSizeTable } from '@/lib/studio/scene-size'
+import type { ComponentTypeId, TerminalDefinition } from "./types";
+import { buildComponentSceneSizeTable } from "@/lib/studio/scene-size";
 
 /** Scene-space width/height per component type (for terminal and wire layout). */
-export const COMPONENT_SCENE_SIZE: Record<ComponentTypeId, { w: number; h: number }> =
-  buildComponentSceneSizeTable()
+export const COMPONENT_SCENE_SIZE: Record<
+  ComponentTypeId,
+  { w: number; h: number }
+> = buildComponentSceneSizeTable();
 
 /**
  * Normalize rotation to 0–359 degrees on the z axis.
  * @param degrees Raw rotation in degrees.
  */
 export function normalizeRotationZ(degrees: number): number {
-  return ((degrees % 360) + 360) % 360
+  return ((degrees % 360) + 360) % 360;
 }
 
 /**
@@ -22,10 +24,10 @@ export function componentSceneDimensions(
   type: ComponentTypeId,
   rotationZ = 0,
 ): { w: number; h: number } {
-  const base = COMPONENT_SCENE_SIZE[type]
-  const r = normalizeRotationZ(rotationZ)
-  if (r === 90 || r === 270) return { w: base.h, h: base.w }
-  return { w: base.w, h: base.h }
+  const base = COMPONENT_SCENE_SIZE[type];
+  const r = normalizeRotationZ(rotationZ);
+  if (r === 90 || r === 270) return { w: base.h, h: base.w };
+  return { w: base.w, h: base.h };
 }
 
 /**
@@ -37,63 +39,72 @@ export function terminalRelativePositions(
   terminals: TerminalDefinition[],
   type: ComponentTypeId,
 ): Record<string, { x: number; y: number }> {
-  if (terminals.length === 0) return {}
+  if (terminals.length === 0) return {};
 
-  const positions: Record<string, { x: number; y: number }> = {}
-  const isBoard = type === 'esp32-devkit-v1' || type === 'arduino-uno'
+  const positions: Record<string, { x: number; y: number }> = {};
+  const isBoard = type === "esp32-devkit-v1" || type === "arduino-uno";
 
   if (isBoard) {
     const esp32Left = new Set([
-      'VIN',
-      'GND_L',
-      'IO13',
-      'IO12',
-      'IO14',
-      'IO27',
-      'IO26',
-      'IO25',
-      'IO33',
-      'IO32',
-      'IO35',
-      'IO34',
-      'VN',
-      'VP',
-      'EN',
-    ])
+      "VIN",
+      "GND_L",
+      "IO13",
+      "IO12",
+      "IO14",
+      "IO27",
+      "IO26",
+      "IO25",
+      "IO33",
+      "IO32",
+      "IO35",
+      "IO34",
+      "VN",
+      "VP",
+      "EN",
+    ]);
     const left = terminals.filter((t) =>
-      type === 'esp32-devkit-v1'
+      type === "esp32-devkit-v1"
         ? esp32Left.has(t.id)
-        : ['VIN', 'GND_L', 'IO4', 'IO13', 'IO18', 'IO21', '5V', 'GND', 'D13', 'A4'].includes(
-            t.id,
-          ),
-    )
-    const right = terminals.filter((t) => !left.includes(t))
+        : [
+            "VIN",
+            "GND_L",
+            "IO4",
+            "IO13",
+            "IO18",
+            "IO21",
+            "5V",
+            "GND",
+            "D13",
+            "A4",
+          ].includes(t.id),
+    );
+    const right = terminals.filter((t) => !left.includes(t));
     left.forEach((t, i) => {
-      const n = Math.max(left.length, 1)
-      positions[t.id] = { x: 0.02, y: 0.12 + (i / n) * 0.76 }
-    })
+      const n = Math.max(left.length, 1);
+      positions[t.id] = { x: 0.02, y: 0.12 + (i / n) * 0.76 };
+    });
     right.forEach((t, i) => {
-      const n = Math.max(right.length, 1)
-      positions[t.id] = { x: 0.92, y: 0.12 + (i / n) * 0.76 }
-    })
-    return positions
+      const n = Math.max(right.length, 1);
+      positions[t.id] = { x: 0.92, y: 0.12 + (i / n) * 0.76 };
+    });
+    return positions;
   }
 
   terminals.forEach((t, i) => {
-    const n = terminals.length
+    const n = terminals.length;
     if (n <= 2) {
-      positions[t.id] = i === 0 ? { x: 0.08, y: 0.5 } : { x: 0.92, y: 0.5 }
+      positions[t.id] = i === 0 ? { x: 0.08, y: 0.5 } : { x: 0.92, y: 0.5 };
     } else {
-      const cols = Math.ceil(Math.sqrt(n))
-      const row = Math.floor(i / cols)
-      const col = i % cols
+      const cols = Math.ceil(Math.sqrt(n));
+      const row = Math.floor(i / cols);
+      const col = i % cols;
       positions[t.id] = {
         x: 0.1 + (col / Math.max(cols - 1, 1)) * 0.8,
         y: 0.15 + (row / Math.max(Math.ceil(n / cols) - 1, 1)) * 0.7,
-      }
+      };
     }
-  })
-  return positions
+  });
+  return positions;
 }
 
 /**
@@ -112,12 +123,18 @@ export function terminalScenePosition(
   terminals: TerminalDefinition[],
   rotationZ = 0,
 ): { x: number; y: number } {
-  const rel = terminalRelativePositions(terminals, type)[terminalId]
+  const rel = terminalRelativePositions(terminals, type)[terminalId];
   if (!rel) {
-    const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ)
-    return { x: componentX + boxW / 2, y: componentY + boxH / 2 }
+    const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ);
+    return { x: componentX + boxW / 2, y: componentY + boxH / 2 };
   }
-  return terminalScenePositionFromRel(componentX, componentY, type, rel, rotationZ)
+  return terminalScenePositionFromRel(
+    componentX,
+    componentY,
+    type,
+    rel,
+    rotationZ,
+  );
 }
 
 /**
@@ -135,24 +152,24 @@ export function terminalScenePositionFromRel(
   rel: { x: number; y: number },
   rotationZ = 0,
 ): { x: number; y: number } {
-  const base = COMPONENT_SCENE_SIZE[type]
-  const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ)
-  const lx = rel.x * base.w
-  const ly = rel.y * base.h
-  const offX = (boxW - base.w) / 2
-  const offY = (boxH - base.h) / 2
-  const pivotX = offX + base.w / 2
-  const pivotY = offY + base.h / 2
-  const dx = lx - base.w / 2
-  const dy = ly - base.h / 2
-  const rad = (normalizeRotationZ(rotationZ) * Math.PI) / 180
-  const rx = dx * Math.cos(rad) - dy * Math.sin(rad)
-  const ry = dx * Math.sin(rad) + dy * Math.cos(rad)
+  const base = COMPONENT_SCENE_SIZE[type];
+  const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ);
+  const lx = rel.x * base.w;
+  const ly = rel.y * base.h;
+  const offX = (boxW - base.w) / 2;
+  const offY = (boxH - base.h) / 2;
+  const pivotX = offX + base.w / 2;
+  const pivotY = offY + base.h / 2;
+  const dx = lx - base.w / 2;
+  const dy = ly - base.h / 2;
+  const rad = (normalizeRotationZ(rotationZ) * Math.PI) / 180;
+  const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
+  const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
 
   return {
     x: componentX + pivotX + rx,
     y: componentY + pivotY + ry,
-  }
+  };
 }
 
 /**
@@ -172,19 +189,19 @@ export function terminalRelativeFromScenePoint(
   sceneX: number,
   sceneY: number,
 ): { x: number; y: number } | null {
-  const base = COMPONENT_SCENE_SIZE[type]
-  const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ)
-  const offX = (boxW - base.w) / 2
-  const offY = (boxH - base.h) / 2
-  const pivotX = offX + base.w / 2
-  const pivotY = offY + base.h / 2
-  const rx = sceneX - componentX - pivotX
-  const ry = sceneY - componentY - pivotY
-  const rad = (-normalizeRotationZ(rotationZ) * Math.PI) / 180
-  const dx = rx * Math.cos(rad) - ry * Math.sin(rad)
-  const dy = rx * Math.sin(rad) + ry * Math.cos(rad)
-  const lx = dx + base.w / 2
-  const ly = dy + base.h / 2
-  if (base.w <= 0 || base.h <= 0) return null
-  return { x: lx / base.w, y: ly / base.h }
+  const base = COMPONENT_SCENE_SIZE[type];
+  const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ);
+  const offX = (boxW - base.w) / 2;
+  const offY = (boxH - base.h) / 2;
+  const pivotX = offX + base.w / 2;
+  const pivotY = offY + base.h / 2;
+  const rx = sceneX - componentX - pivotX;
+  const ry = sceneY - componentY - pivotY;
+  const rad = (-normalizeRotationZ(rotationZ) * Math.PI) / 180;
+  const dx = rx * Math.cos(rad) - ry * Math.sin(rad);
+  const dy = rx * Math.sin(rad) + ry * Math.cos(rad);
+  const lx = dx + base.w / 2;
+  const ly = dy + base.h / 2;
+  if (base.w <= 0 || base.h <= 0) return null;
+  return { x: lx / base.w, y: ly / base.h };
 }

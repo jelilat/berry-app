@@ -14,6 +14,7 @@ const INTERACTION_FLOOR_SCENE_SIZE: Partial<Record<ComponentTypeId, { w: number;
   'resistor-1k': { w: 0.08, h: 0.018 },
   'resistor-2k': { w: 0.08, h: 0.018 },
   'push-button': { w: 0.04, h: 0.04 },
+  'max7219-led-matrix': { w: 0.082, h: 0.082 },
 }
 
 /**
@@ -96,6 +97,7 @@ export function buildComponentSceneSizeTable(): Record<
     'bme280': catalogSceneSize('bme280'),
     'servo-sg90': catalogSceneSize('servo-sg90'),
     'lcd-1602-i2c': catalogSceneSize('lcd-1602-i2c'),
+    'max7219-led-matrix': catalogSceneSize('max7219-led-matrix'),
     'jumper-mm': { w: 0.01, h: 0.01 },
     'jumper-mf': { w: 0.01, h: 0.01 },
     'jumper-ff': { w: 0.01, h: 0.01 },

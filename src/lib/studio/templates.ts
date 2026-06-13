@@ -11,8 +11,6 @@ export interface BuilderTemplate {
   prompt: string
   icon: LucideIcon
   kind: BuilderTemplateKind
-  /** Whether the bench should run the AI build loop after opening. */
-  autoRunPrompt?: boolean
   /** Public path for example JSON when `kind` is `example`. */
   examplePath?: string
   /** Default project title when bootstrapping a starter layout. */
@@ -27,7 +25,6 @@ export const BUILDER_TEMPLATES: BuilderTemplate[] = [
     prompt: 'Build a simple blinking LED',
     icon: Lightbulb,
     kind: 'example',
-    autoRunPrompt: true,
     examplePath: '/examples/esp32-led-blink.project.json',
     projectName: 'LED blink',
   },
@@ -36,7 +33,8 @@ export const BUILDER_TEMPLATES: BuilderTemplate[] = [
     label: 'Make a simple calculator',
     prompt: 'Build a simple calculator with buttons and a display',
     icon: Calculator,
-    kind: 'starter',
+    kind: 'example',
+    examplePath: '/examples/arduino-calculator.project.json',
     projectName: 'Calculator',
   },
   {
@@ -44,7 +42,8 @@ export const BUILDER_TEMPLATES: BuilderTemplate[] = [
     label: 'Show text on an LED matrix',
     prompt: 'Build a simple message display on a MAX7219 LED matrix',
     icon: Monitor,
-    kind: 'starter',
+    kind: 'example',
+    examplePath: '/examples/esp32-max7219-display.project.json',
     projectName: 'MAX7219 display',
   },
 ]

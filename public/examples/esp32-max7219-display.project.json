@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "board": "esp32-devkit-v1",
+  "metadata": {
+    "name": "ESP32 MAX7219 display",
+    "description": "ESP32 starter wired to a MAX7219 LED matrix over SPI-style GPIO signals."
+  },
+  "components": [
+    {
+      "id": "breadboard_1",
+      "type": "breadboard-full",
+      "transform": {
+        "position": { "x": 0, "y": 0, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "esp32_1",
+      "type": "esp32-devkit-v1",
+      "transform": {
+        "position": { "x": 0.055, "y": 0.035, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 90 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "matrix_1",
+      "type": "max7219-led-matrix",
+      "transform": {
+        "position": { "x": 0.29, "y": 0.05, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": "net_3v3",
+      "terminals": [
+        { "component": "esp32_1", "terminal": "3V3" },
+        { "component": "matrix_1", "terminal": "VCC" }
+      ]
+    },
+    {
+      "id": "net_gnd",
+      "terminals": [
+        { "component": "esp32_1", "terminal": "GND_R" },
+        { "component": "matrix_1", "terminal": "GND" }
+      ]
+    },
+    {
+      "id": "net_matrix_din",
+      "terminals": [
+        { "component": "esp32_1", "terminal": "IO23" },
+        { "component": "matrix_1", "terminal": "DIN" }
+      ]
+    },
+    {
+      "id": "net_matrix_clk",
+      "terminals": [
+        { "component": "esp32_1", "terminal": "IO18" },
+        { "component": "matrix_1", "terminal": "CLK" }
+      ]
+    },
+    {
+      "id": "net_matrix_cs",
+      "terminals": [
+        { "component": "esp32_1", "terminal": "IO5" },
+        { "component": "matrix_1", "terminal": "CS" }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "wire_3v3",
+      "net": "net_3v3",
+      "color": "red",
+      "points": [
+        { "x": 0.145, "y": 0.14, "z": 0 },
+        { "x": 0.29, "y": 0.14, "z": 0 },
+        { "x": 0.29, "y": 0.06, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_gnd",
+      "net": "net_gnd",
+      "color": "black",
+      "points": [
+        { "x": 0.145, "y": 0.128, "z": 0 },
+        { "x": 0.275, "y": 0.128, "z": 0 },
+        { "x": 0.275, "y": 0.07, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_din",
+      "net": "net_matrix_din",
+      "color": "green",
+      "points": [
+        { "x": 0.145, "y": 0.045, "z": 0 },
+        { "x": 0.255, "y": 0.045, "z": 0 },
+        { "x": 0.255, "y": 0.085, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_clk",
+      "net": "net_matrix_clk",
+      "color": "yellow",
+      "points": [
+        { "x": 0.145, "y": 0.085, "z": 0 },
+        { "x": 0.245, "y": 0.085, "z": 0 },
+        { "x": 0.245, "y": 0.105, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_cs",
+      "net": "net_matrix_cs",
+      "color": "blue",
+      "points": [
+        { "x": 0.145, "y": 0.098, "z": 0 },
+        { "x": 0.265, "y": 0.098, "z": 0 },
+        { "x": 0.265, "y": 0.125, "z": 0 }
+      ]
+    }
+  ]
+}

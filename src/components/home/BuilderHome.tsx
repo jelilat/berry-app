@@ -98,7 +98,7 @@ export function BuilderHome() {
       setErrorMessage(null)
       try {
         await bootstrapBuilderTemplate(templateId, { saveForUser: !!session })
-        if (template?.autoRunPrompt) {
+        if (template) {
           stashPendingAgentRun(template.prompt, selectedModel)
         }
         if (session) {
@@ -196,8 +196,8 @@ export function BuilderHome() {
 
         <div className="relative w-full max-w-3xl text-center">
           <div className="mb-8 inline-flex items-center gap-2">
-            <Image src={brand.assets.icon} alt="" width={28} height={28} />
-            <span className="text-lg font-extrabold tracking-[-0.05em]">{brand.name}</span>
+            {/* <Image src={brand.assets.icon} alt="" width={24} height={24} /> */}
+            <span className="text-xl font-extrabold tracking-[-0.05em]">{brand.name}</span>
           </div>
 
           <h1 className="text-5xl font-extrabold leading-[0.95] tracking-[-0.06em] sm:text-6xl">

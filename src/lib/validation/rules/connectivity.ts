@@ -13,6 +13,9 @@ const INPUT_LIKE_KINDS: TerminalKind[] = [
   'analog_in',
   'i2c_sda',
   'i2c_scl',
+  'spi_mosi',
+  'spi_sck',
+  'spi_cs',
   'uart_rx',
 ]
 const SENSOR_POWER_TYPES: ComponentTypeId[] = [
@@ -20,6 +23,7 @@ const SENSOR_POWER_TYPES: ComponentTypeId[] = [
   'hc-sr04',
   'servo-sg90',
   'lcd-1602-i2c',
+  'max7219-led-matrix',
 ]
 
 /**
@@ -146,6 +150,9 @@ function isSignalTerminal(terminal: ResolvedTerminal): boolean {
     terminal.kind === 'analog_in' ||
     terminal.kind === 'i2c_sda' ||
     terminal.kind === 'i2c_scl' ||
+    terminal.kind === 'spi_mosi' ||
+    terminal.kind === 'spi_sck' ||
+    terminal.kind === 'spi_cs' ||
     terminal.kind === 'uart_tx' ||
     terminal.kind === 'uart_rx' ||
     terminal.kind === 'pwm'

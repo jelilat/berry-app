@@ -26,6 +26,7 @@ export const PHYSICAL_DIMENSIONS_MM: Partial<
   bme280: { width: 20, height: 20, depth: 3 },
   "servo-sg90": { width: 23, height: 12, depth: 27 },
   "lcd-1602-i2c": { width: 80, height: 36, depth: 12 },
+  "max7219-led-matrix": { width: 32, height: 32, depth: 8 },
 };
 
 /**

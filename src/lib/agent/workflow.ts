@@ -159,6 +159,14 @@ function ledBlinkToolCalls(board: BoardId): StudioToolCall[] {
  * @param input Agent run input (prompt + optional clarification answers).
  */
 function buildClarificationFallback(input: AgentRunInput): ClarificationResult {
+  if (input.project && !isLedBlinkPrompt(input.prompt)) {
+    return {
+      status: 'ready',
+      normalizedGoal: input.project.metadata.name,
+      assumptions: ['Use the prepared starter graph as the first circuit draft.'],
+    }
+  }
+
   if (!isLedBlinkPrompt(input.prompt)) {
     return {
       status: 'needs_clarification',
@@ -415,6 +423,62 @@ function applyPlannedProjectMetadata(
 }
 
 /**
+ * Return a scripted agent-loop result for an already prepared non-reference starter.
+ * This mirrors the real workflow without spending model calls on starter paths.
+ * @param input User prompt and current project context.
+ * @param clarification Ready clarification for the review.
+ */
+function runScriptedStarterWorkflow(
+  input: AgentRunInput,
+  clarification: Extract<ClarificationResult, { status: 'ready' }>,
+): AgentRunResult | null {
+  if (!input.project || isLedBlinkPrompt(input.prompt)) return null
+
+  let state = createInitialState(input, clarification)
+  const validationResults = validate(state.project)
+  state = { ...state, validationResults }
+  state = appendTimelineEvent(
+    state,
+    'Clarifier',
+    'Understood build goal',
+    input.prompt,
+    'success',
+  )
+  state = appendTimelineEvent(
+    state,
+    'Planner',
+    'Selected starter architecture',
+    `${state.project.components.length} placed parts on ${boardName(state.project.board)}.`,
+    'success',
+  )
+  state = appendTimelineEvent(
+    state,
+    'Circuit designer',
+    'Mapped component connections',
+    `${state.project.nets.length} electrical nets are ready on the bench.`,
+    'success',
+  )
+  state = appendTimelineEvent(
+    state,
+    'Validation agent',
+    hasValidationErrors(validationResults) ? 'Circuit needs attention' : 'Circuit validation passed',
+    hasValidationErrors(validationResults)
+      ? validationResults.filter((result) => result.severity === 'error').map((result) => result.message).join(' ')
+      : 'No blocking wiring errors.',
+    hasValidationErrors(validationResults) ? 'warning' : 'success',
+  )
+  state = appendTimelineEvent(
+    state,
+    'Next-step agent',
+    'Waiting for builder direction',
+    'The next turn decides whether to explain, modify, or generate firmware.',
+    'success',
+  )
+
+  return { ok: true, status: 'completed', state }
+}
+
+/**
  * Run the first Phase 6 multi-agent workflow slice.
  * @param input User prompt and optional existing project context.
  * @param modelClient Optional provider-neutral model client.
@@ -425,6 +489,10 @@ export async function runAgentWorkflow(
 ): Promise<AgentRunResult> {
   const client = modelClient ?? createWorkflowModelClient(input)
   const clarification = await clarifyGoal(input, client)
+  if (clarification.status === 'ready') {
+    const scripted = runScriptedStarterWorkflow(input, clarification)
+    if (scripted) return scripted
+  }
   let state = createInitialState(input, clarification)
   state = appendTimelineEvent(state, 'Clarifier', 'Read user request', input.prompt)
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { DEFAULT_FIRMWARE_PATH } from '@/lib/firmware/source'
+import { loadBerryProjectFromJson } from '@/lib/project/io'
 import { hasValidationErrors } from '@/lib/validation'
 import type { BerryModelClient, StructuredModelRequest } from '@/lib/ai/model-client'
 import type { AgentReferenceCircuit } from './types'
@@ -126,6 +129,25 @@ describe('runAgentWorkflow', () => {
     expect(result.ok).toBe(false)
     expect(result.status).toBe('needs_clarification')
     expect(result.state.clarification.status).toBe('needs_clarification')
+  })
+
+  it('runs the scripted starter loop for a loaded non-blink project', async () => {
+    const json = readFileSync(
+      path.join(process.cwd(), 'examples', 'arduino-calculator.project.json'),
+      'utf8',
+    )
+    const project = loadBerryProjectFromJson(json)
+    const result = await runAgentWorkflow({
+      prompt: 'Build a simple calculator with buttons and a display',
+      project,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.status).toBe('completed')
+    expect(result.state.project.metadata.name).toBe('Arduino calculator')
+    expect(result.state.timeline.some((event) => event.agent === 'Planner')).toBe(true)
+    expect(result.state.timeline.some((event) => event.agent === 'Next-step agent')).toBe(true)
+    expect(result.state.buildResult).toBeUndefined()
   })
 
   it('builds the deterministic ESP32 LED blink workflow', async () => {

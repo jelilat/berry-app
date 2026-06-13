@@ -7,6 +7,7 @@ import {
   ProjectParseError,
   serializeBerryProject,
 } from './io'
+import { hasValidationErrors, validate } from '@/lib/validation'
 import type { BerryProject } from './types'
 
 /** Minimal valid project for mutation in error-case tests. */
@@ -68,6 +69,20 @@ describe('parseBerryProject', () => {
     expect(project.components).toHaveLength(4)
     expect(project.nets).toHaveLength(3)
     expect(project.wires).toHaveLength(3)
+  })
+
+  it.each([
+    ['arduino-calculator.project.json', 'Arduino calculator'],
+    ['esp32-max7219-display.project.json', 'ESP32 MAX7219 display'],
+  ])('loads examples/%s from disk', (fixtureName, projectName) => {
+    const fixturePath = path.join(process.cwd(), 'examples', fixtureName)
+    const json = readFileSync(fixturePath, 'utf8')
+    const project = loadBerryProjectFromJson(json)
+    expect(project.metadata.name).toBe(projectName)
+    expect(project.components.length).toBeGreaterThan(0)
+    expect(project.nets.length).toBeGreaterThan(0)
+    expect(project.wires.length).toBeGreaterThan(0)
+    expect(hasValidationErrors(validate(project))).toBe(false)
   })
 })
 

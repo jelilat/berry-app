@@ -3,6 +3,10 @@
 import { Bot, Check, Clock3, MessageSquare, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentRunResult } from '@/lib/agent/types'
+import { getBoardProfile } from '@/lib/project/boards'
+import { getComponentDefinition } from '@/lib/project/catalog'
+import type { BerryProject, Net } from '@/lib/project/types'
+import { validate } from '@/lib/validation'
 
 const CHAT_STORAGE_PREFIX = 'berry.studio.bench.chats.v2'
 const ASSISTANT_NAME = 'Pip'
@@ -148,7 +152,7 @@ export function AIAssistantPanel({
           : item,
       ),
     )
-    onSubmit(cleanPrompt)
+    onSubmit(promptForWorkflow(chat.messages, cleanPrompt))
   }
 
   return (
@@ -272,7 +276,7 @@ function ChatBubble({ message }: { message: BenchMessage }) {
         {isUser ? <MessageSquare size={13} /> : <Bot size={13} />}
         {isUser ? 'You' : ASSISTANT_NAME}
       </div>
-      {message.text}
+      <div className="whitespace-pre-wrap">{message.text}</div>
     </div>
   )
 }
@@ -311,13 +315,380 @@ function RunLogHeader({ done, count }: { done: boolean; count: number }) {
  * @param result Agent workflow result.
  */
 function summarizeAgentResult(result: AgentRunResult): string {
+  return renderAiResponseTemplate(result)
+}
+
+/**
+ * Render a reusable assistant response for any main-page handoff or bench run.
+ * @param result Agent workflow result.
+ */
+function renderAiResponseTemplate(result: AgentRunResult): string {
   if (result.status === 'needs_clarification' && result.state.clarification.status === 'needs_clarification') {
-    return result.state.clarification.questions.map((question) => question.question).join('\n')
+    return renderClarificationFeedback(result)
   }
-  if (!result.ok) {
-    return result.error ?? 'I could not finish this build yet.'
+
+  if (isScriptedStarterResult(result)) {
+    return renderScriptedStarterResponse(result)
   }
-  return 'I built the LED blink circuit, generated firmware, ran validation, built the artifact, simulated it, and prepared the wiring guide.'
+
+  const project = result.state.project
+  const lines = [
+    renderRunSummary(result),
+    '',
+    renderProjectOverview(project),
+    '',
+    renderConnectionGuide(project),
+    '',
+    renderBehaviorSummary(project),
+    '',
+    renderPipelineStatus(result),
+  ]
+
+  if (result.state.wiringGuide) {
+    lines.push('', 'Wiring guide:', result.state.wiringGuide)
+  }
+
+  return lines.filter((line) => line !== null).join('\n')
+}
+
+/**
+ * True when a prepared starter followed the no-model scripted agent path.
+ * @param result Agent workflow result.
+ */
+function isScriptedStarterResult(result: AgentRunResult): boolean {
+  return (
+    result.status === 'completed' &&
+    !result.state.buildResult &&
+    result.state.timeline.some((event) => event.agent === 'Next-step agent')
+  )
+}
+
+/**
+ * Render a starter response as an agent-loop turn, not a project-file summary.
+ * @param result Scripted starter workflow result.
+ */
+function renderScriptedStarterResponse(result: AgentRunResult): string {
+  const project = result.state.project
+  const promptIntent = starterFollowUpIntent(result.state.userPrompt)
+
+  if (promptIntent === 'firmware') {
+    return [
+      'I’ll take the firmware path next.',
+      '',
+      renderStarterPlan(project),
+      '',
+      'Firmware direction:',
+      ...starterFirmwareNotes(project).map((note) => `- ${note}`),
+      '',
+      'Next question:',
+      'Should I generate the first firmware draft now, or adjust the wiring before code?',
+      '',
+      'Options:',
+      '- Generate firmware',
+      '- Adjust wiring',
+    ].join('\n')
+  }
+
+  if (promptIntent === 'modify') {
+    return [
+      'I can change the circuit before firmware.',
+      '',
+      renderStarterPlan(project),
+      '',
+      'What should change?',
+      '- Button count or button labels',
+      '- Display module',
+      '- Controller board',
+      '- Pin assignments',
+      '',
+      'Reply with the change and I’ll update the bench.',
+    ].join('\n')
+  }
+
+  return [
+    starterOpeningLine(project),
+    '',
+    renderStarterPlan(project),
+    '',
+    renderConnectionGuide(project),
+    '',
+    renderBehaviorSummary(project),
+    '',
+    renderPipelineStatus(result),
+    '',
+    'Next question:',
+    'What do you want Pip to do next?',
+    '',
+    'Options:',
+    '- Explain the wiring step by step',
+    '- Generate firmware',
+    '- Change the circuit',
+  ].join('\n')
+}
+
+/**
+ * Infer the user's selected next step from a clarification-style follow-up.
+ * @param prompt Workflow prompt for the current turn.
+ */
+function starterFollowUpIntent(prompt: string): 'firmware' | 'modify' | 'explain' | null {
+  const answer = prompt.toLowerCase().split('clarification answer:').at(-1) ?? prompt.toLowerCase()
+  if (answer.includes('firmware') || answer.includes('code') || answer.includes('generate')) return 'firmware'
+  if (answer.includes('change') || answer.includes('modify') || answer.includes('adjust')) return 'modify'
+  if (answer.includes('explain') || answer.includes('wiring')) return 'explain'
+  return null
+}
+
+/**
+ * Opening line for a prepared starter workflow.
+ * @param project Current project graph.
+ */
+function starterOpeningLine(project: BerryProject): string {
+  const componentTypes = new Set(project.components.map((component) => component.type))
+  if (componentTypes.has('lcd-1602-i2c') && componentTypes.has('push-button')) {
+    return 'I’ll build this as a button-driven calculator with an Arduino display.'
+  }
+  if (componentTypes.has('max7219-led-matrix')) {
+    return 'I’ll build this as an ESP32 message display using a MAX7219 LED matrix.'
+  }
+  return 'I’ll turn this request into a concrete bench circuit.'
+}
+
+/**
+ * Render the agent's selected architecture for a prepared starter.
+ * @param project Current project graph.
+ */
+function renderStarterPlan(project: BerryProject): string {
+  const board = getBoardProfile(project.board)
+  const componentTypes = new Set(project.components.map((component) => component.type))
+  const plan =
+    componentTypes.has('lcd-1602-i2c') && componentTypes.has('push-button')
+      ? [
+          `Controller: ${board.name}`,
+          'Display: LCD 1602 over I2C',
+          'Inputs: four push buttons with pull-down resistors',
+          'Behavior: read button presses, update calculator state, print result to the LCD',
+        ]
+      : componentTypes.has('max7219-led-matrix')
+        ? [
+            `Controller: ${board.name}`,
+            'Display: MAX7219 LED matrix',
+            'Signals: DIN, CLK, and CS',
+            'Behavior: send text/frame data from firmware to the display driver',
+          ]
+        : [
+            `Controller: ${board.name}`,
+            `Parts: ${project.components.length}`,
+            'Behavior: use the bench graph as the circuit source of truth',
+          ]
+
+  return ['Plan:', ...plan.map((item) => `- ${item}`)].join('\n')
+}
+
+/**
+ * Hardcoded firmware notes for prepared starter paths.
+ * @param project Current project graph.
+ */
+function starterFirmwareNotes(project: BerryProject): string[] {
+  const componentTypes = new Set(project.components.map((component) => component.type))
+  if (componentTypes.has('lcd-1602-i2c') && componentTypes.has('push-button')) {
+    return [
+      'Read D2, D3, D4, and D5 as calculator controls.',
+      'Use A4/A5 for LCD I2C.',
+      'Keep the pull-down resistor behavior in the firmware assumptions.',
+    ]
+  }
+  if (componentTypes.has('max7219-led-matrix')) {
+    return [
+      'Use IO23 for DIN, IO18 for CLK, and IO5 for CS.',
+      'Initialize the MAX7219 driver before writing display frames.',
+      'Keep display power at the selected board logic voltage.',
+    ]
+  }
+  return ['Generate firmware from the project graph pin map.']
+}
+
+/**
+ * Render a short follow-up prompt when the agent needs user input.
+ * @param result Agent workflow result containing clarification questions.
+ */
+function renderClarificationFeedback(result: AgentRunResult): string {
+  if (result.state.clarification.status !== 'needs_clarification') {
+    return 'I need one more detail before I can continue.'
+  }
+
+  const question = result.state.clarification.questions[0]
+  if (!question) {
+    return 'I need one more detail before I can continue.'
+  }
+
+  return [
+    'I need one detail before I change the bench.',
+    '',
+    question.question,
+    question.options?.length
+      ? ['', 'Options:', ...question.options.map((option) => `- ${option}`)].join('\n')
+      : null,
+    '',
+    'Reply with one option and I’ll continue from this chat.',
+  ].filter((line): line is string => line !== null).join('\n')
+}
+
+/**
+ * Summarize whether the AI run completed, paused, or failed.
+ * @param result Agent workflow result.
+ */
+function renderRunSummary(result: AgentRunResult): string {
+  if (result.status === 'completed' && !result.state.buildResult) {
+    return 'I mapped the requested circuit into an agent plan and checked the bench graph.'
+  }
+
+  if (result.status === 'completed') {
+    return 'I set up the bench project, generated firmware, ran validation, built the artifact, and simulated the supported circuit.'
+  }
+
+  if (result.status === 'needs_clarification' && result.state.clarification.status === 'needs_clarification') {
+    const questions = result.state.clarification.questions
+      .map((question) => `- ${question.question}`)
+      .join('\n')
+    return [
+      'I loaded the project context, but the current executable AI build loop needs one more choice before it can mutate/build this circuit.',
+      questions,
+    ].join('\n')
+  }
+
+  return `I loaded the project context, but I could not finish the full build loop yet. ${result.error ?? 'No detailed error was returned.'}`
+}
+
+/**
+ * Render the board and component list from a Berry project.
+ * @param project Project graph to explain.
+ */
+function renderProjectOverview(project: BerryProject): string {
+  const board = getBoardProfile(project.board)
+  const parts = project.components
+    .map((component) => {
+      const definition = getComponentDefinition(component.type)
+      return `- ${component.id}: ${definition.name}`
+    })
+    .join('\n')
+
+  return [
+    `Project: ${project.metadata.name}`,
+    `Target board: ${board.name} (${board.operatingVoltage} V logic)`,
+    'Parts:',
+    parts || '- No parts placed yet.',
+  ].join('\n')
+}
+
+/**
+ * Render a human-readable connection list from project nets.
+ * @param project Project graph to explain.
+ */
+function renderConnectionGuide(project: BerryProject): string {
+  const connections = project.nets.map((net) => renderNet(project, net)).filter(Boolean)
+  return [
+    'How to connect it:',
+    connections.length > 0
+      ? connections.map((connection) => `- ${connection}`).join('\n')
+      : '- No electrical nets are connected yet. Use Connect in Studio or ask me to wire the circuit.',
+  ].join('\n')
+}
+
+/**
+ * Explain the practical behavior implied by the project graph.
+ * @param project Project graph to explain.
+ */
+function renderBehaviorSummary(project: BerryProject): string {
+  const componentTypes = new Set(project.components.map((component) => component.type))
+
+  if (componentTypes.has('lcd-1602-i2c') && componentTypes.has('push-button')) {
+    return [
+      'How it works:',
+      '- The Arduino reads each button as a digital input.',
+      '- Each button has a resistor path to GND, so the input has a stable low state when the button is not pressed.',
+      '- The LCD uses the Arduino I2C pins to show the calculator state/result.',
+    ].join('\n')
+  }
+
+  if (componentTypes.has('max7219-led-matrix')) {
+    return [
+      'How it works:',
+      '- The ESP32 powers the MAX7219 module from 3.3 V and GND.',
+      '- DIN, CLK, and CS form the display control link; firmware shifts display data into the driver.',
+      '- The MAX7219 handles the LED matrix scanning after the ESP32 sends the frame data.',
+    ].join('\n')
+  }
+
+  if (componentTypes.has('led-5mm')) {
+    return [
+      'How it works:',
+      '- A GPIO pin drives current through the resistor into the LED anode.',
+      '- The resistor limits current so the LED and board pin are protected.',
+      '- Firmware toggles the GPIO high/low to blink the LED.',
+    ].join('\n')
+  }
+
+  return [
+    'How it works:',
+    '- The project graph lists parts, nets, and visual wires. Nets define the real electrical connections; wires show the route on the bench.',
+  ].join('\n')
+}
+
+/**
+ * Render one net as a compact terminal-to-terminal instruction.
+ * @param project Project graph containing component names.
+ * @param net Net to render.
+ */
+function renderNet(project: BerryProject, net: Net): string {
+  const terminals = net.terminals.map((terminal) => {
+    if (terminal.component && terminal.terminal) {
+      const component = project.components.find((candidate) => candidate.id === terminal.component)
+      const name = component ? getComponentDefinition(component.type).name : terminal.component
+      return `${name} ${terminal.component}.${terminal.terminal}`
+    }
+    if (terminal.breadboard && terminal.site) {
+      return `${terminal.breadboard} ${terminal.site.kind}`
+    }
+    return null
+  }).filter((terminal): terminal is string => Boolean(terminal))
+
+  if (terminals.length < 2) return ''
+  return `${terminalLabelFromNetId(net.id)}: ${terminals.join(' -> ')}.`
+}
+
+/**
+ * Turn a net id into a short readable label.
+ * @param netId Project net id.
+ */
+function terminalLabelFromNetId(netId: string): string {
+  return netId
+    .replace(/^net_/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+/**
+ * Render build, validation, and simulation status from the run state.
+ * @param result Agent workflow result.
+ */
+function renderPipelineStatus(result: AgentRunResult): string {
+  const validationResults =
+    result.state.validationResults.length > 0
+      ? result.state.validationResults
+      : validate(result.state.project)
+  const validationErrors = validationResults.filter((finding) => finding.severity === 'error')
+  const validationWarnings = validationResults.filter((finding) => finding.severity === 'warning')
+  const build = result.state.buildResult
+  const simulation = result.state.simulationResult
+
+  return [
+    'Status:',
+    `- Validation: ${validationErrors.length === 0 ? 'no blocking errors' : `${validationErrors.length} blocking error(s)`}${validationWarnings.length > 0 ? `, ${validationWarnings.length} warning(s)` : ''}`,
+    `- Firmware: ${result.state.codegenResult?.ok ? 'generated from the graph' : 'not generated yet'}`,
+    `- Build: ${build ? (build.ok ? 'passed' : 'failed') : 'not run yet'}`,
+    `- Simulation: ${simulation ? simulation.status : 'not run yet'}`,
+    '- Deploy: coming soon.',
+  ].join('\n')
 }
 
 /**
@@ -363,6 +734,30 @@ function titleFromPrompt(prompt: string): string {
 function appendUniqueMessage(messages: BenchMessage[], message: BenchMessage): BenchMessage[] {
   if (messages.some((item) => item.id === message.id)) return messages
   return [...messages, message]
+}
+
+/**
+ * Build the workflow prompt for a user turn.
+ * Keeps clarification answers attached to the original request while displaying
+ * only the user's short answer in chat.
+ * @param messages Existing chat messages before the new user turn.
+ * @param cleanPrompt Current user input.
+ */
+function promptForWorkflow(messages: BenchMessage[], cleanPrompt: string): string {
+  const firstUserPrompt = messages.find((message) => message.role === 'user')?.text
+  const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant')
+  const isClarificationReply =
+    lastAssistant?.text.includes('Reply with one option') ||
+    lastAssistant?.text.includes('What do you want Pip to do next?') ||
+    lastAssistant?.text.includes('Should I generate the first firmware draft now')
+
+  if (!firstUserPrompt || !isClarificationReply) return cleanPrompt
+
+  return [
+    firstUserPrompt,
+    '',
+    `Clarification answer: ${cleanPrompt}`,
+  ].join('\n')
 }
 
 /**

@@ -1,0 +1,252 @@
+{
+  "version": 1,
+  "board": "arduino-uno",
+  "metadata": {
+    "name": "Arduino calculator",
+    "description": "Four-button calculator starter with an Arduino UNO and I2C LCD display."
+  },
+  "components": [
+    {
+      "id": "arduino_1",
+      "type": "arduino-uno",
+      "transform": {
+        "position": { "x": 0.03, "y": 0.075, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "lcd_1",
+      "type": "lcd-1602-i2c",
+      "transform": {
+        "position": { "x": 0.285, "y": 0.02, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "button_add",
+      "type": "push-button",
+      "transform": {
+        "position": { "x": 0.285, "y": 0.135, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "button_subtract",
+      "type": "push-button",
+      "transform": {
+        "position": { "x": 0.34, "y": 0.135, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "button_multiply",
+      "type": "push-button",
+      "transform": {
+        "position": { "x": 0.285, "y": 0.195, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "button_equals",
+      "type": "push-button",
+      "transform": {
+        "position": { "x": 0.34, "y": 0.195, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "resistor_add",
+      "type": "resistor-1k",
+      "transform": {
+        "position": { "x": 0.285, "y": 0.175, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 90 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "resistor_subtract",
+      "type": "resistor-1k",
+      "transform": {
+        "position": { "x": 0.34, "y": 0.175, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 90 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "resistor_multiply",
+      "type": "resistor-1k",
+      "transform": {
+        "position": { "x": 0.285, "y": 0.235, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 90 },
+        "scale": 1
+      }
+    },
+    {
+      "id": "resistor_equals",
+      "type": "resistor-1k",
+      "transform": {
+        "position": { "x": 0.34, "y": 0.235, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 90 },
+        "scale": 1
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": "net_5v",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "5V" },
+        { "component": "lcd_1", "terminal": "VCC" },
+        { "component": "button_add", "terminal": "pin1" },
+        { "component": "button_subtract", "terminal": "pin1" },
+        { "component": "button_multiply", "terminal": "pin1" },
+        { "component": "button_equals", "terminal": "pin1" }
+      ]
+    },
+    {
+      "id": "net_gnd",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "GND" },
+        { "component": "lcd_1", "terminal": "GND" },
+        { "component": "resistor_add", "terminal": "pin2" },
+        { "component": "resistor_subtract", "terminal": "pin2" },
+        { "component": "resistor_multiply", "terminal": "pin2" },
+        { "component": "resistor_equals", "terminal": "pin2" }
+      ]
+    },
+    {
+      "id": "net_i2c_sda",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "A4" },
+        { "component": "lcd_1", "terminal": "SDA" }
+      ]
+    },
+    {
+      "id": "net_i2c_scl",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "A5" },
+        { "component": "lcd_1", "terminal": "SCL" }
+      ]
+    },
+    {
+      "id": "net_button_add",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "D2" },
+        { "component": "button_add", "terminal": "pin2" },
+        { "component": "resistor_add", "terminal": "pin1" }
+      ]
+    },
+    {
+      "id": "net_button_subtract",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "D3" },
+        { "component": "button_subtract", "terminal": "pin2" },
+        { "component": "resistor_subtract", "terminal": "pin1" }
+      ]
+    },
+    {
+      "id": "net_button_multiply",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "D4" },
+        { "component": "button_multiply", "terminal": "pin2" },
+        { "component": "resistor_multiply", "terminal": "pin1" }
+      ]
+    },
+    {
+      "id": "net_button_equals",
+      "terminals": [
+        { "component": "arduino_1", "terminal": "D5" },
+        { "component": "button_equals", "terminal": "pin2" },
+        { "component": "resistor_equals", "terminal": "pin1" }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "wire_lcd_power",
+      "net": "net_5v",
+      "color": "red",
+      "points": [
+        { "x": 0.19, "y": 0.25, "z": 0 },
+        { "x": 0.285, "y": 0.25, "z": 0 },
+        { "x": 0.285, "y": 0.035, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_lcd_ground",
+      "net": "net_gnd",
+      "color": "black",
+      "points": [
+        { "x": 0.16, "y": 0.08, "z": 0 },
+        { "x": 0.265, "y": 0.08, "z": 0 },
+        { "x": 0.265, "y": 0.05, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_sda",
+      "net": "net_i2c_sda",
+      "color": "green",
+      "points": [
+        { "x": 0.11, "y": 0.08, "z": 0 },
+        { "x": 0.25, "y": 0.08, "z": 0 },
+        { "x": 0.25, "y": 0.055, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_scl",
+      "net": "net_i2c_scl",
+      "color": "yellow",
+      "points": [
+        { "x": 0.1, "y": 0.08, "z": 0 },
+        { "x": 0.235, "y": 0.08, "z": 0 },
+        { "x": 0.235, "y": 0.06, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_add",
+      "net": "net_button_add",
+      "color": "blue",
+      "points": [
+        { "x": 0.08, "y": 0.09, "z": 0 },
+        { "x": 0.285, "y": 0.09, "z": 0 },
+        { "x": 0.285, "y": 0.155, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_subtract",
+      "net": "net_button_subtract",
+      "color": "orange",
+      "points": [
+        { "x": 0.095, "y": 0.09, "z": 0 },
+        { "x": 0.34, "y": 0.09, "z": 0 },
+        { "x": 0.34, "y": 0.155, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_multiply",
+      "net": "net_button_multiply",
+      "color": "purple",
+      "points": [
+        { "x": 0.11, "y": 0.09, "z": 0 },
+        { "x": 0.265, "y": 0.09, "z": 0 },
+        { "x": 0.265, "y": 0.215, "z": 0 }
+      ]
+    },
+    {
+      "id": "wire_equals",
+      "net": "net_button_equals",
+      "color": "white",
+      "points": [
+        { "x": 0.125, "y": 0.09, "z": 0 },
+        { "x": 0.36, "y": 0.09, "z": 0 },
+        { "x": 0.36, "y": 0.215, "z": 0 }
+      ]
+    }
+  ]
+}

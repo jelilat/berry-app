@@ -38,20 +38,27 @@ export function saveUserProjects(projects: UserProjectEntry[]): void {
 }
 
 /**
+ * Display title for a saved project entry.
+ * @param project Current Berry project graph.
+ */
+function projectTitle(project: BerryProject): string {
+  return project.metadata.name.trim() || 'Untitled project'
+}
+
+/**
  * Upsert a project into the signed-in builder library.
  * @param project Current Berry project graph.
  */
 export function upsertUserProject(project: BerryProject): UserProjectEntry {
-  const slug =
-    project.metadata.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') ||
-    'project'
+  const title = projectTitle(project)
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project'
   const projects = loadUserProjects()
   const existingIndex = projects.findIndex(
-    (item) => item.name === project.metadata.name && item.board === project.board,
+    (item) => item.name === title && item.board === project.board,
   )
   const entry: UserProjectEntry = {
     id: existingIndex >= 0 ? projects[existingIndex]!.id : `${slug}-${Date.now()}`,
-    name: project.metadata.name,
+    name: title,
     board: project.board,
     updatedAt: new Date().toISOString(),
     projectJson: serializeBerryProject(project, false),

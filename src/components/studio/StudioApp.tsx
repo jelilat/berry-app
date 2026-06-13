@@ -44,7 +44,7 @@ import {
 } from '@/lib/studio/storage'
 import { consumePendingAgentRun } from '@/lib/studio/session-bootstrap'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
-import { AIAssistantPanel } from './AIAssistantPanel'
+import { AIAssistantPanel, type SubmittedPrompt } from './AIAssistantPanel'
 import { ComponentTray } from './ComponentTray'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
 import { FirmwareWorktreePanel } from './FirmwareWorktreePanel'
@@ -57,6 +57,55 @@ import type { StudioViewMode } from './ViewModeToggle'
 import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
+
+/**
+ * Create the local chat namespace for a loaded bench project.
+ * @param project Project currently opened in the bench.
+ */
+function createProjectChatKey(project: BerryProject): string {
+  const stableSource = project.metadata.createdAt ?? `${project.board}:${project.metadata.name}`
+  return stableSource
+    .toLowerCase()
+    .replace(/[^a-z0-9._:-]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+/**
+ * Display title for the current project.
+ * @param project Project currently opened in the bench.
+ */
+function projectTitle(project: BerryProject): string {
+  return project.metadata.name.trim() || 'Untitled project'
+}
+
+/**
+ * Whether a metadata name is only the default placeholder.
+ * @param name Project metadata name.
+ */
+function isPlaceholderProjectName(name: string): boolean {
+  return name.trim().length === 0 || name.trim().toLowerCase() === 'untitled project'
+}
+
+/**
+ * Keep the current bench identity while accepting generated project metadata.
+ * @param current Project that started the AI run.
+ * @param generated Project returned by the AI build workflow.
+ */
+function preserveProjectIdentity(
+  current: BerryProject,
+  generated: BerryProject,
+): BerryProject {
+  return {
+    ...generated,
+    metadata: {
+      ...generated.metadata,
+      name: isPlaceholderProjectName(generated.metadata.name)
+        ? projectTitle(current)
+        : generated.metadata.name,
+      createdAt: current.metadata.createdAt ?? generated.metadata.createdAt,
+    },
+  }
+}
 
 /**
  * Stable key for comparing validation findings before and after a tentative edit.
@@ -114,6 +163,7 @@ export function StudioApp() {
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [agentLoading, setAgentLoading] = useState(false)
   const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
+  const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPrompt | null>(null)
   const [validationFlyoutOpen, setValidationFlyoutOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
@@ -124,6 +174,13 @@ export function StudioApp() {
   const handleAgentRunRef = useRef<
     (prompt: string, mode?: 'auto' | 'deterministic' | 'real') => Promise<void>
   >(async () => {})
+  const initialProjectRef = useRef<BerryProject | null>(null)
+  if (!initialProjectRef.current) {
+    initialProjectRef.current = createStarterProject()
+  }
+  const [projectChatKey, setProjectChatKey] = useState(() =>
+    createProjectChatKey(initialProjectRef.current!),
+  )
 
   const {
     project,
@@ -133,7 +190,7 @@ export function StudioApp() {
     redo,
     canUndo,
     canRedo,
-  } = useProjectHistory(createStarterProject())
+  } = useProjectHistory(initialProjectRef.current)
 
   const validationResults = useValidation(project)
   const validationHasErrors = hasValidationErrors(validationResults)
@@ -279,7 +336,11 @@ export function StudioApp() {
         setAgentResult(result)
         if (result.status === 'completed') {
           skipNextPipelineResetRef.current = true
-          resetProject(replaceProject(result.state.project))
+          const completedProject = replaceProject(
+            preserveProjectIdentity(project, result.state.project),
+          )
+          resetProject(completedProject)
+          setProjectChatKey(createProjectChatKey(completedProject))
           const source = result.state.firmwareFiles[DEFAULT_FIRMWARE_PATH]
           if (source) {
             setFirmwareSource(source)
@@ -312,6 +373,7 @@ export function StudioApp() {
     if (stored) {
       resetProject(stored)
     }
+    setProjectChatKey(createProjectChatKey(stored ?? initialProjectRef.current!))
     setFirmwareSource(
       loadFirmwareSourceFromStorage() ??
         createDefaultFirmwareSource(stored?.board ?? 'esp32-devkit-v1'),
@@ -320,6 +382,8 @@ export function StudioApp() {
 
     const pending = consumePendingAgentRun()
     if (pending) {
+      const submission = { id: `main_${Date.now().toString(36)}`, text: pending.prompt }
+      setSubmittedPrompt(submission)
       window.setTimeout(() => {
         void handleAgentRunRef.current(pending.prompt, pending.mode)
       }, 0)
@@ -339,6 +403,7 @@ export function StudioApp() {
   const handleNew = useCallback(() => {
     const nextProject = createStarterProject()
     resetProject(nextProject)
+    setProjectChatKey(createProjectChatKey(nextProject))
     setFirmwareSource(createDefaultFirmwareSource(nextProject.board))
     setSelectedNodeId(null)
     setSelectedWireId(null)
@@ -355,6 +420,7 @@ export function StudioApp() {
       const json = await res.text()
       const parsed = loadBerryProjectFromJson(json)
       resetProject(replaceProject(parsed))
+      setProjectChatKey(createProjectChatKey(parsed))
       setFirmwareSource(createEsp32BlinkFirmwareSource())
       setViewMode('2d')
       setStatus('ready')
@@ -580,7 +646,7 @@ export function StudioApp() {
     <div className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <StudioToolbar
-          projectName={project.metadata.name}
+          projectName={projectTitle(project)}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onNew={handleNew}
@@ -646,10 +712,10 @@ export function StudioApp() {
           <div className="flex min-h-0 flex-1 gap-0">
             {viewMode === 'code' ? (
               <>
-                <FirmwareWorktreePanel
-                  board={project.board}
-                  projectName={project.metadata.name}
-                  buildResult={buildResult}
+                  <FirmwareWorktreePanel
+                    board={project.board}
+                    projectName={projectTitle(project)}
+                    buildResult={buildResult}
                   selectedPath={selectedFirmwarePath}
                   onSelectPath={setSelectedFirmwarePath}
                 />
@@ -755,6 +821,8 @@ export function StudioApp() {
           </div>
           <AIAssistantPanel
             loading={agentLoading}
+            projectChatKey={projectChatKey}
+            submittedPrompt={submittedPrompt}
             result={agentResult}
             onSubmit={handleAgentRun}
           />

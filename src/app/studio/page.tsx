@@ -1,13 +1,8 @@
-import { StudioApp } from '@/components/studio/StudioApp'
-
-export const metadata = {
-  title: 'berry. | Studio',
-  description: '2D hardware bench — place parts, wire pins, export project JSON.',
-}
+import { redirect } from 'next/navigation'
 
 /**
- * Studio route: client-side schematic editor.
+ * Legacy Studio URL retained for old links.
  */
-export default function StudioPage() {
-  return <StudioApp />
+export default function StudioRedirectPage() {
+  redirect('/bench')
 }

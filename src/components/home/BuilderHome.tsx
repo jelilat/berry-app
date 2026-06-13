@@ -88,26 +88,30 @@ export function BuilderHome() {
   }, [])
 
   /**
-   * Open Studio after bootstrapping a reference template.
+   * Open the bench after bootstrapping a reference template.
    * @param templateId Template id from a chip.
    */
   const handleTemplateSelect = useCallback(
     async (templateId: string) => {
+      const template = BUILDER_TEMPLATES.find((candidate) => candidate.id === templateId)
       setBootstrapping(true)
       setErrorMessage(null)
       try {
         await bootstrapBuilderTemplate(templateId, { saveForUser: !!session })
+        if (template?.autoRunPrompt) {
+          stashPendingAgentRun(template.prompt, selectedModel)
+        }
         if (session) {
           setProjects(loadUserProjects())
         }
-        router.push('/studio')
+        router.push('/bench')
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to open template')
       } finally {
         setBootstrapping(false)
       }
     },
-    [router, session],
+    [router, selectedModel, session],
   )
 
   /**
@@ -128,7 +132,7 @@ export function BuilderHome() {
     saveProjectToStorage(starter)
     saveFirmwareSourceToStorage(createDefaultFirmwareSource(starter.board))
     stashPendingAgentRun(cleanPrompt, selectedModel)
-    router.push('/studio')
+    router.push('/bench')
   }, [bootstrapping, prompt, router, selectedModel, session])
 
   /**
@@ -140,7 +144,7 @@ export function BuilderHome() {
       const project = projects.find((entry) => entry.id === projectId)
       if (!project) return
       bootstrapSavedProject(project.projectJson)
-      router.push('/studio')
+      router.push('/bench')
     },
     [projects, router],
   )
@@ -294,7 +298,7 @@ export function BuilderHome() {
                   background: 'linear-gradient(135deg, #F05F8D 0%, #D6336C 55%, #A61E4D 100%)',
                   boxShadow: '0 12px 28px rgba(214,51,108,0.24)',
                 }}
-                aria-label="Send prompt to Berry"
+                aria-label="Send prompt to Pip"
               >
                 <ArrowUp size={18} />
               </button>
@@ -302,7 +306,6 @@ export function BuilderHome() {
           </div>
 
           <div className="mt-10">
-          
             <div className="flex flex-wrap items-center justify-center gap-2">
               {BUILDER_TEMPLATES.map((template) => {
                 const Icon = template.icon

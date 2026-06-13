@@ -395,6 +395,26 @@ function createInitialState(input: AgentRunInput, clarification: ClarificationRe
 }
 
 /**
+ * Apply a human-readable planned project name after the design tools create a graph.
+ * @param project Project graph produced by the circuit designer.
+ * @param plan Build plan with the normalized user-facing goal.
+ */
+function applyPlannedProjectMetadata(
+  project: AgentRunState['project'],
+  plan: AgentBuildPlan,
+): AgentRunState['project'] {
+  const now = new Date().toISOString()
+  return {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      name: plan.goal.trim() || project.metadata.name,
+      updatedAt: now,
+    },
+  }
+}
+
+/**
  * Run the first Phase 6 multi-agent workflow slice.
  * @param input User prompt and optional existing project context.
  * @param modelClient Optional provider-neutral model client.
@@ -495,6 +515,7 @@ export async function runAgentWorkflow(
       circuitIntent.toolCalls.length > 0
         ? designCircuitFromToolCalls(state, circuitIntent.toolCalls)
         : designLedBlinkCircuit(state, targetBoard)
+    state = { ...state, project: applyPlannedProjectMetadata(state.project, plan) }
     const validationResults = validate(state.project)
     state = { ...state, validationResults }
 

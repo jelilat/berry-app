@@ -4,14 +4,12 @@ import { useEffect, useState } from 'react'
 
 /** Rotating hardware ideas shown as an animated typewriter hint. */
 const PROMPT_HINTS = [
-  'soil probe that pings my phone when the herb bed dries out',
-  'HC-SR04 that maps distance to a piezo beep rate on GPIO',
-  'cap-touch pad that fades a warm desk lamp over I2C',
-  'NeoPixel strip that tracks room humidity from a BME280',
-  'pan-tilt bracket that follows a bright spot with two servos',
-  'rotary encoder that scrolls Wi-Fi names on a 128×64 OLED',
-  'lid switch that logs every time the enclosure opens',
-  'stepper stage that sketches a berry on the breadboard at boot',
+  'an automated trash can that opens when someone walks up',
+  'a rain detector that warns me before the window gets wet',
+  'a human sensor that turns lights on when the room is occupied',
+  'a plant monitor that tells me when the soil is dry',
+  'a garage parking helper with distance lights',
+  'a desk reminder that blinks when it is time to stand',
 ] as const
 
 const TYPE_MS = 38
@@ -77,7 +75,7 @@ export function TypingPromptHint({ visible }: { visible: boolean }) {
       className="pointer-events-none absolute inset-x-4 top-4 select-none text-lg font-medium leading-7"
       aria-hidden="true"
     >
-      <span style={{ color: 'var(--text-muted)' }}>Ask Berry for </span>
+      <span style={{ color: 'var(--text-muted)' }}>Ask Pip for </span>
       <span style={{ color: 'var(--text-secondary)' }}>{displayText}</span>
       <span
         className="ml-0.5 inline-block h-[1.1em] w-[2px] align-[-0.12em] animate-pulse"

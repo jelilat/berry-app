@@ -1,10 +1,11 @@
 'use client'
 
 import { Bot, Check, Clock3, MessageSquare, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentRunResult } from '@/lib/agent/types'
 
-const CHAT_STORAGE_KEY = 'berry.studio.bench.chats.v1'
+const CHAT_STORAGE_PREFIX = 'berry.studio.bench.chats.v2'
+const ASSISTANT_NAME = 'Pip'
 
 interface BenchMessage {
   id: string
@@ -19,22 +20,33 @@ interface BenchChat {
   updatedAt: string
 }
 
+/** Prompt forwarded from home into the bench chat (already running or about to). */
+export interface SubmittedPrompt {
+  id: string
+  text: string
+}
+
 /**
  * Right-side AI assistant rail with local chat history.
  * @param props Agent run status, latest result, and submit callback.
  */
 export function AIAssistantPanel({
   loading,
+  projectChatKey,
+  submittedPrompt = null,
   result,
   onSubmit,
 }: {
   loading: boolean
+  projectChatKey: string
+  submittedPrompt?: SubmittedPrompt | null
   result: AgentRunResult | null
-  onSubmit: (prompt: string) => void
+  onSubmit: (prompt: string) => void | Promise<void>
 }) {
-  const [prompt, setPrompt] = useState('Build me an ESP32 blinking LED')
-  const [chats, setChats] = useState<BenchChat[]>(() => loadChats())
+  const [prompt, setPrompt] = useState('')
+  const [chats, setChats] = useState<BenchChat[]>(() => loadChats(projectChatKey))
   const [activeChatId, setActiveChatId] = useState(() => chats[0]?.id ?? createChat().id)
+  const skipNextSaveRef = useRef(false)
 
   const activeChat = useMemo(
     () => chats.find((chat) => chat.id === activeChatId) ?? chats[0],
@@ -42,8 +54,27 @@ export function AIAssistantPanel({
   )
 
   useEffect(() => {
-    saveChats(chats)
-  }, [chats])
+    const nextChats = loadChats(projectChatKey)
+    skipNextSaveRef.current = true
+    setChats(nextChats)
+    setActiveChatId(nextChats[0]?.id ?? createChat().id)
+  }, [projectChatKey])
+
+  useEffect(() => {
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false
+      return
+    }
+    saveChats(projectChatKey, chats)
+  }, [chats, projectChatKey])
+
+  useEffect(() => {
+    const text = submittedPrompt?.text.trim()
+    if (!text || !submittedPrompt) return
+    const chat = createChatFromPrompt(text, submittedPrompt.id)
+    setChats((current) => [chat, ...current.filter((item) => item.id !== chat.id)])
+    setActiveChatId(chat.id)
+  }, [submittedPrompt])
 
   useEffect(() => {
     if (!result || !activeChatId) return
@@ -72,7 +103,7 @@ export function AIAssistantPanel({
     const chat = createChat()
     setChats((current) => [chat, ...current])
     setActiveChatId(chat.id)
-    setPrompt('Build me an ESP32 blinking LED')
+    setPrompt('')
   }
 
   /**
@@ -128,7 +159,7 @@ export function AIAssistantPanel({
       <div className="flex h-[58px] shrink-0 items-center gap-2 border-b px-4" style={{ borderColor: 'var(--border)' }}>
         <div className="min-w-0">
           <p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
-            Bench
+            {ASSISTANT_NAME}
           </p>
           <p className="truncate text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
             Hardware build assistant
@@ -171,17 +202,17 @@ export function AIAssistantPanel({
           </div>
         ) : (
           <div className="space-y-3">
-            <ThoughtRow text="Ask me to build, test, or iterate on a hardware idea." />
+            <ThoughtRow text="Ask me to build, test, or iterate on a supported bench." />
             <div className="rounded-xl p-4 text-sm font-semibold leading-relaxed" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-              I can create the Studio graph, generate firmware, run validation, build, simulate, and give you real wiring instructions.
+              Tell me what you want to build. I can set up the bench, wire the starter circuit, write the code, and show you how to build it for real.
             </div>
           </div>
         )}
 
         {result?.state.timeline.length ? (
           <div className="mt-4 space-y-2">
-            <PlanHeader done={result.status === 'completed'} count={result.state.timeline.length} />
-            {result.state.timeline.slice(-6).map((event) => (
+            <RunLogHeader done={result.status === 'completed'} count={result.state.timeline.length} />
+            {result.state.timeline.map((event) => (
               <ThoughtRow key={event.id} text={`${event.title}${event.detail ? ` — ${event.detail}` : ''}`} />
             ))}
           </div>
@@ -210,7 +241,7 @@ export function AIAssistantPanel({
             disabled={loading || prompt.trim().length === 0}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: 'var(--accent)' }}
-            title="Send to Bench"
+            title={`Send to ${ASSISTANT_NAME}`}
           >
             {loading ? <Sparkles size={16} /> : <Send size={16} />}
           </button>
@@ -239,7 +270,7 @@ function ChatBubble({ message }: { message: BenchMessage }) {
     >
       <div className="mb-1 flex items-center gap-1.5 text-xs font-extrabold" style={{ color: isUser ? 'var(--accent)' : 'var(--leaf)' }}>
         {isUser ? <MessageSquare size={13} /> : <Bot size={13} />}
-        {isUser ? 'You' : 'Bench'}
+        {isUser ? 'You' : ASSISTANT_NAME}
       </div>
       {message.text}
     </div>
@@ -260,14 +291,14 @@ function ThoughtRow({ text }: { text: string }) {
 }
 
 /**
- * Render latest plan status.
+ * Render latest build log status.
  * @param props Completion and timeline count.
  */
-function PlanHeader({ done, count }: { done: boolean; count: number }) {
+function RunLogHeader({ done, count }: { done: boolean; count: number }) {
   return (
     <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold" style={{ background: 'rgba(0,0,0,0.045)', color: 'var(--text-secondary)' }}>
       <Check size={14} style={{ color: done ? 'var(--leaf)' : 'var(--text-muted)' }} />
-      <span>Plan</span>
+      <span>Build log</span>
       <span className="ml-auto tabular-nums" style={{ color: 'var(--text-muted)' }}>
         {done ? count : 0}/{count} done
       </span>
@@ -286,7 +317,7 @@ function summarizeAgentResult(result: AgentRunResult): string {
   if (!result.ok) {
     return result.error ?? 'I could not finish this build yet.'
   }
-  return 'I built the ESP32 LED blink circuit, generated firmware, ran validation, built the artifact, simulated it, and prepared the wiring guide.'
+  return 'I built the LED blink circuit, generated firmware, ran validation, built the artifact, simulated it, and prepared the wiring guide.'
 }
 
 /**
@@ -298,6 +329,21 @@ function createChat(): BenchChat {
     title: 'New build',
     messages: [],
     updatedAt: new Date().toISOString(),
+  }
+}
+
+/**
+ * Create a chat seeded by a prompt that was submitted before opening the bench.
+ * @param prompt Prompt text forwarded from the home page.
+ * @param submissionId Stable id for this prompt handoff.
+ */
+function createChatFromPrompt(prompt: string, submissionId: string): BenchChat {
+  const now = new Date().toISOString()
+  return {
+    id: `chat_${submissionId}`,
+    title: titleFromPrompt(prompt),
+    messages: [{ id: `user_${submissionId}`, role: 'user', text: prompt }],
+    updatedAt: now,
   }
 }
 
@@ -322,10 +368,10 @@ function appendUniqueMessage(messages: BenchMessage[], message: BenchMessage): B
 /**
  * Load local chat sessions.
  */
-function loadChats(): BenchChat[] {
+function loadChats(projectChatKey: string): BenchChat[] {
   if (typeof window === 'undefined') return [createChat()]
   try {
-    const raw = window.localStorage.getItem(CHAT_STORAGE_KEY)
+    const raw = window.localStorage.getItem(chatStorageKey(projectChatKey))
     if (!raw) return [createChat()]
     const parsed = JSON.parse(raw) as BenchChat[]
     return Array.isArray(parsed) && parsed.length > 0 ? parsed : [createChat()]
@@ -338,7 +384,15 @@ function loadChats(): BenchChat[] {
  * Persist local chat sessions.
  * @param chats Chat sessions.
  */
-function saveChats(chats: BenchChat[]): void {
+function saveChats(projectChatKey: string, chats: BenchChat[]): void {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chats.slice(0, 12)))
+  window.localStorage.setItem(chatStorageKey(projectChatKey), JSON.stringify(chats.slice(0, 12)))
+}
+
+/**
+ * Storage key for one project's local chat history.
+ * @param projectChatKey Stable project identity string.
+ */
+function chatStorageKey(projectChatKey: string): string {
+  return `${CHAT_STORAGE_PREFIX}:${projectChatKey}`
 }

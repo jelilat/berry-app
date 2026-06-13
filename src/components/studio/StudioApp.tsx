@@ -42,6 +42,7 @@ import {
   saveFirmwareSourceToStorage,
   saveProjectToStorage,
 } from '@/lib/studio/storage'
+import { consumePendingAgentRun } from '@/lib/studio/session-bootstrap'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
 import { AIAssistantPanel } from './AIAssistantPanel'
 import { ComponentTray } from './ComponentTray'
@@ -120,6 +121,9 @@ export function StudioApp() {
   )
   const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
   const skipNextPipelineResetRef = useRef(false)
+  const handleAgentRunRef = useRef<
+    (prompt: string, mode?: 'auto' | 'deterministic' | 'real') => Promise<void>
+  >(async () => {})
 
   const {
     project,
@@ -255,7 +259,10 @@ export function StudioApp() {
     }
   }, [buildLoading, firmwareSource, project, validationHasErrors])
 
-  const handleAgentRun = useCallback(async (prompt: string) => {
+  const handleAgentRun = useCallback(async (
+    prompt: string,
+    mode: 'auto' | 'deterministic' | 'real' = 'auto',
+  ) => {
     if (agentLoading || prompt.trim().length === 0) return
     setAgentLoading(true)
     setAgentResult(null)
@@ -264,7 +271,7 @@ export function StudioApp() {
       const response = await fetch('/api/agent/run', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, project }),
+        body: JSON.stringify({ prompt, project, mode }),
       })
       const json = await response.json()
       if (json.state) {
@@ -298,6 +305,8 @@ export function StudioApp() {
     }
   }, [agentLoading, project, resetProject])
 
+  handleAgentRunRef.current = handleAgentRun
+
   useEffect(() => {
     const stored = loadProjectFromStorage()
     if (stored) {
@@ -308,6 +317,13 @@ export function StudioApp() {
         createDefaultFirmwareSource(stored?.board ?? 'esp32-devkit-v1'),
     )
     setStatus('ready')
+
+    const pending = consumePendingAgentRun()
+    if (pending) {
+      window.setTimeout(() => {
+        void handleAgentRunRef.current(pending.prompt, pending.mode)
+      }, 0)
+    }
   }, [resetProject])
 
   useEffect(() => {

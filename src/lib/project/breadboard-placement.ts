@@ -1,6 +1,5 @@
 import { getComponentDefinition } from './catalog'
 import {
-  breadboardHole,
   offsetHoleColumn,
   type BreadboardHoleSite,
   type BreadboardPlacement,
@@ -28,23 +27,8 @@ export function inferPlacementFromAnchor(
 
   if (terminals.length === 2) {
     const [t0, t1] = terminals
-    const alongCol = rot === 0 || rot === 180
-    if (alongCol) {
-      sites[t0.id] = anchor
-      sites[t1.id] = offsetHoleColumn(anchor, rot === 0 ? 2 : -2)
-    } else {
-      const rowIndex = (offset: number) => {
-        const rows =
-          anchor.block === 'top'
-            ? ['a', 'b', 'c', 'd', 'e']
-            : ['f', 'g', 'h', 'i', 'j']
-        const i = rows.indexOf(anchor.row)
-        const next = rows[Math.max(0, Math.min(rows.length - 1, i + offset))]
-        return breadboardHole(next as BreadboardHoleSite['row'], anchor.column, anchor.block)
-      }
-      sites[t0.id] = anchor
-      sites[t1.id] = rowIndex(rot === 90 ? 1 : -1)
-    }
+    sites[t0.id] = anchor
+    sites[t1.id] = offsetHoleColumn(anchor, rot === 180 || rot === 270 ? -2 : 2)
     return { sites }
   }
 
@@ -80,4 +64,3 @@ export function placementForInstanceAtHole(
   if (!inferred) return instance.placement
   return mergePlacement(instance.placement, inferred)
 }
-

@@ -1,13 +1,10 @@
 /**
  * Breadboard hole grid, tie groups (shared copper), and site formatting.
- * Standard full breadboard: 60 columns, rows a–e (top) / f–j (bottom), 5-hole tie strips.
+ * Standard full breadboard: 60 columns, rows a–e (top) / f–j (bottom), 5-hole column tie strips.
  */
 
 /** Column count on the main tie area. */
 export const BREADBOARD_COLUMNS = 60
-
-/** Holes per electrical tie strip (horizontal group on one row letter). */
-export const BREADBOARD_TIE_WIDTH = 5
 
 /** Row letters above the center trench. */
 export const BREADBOARD_ROWS_TOP = ['a', 'b', 'c', 'd', 'e'] as const
@@ -146,12 +143,11 @@ export function parseBreadboardPlacement(value: unknown, path: string): Breadboa
 }
 
 /**
- * Stable key for holes that share copper (5-column tie strip on one row).
+ * Stable key for holes that share copper (same column within a 5-row block).
  * @param site Hole site on the main grid.
  */
 export function breadboardHoleTieKey(site: BreadboardHoleSite): string {
-  const group = Math.floor((site.column - 1) / BREADBOARD_TIE_WIDTH)
-  return `hole:${site.block}:${site.row}:${group}`
+  return `hole:${site.block}:${site.column}`
 }
 
 /**

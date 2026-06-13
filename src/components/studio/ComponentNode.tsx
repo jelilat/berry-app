@@ -55,6 +55,7 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
     baseHeight,
     rotationZ,
     placementDriven,
+    lockRuntimePinLayout,
     onPinWireStart,
     onPinWireTarget,
     onVisualPinLayout,
@@ -77,12 +78,12 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
 
   const handlePinLayout = useCallback(
     (layout: Record<string, { x: number; y: number }>) => {
-      if (placementDriven) return
+      if (placementDriven || lockRuntimePinLayout) return
       if (Object.keys(layout).length === 0) return
       setWokwiPinLayout((prev) => ({ ...terminalLayout, ...prev, ...layout }))
       onVisualPinLayout?.(d.instanceId, layout)
     },
-    [d.instanceId, onVisualPinLayout, placementDriven, terminalLayout],
+    [d.instanceId, lockRuntimePinLayout, onVisualPinLayout, placementDriven, terminalLayout],
   )
 
   const layout = useMemo(
@@ -137,7 +138,7 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
             width={baseWidth}
             height={baseHeight}
             fit
-            onPinLayout={handlePinLayout}
+            onPinLayout={lockRuntimePinLayout ? undefined : handlePinLayout}
           />
         ) : placementDriven ? (
           <FlexiblePlacementArt

@@ -181,6 +181,8 @@ export interface ComponentNodeData {
   baseHeight: number;
   rotationZ: number;
   placementDriven: boolean;
+  /** Keep terminal handles on breadboard placement sites instead of live Wokwi pinInfo. */
+  lockRuntimePinLayout: boolean;
   onPinWireStart?: (
     componentId: string,
     terminalId: string,
@@ -251,6 +253,7 @@ export function projectToFlowNodes(
         defaultBaseSize.height,
       ) ??
       catalogTerminalLayout(instance);
+    const lockRuntimePinLayout = Boolean(instance.parent && instance.placement?.sites);
 
     const terminalValidation = new Map<string, ValidationResult[]>()
     const errorTerminalIds: string[] = []
@@ -291,6 +294,7 @@ export function projectToFlowNodes(
         baseHeight,
         rotationZ,
         placementDriven: placementGeometry !== null,
+        lockRuntimePinLayout,
       },
       style: { width, height },
       zIndex: componentNodeZIndex(instance),

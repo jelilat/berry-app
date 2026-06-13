@@ -83,6 +83,7 @@ describe('projectToFlowNodes', () => {
     const catalogSize = componentPixelSize('resistor-220', 640)
 
     expect(resistor.data.placementDriven).toBe(true)
+    expect(resistor.data.lockRuntimePinLayout).toBe(true)
     expect(resistor.data.height).toBeGreaterThan(catalogSize.height)
     expect(resistor.data.terminalLayout.pin1.y).toBeLessThan(resistor.data.terminalLayout.pin2.y)
   })
@@ -119,9 +120,47 @@ describe('projectToFlowNodes', () => {
     const catalogSize = componentPixelSize('led-5mm', 640)
 
     expect(led.data.placementDriven).toBe(false)
+    expect(led.data.lockRuntimePinLayout).toBe(true)
     expect(led.data.width).toBeCloseTo(catalogSize.width, 5)
     expect(led.data.height).toBeCloseTo(catalogSize.height, 5)
     expect(led.data.terminalLayout.anode.y).toBeLessThan(led.data.terminalLayout.cathode.y)
+  })
+
+  it('keeps a breadboard-mounted ESP32 on placement-locked pin handles', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'placed esp32' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0, y: 0, z: 0 } },
+        },
+        {
+          id: 'esp32_1',
+          type: 'esp32-devkit-v1',
+          parent: 'breadboard_1',
+          transform: {
+            position: { x: 0.04, y: 0.03, z: 0 },
+            rotation: { x: 0, y: 0, z: 90 },
+          },
+          placement: {
+            sites: {
+              IO13: { kind: 'hole', block: 'top', row: 'a', column: 11 },
+              GND_R: { kind: 'hole', block: 'bottom', row: 'i', column: 10 },
+            },
+          },
+        },
+      ],
+      nets: [],
+      wires: [],
+    })
+
+    const esp = projectToFlowNodes(project, null).find((node) => node.id === 'esp32_1')!
+
+    expect(esp.data.placementDriven).toBe(false)
+    expect(esp.data.lockRuntimePinLayout).toBe(true)
   })
 })
 

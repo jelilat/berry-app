@@ -80,7 +80,7 @@ When a part sits on a `breadboard-full`, `placement.sites` maps each **terminal 
 | `column` | Column `1`–`60` |
 | `edge` / `polarity` | For rails: `top`/`bottom` edge, `positive`/`negative` |
 
-**Tie groups:** On a standard full breadboard, holes in the same row letter and same 5-column group (cols 1–5, 6–10, …) share copper. Studio snaps moves to the nearest hole and records per-terminal placement.
+**Tie groups:** On a standard full breadboard, holes in the same column share copper within each 5-row block (`a`–`e` above the trench, `f`–`j` below it). Studio snaps moves to the nearest hole and records per-terminal placement.
 
 Electrical connectivity is still stored in `nets`; placement records **where** legs sit on the breadboard.
 

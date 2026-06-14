@@ -6,11 +6,10 @@ import {
   Home,
   LogIn,
   LogOut,
-  MessageSquare,
   Plus,
 } from 'lucide-react'
 import { brand } from '@/lib/brand'
-import type { AuthSession } from '@/lib/auth/dummy-auth'
+import type { AuthSession } from '@/lib/auth/session'
 import type { UserProjectEntry } from '@/lib/projects/user-projects'
 
 /**

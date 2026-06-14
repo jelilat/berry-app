@@ -5,13 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, ChevronDown } from 'lucide-react'
 import { brand } from '@/lib/brand'
-import {
-  clearAuthSession,
-  createDummyUser,
-  loadAuthSession,
-  saveAuthSession,
-  type AuthSession,
-} from '@/lib/auth/dummy-auth'
+import { authSessionFromUser, type AuthSession } from '@/lib/auth/session'
+import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
 import {
   loadUserProjects,
   type UserProjectEntry,
@@ -57,9 +52,37 @@ export function BuilderHome() {
   const selectedModel = resolveUserModel(selectedModelId)
 
   useEffect(() => {
-    setSession(loadAuthSession())
     setProjects(loadUserProjects())
     setSelectedModelId(loadSelectedModelId())
+
+    let mounted = true
+    try {
+      const supabase = createSupabaseBrowserClient()
+      supabase.auth.getUser().then(({ data, error }) => {
+        if (!mounted) return
+        if (error || !data.user) {
+          setSession(null)
+          return
+        }
+        setSession(authSessionFromUser(data.user))
+      })
+
+      const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+        if (!mounted) return
+        setSession(nextSession?.user ? authSessionFromUser(nextSession.user) : null)
+        setProjects(loadUserProjects())
+      })
+
+      return () => {
+        mounted = false
+        data.subscription.unsubscribe()
+      }
+    } catch {
+      setSession(null)
+      return () => {
+        mounted = false
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -150,20 +173,56 @@ export function BuilderHome() {
   )
 
   /**
-   * Placeholder sign-in that stores a demo session locally.
+   * Start Google OAuth through Supabase.
    */
-  const handleSignIn = useCallback(() => {
-    const nextSession = saveAuthSession(createDummyUser())
-    setSession(nextSession)
-    setLoginOpen(false)
+  const handleGoogleSignIn = useCallback(async () => {
+    setErrorMessage(null)
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            prompt: 'select_account',
+          },
+        },
+      })
+      if (error) throw error
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to start Google sign-in')
+    }
   }, [])
 
   /**
-   * Clear the dummy session and refresh sidebar state.
+   * Send a magic-link sign-in email through Supabase.
+   * @param email Email address that should receive the sign-in link.
    */
-  const handleSignOut = useCallback(() => {
-    clearAuthSession()
-    setSession(null)
+  const handleEmailSignIn = useCallback(async (email: string) => {
+    setErrorMessage(null)
+    const supabase = createSupabaseBrowserClient()
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (error) throw error
+  }, [])
+
+  /**
+   * Sign the current user out of Supabase and refresh sidebar state.
+   */
+  const handleSignOut = useCallback(async () => {
+    setErrorMessage(null)
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      setSession(null)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to sign out')
+    }
   }, [])
 
   /**
@@ -345,7 +404,8 @@ export function BuilderHome() {
       <LoginPromptModal
         open={loginOpen}
         onClose={() => setLoginOpen(false)}
-        onSignIn={handleSignIn}
+        onGoogleSignIn={handleGoogleSignIn}
+        onEmailSignIn={handleEmailSignIn}
       />
     </div>
   )

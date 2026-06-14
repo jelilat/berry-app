@@ -8,9 +8,22 @@ import { brand } from '@/lib/brand'
 import { authSessionFromUser, type AuthSession } from '@/lib/auth/session'
 import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
 import {
+  getAuthMode,
+  hasSupabaseBrowserConfig,
+  isAuthEnabled,
+  isAuthRequired,
+} from '@/lib/auth/config'
+import {
   loadUserProjects,
+  upsertUserProject,
   type UserProjectEntry,
 } from '@/lib/projects/user-projects'
+import {
+  clearActiveCloudProjectId,
+  loadCloudUserProjects,
+  saveActiveCloudProjectId,
+  upsertCloudUserProject,
+} from '@/lib/projects/cloud-projects'
 import { createStarterProject } from '@/lib/project/mutations'
 import {
   bootstrapBuilderTemplate,
@@ -50,10 +63,44 @@ export function BuilderHome() {
   const [promptFocused, setPromptFocused] = useState(false)
 
   const selectedModel = resolveUserModel(selectedModelId)
+  const authMode = getAuthMode()
+  const authEnabled = isAuthEnabled()
+  const authRequired = isAuthRequired()
+  const cloudSyncEnabled = authEnabled && hasSupabaseBrowserConfig()
+
+  /**
+   * Refresh the project sidebar from cloud for signed-in users, or local storage for guests.
+   * @param signedIn Whether the current user has an active Supabase session.
+   */
+  const refreshProjects = useCallback(async (signedIn: boolean) => {
+    if (!signedIn || !cloudSyncEnabled) {
+      setProjects(loadUserProjects())
+      return
+    }
+
+    try {
+      const supabase = createSupabaseBrowserClient()
+      setProjects(await loadCloudUserProjects(supabase))
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to load cloud projects')
+      setProjects(loadUserProjects())
+    }
+  }, [cloudSyncEnabled])
 
   useEffect(() => {
     setProjects(loadUserProjects())
     setSelectedModelId(loadSelectedModelId())
+
+    if (!authEnabled) {
+      return
+    }
+
+    if (!hasSupabaseBrowserConfig()) {
+      if (authMode === 'required') {
+        setErrorMessage('Auth is required, but Supabase is not configured')
+      }
+      return
+    }
 
     let mounted = true
     try {
@@ -62,15 +109,18 @@ export function BuilderHome() {
         if (!mounted) return
         if (error || !data.user) {
           setSession(null)
+          void refreshProjects(false)
           return
         }
         setSession(authSessionFromUser(data.user))
+        void refreshProjects(true)
       })
 
       const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
         if (!mounted) return
+        const signedIn = !!nextSession?.user
         setSession(nextSession?.user ? authSessionFromUser(nextSession.user) : null)
-        setProjects(loadUserProjects())
+        void refreshProjects(signedIn)
       })
 
       return () => {
@@ -83,7 +133,7 @@ export function BuilderHome() {
         mounted = false
       }
     }
-  }, [])
+  }, [authEnabled, authMode, refreshProjects])
 
   useEffect(() => {
     if (!modelMenuOpen) return
@@ -120,12 +170,18 @@ export function BuilderHome() {
       setBootstrapping(true)
       setErrorMessage(null)
       try {
-        await bootstrapBuilderTemplate(templateId, { saveForUser: !!session })
+        const project = await bootstrapBuilderTemplate(templateId, { saveForUser: false })
         if (template) {
           stashPendingAgentRun(template.prompt, selectedModel)
         }
-        if (session) {
-          setProjects(loadUserProjects())
+        if (session && cloudSyncEnabled) {
+          const supabase = createSupabaseBrowserClient()
+          const entry = await upsertCloudUserProject(supabase, project)
+          saveActiveCloudProjectId(entry.id)
+          await refreshProjects(true)
+        } else {
+          upsertUserProject(project)
+          clearActiveCloudProjectId()
         }
         router.push('/bench')
       } catch (error) {
@@ -134,17 +190,17 @@ export function BuilderHome() {
         setBootstrapping(false)
       }
     },
-    [router, selectedModel, session],
+    [cloudSyncEnabled, refreshProjects, router, selectedModel, session],
   )
 
   /**
    * Submit a custom prompt or show the login gate for guests.
    */
-  const handleSubmitPrompt = useCallback(() => {
+  const handleSubmitPrompt = useCallback(async () => {
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || bootstrapping) return
 
-    if (!session) {
+    if (authRequired && !session) {
       setLoginOpen(true)
       return
     }
@@ -155,8 +211,36 @@ export function BuilderHome() {
     saveProjectToStorage(starter)
     saveFirmwareSourceToStorage(createDefaultFirmwareSource(starter.board))
     stashPendingAgentRun(cleanPrompt, selectedModel)
+    if (session && cloudSyncEnabled) {
+      setBootstrapping(true)
+      setErrorMessage(null)
+      try {
+        const supabase = createSupabaseBrowserClient()
+        const entry = await upsertCloudUserProject(supabase, starter)
+        saveActiveCloudProjectId(entry.id)
+        await refreshProjects(true)
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to save cloud project')
+        setBootstrapping(false)
+        return
+      }
+      setBootstrapping(false)
+      router.push('/bench')
+      return
+    }
+    upsertUserProject(starter)
+    clearActiveCloudProjectId()
     router.push('/bench')
-  }, [bootstrapping, prompt, router, selectedModel, session])
+  }, [
+    authRequired,
+    bootstrapping,
+    cloudSyncEnabled,
+    prompt,
+    refreshProjects,
+    router,
+    selectedModel,
+    session,
+  ])
 
   /**
    * Open a saved project from the sidebar.
@@ -167,9 +251,14 @@ export function BuilderHome() {
       const project = projects.find((entry) => entry.id === projectId)
       if (!project) return
       bootstrapSavedProject(project.projectJson)
+      if (session && cloudSyncEnabled) {
+        saveActiveCloudProjectId(project.id)
+      } else {
+        clearActiveCloudProjectId()
+      }
       router.push('/bench')
     },
-    [projects, router],
+    [cloudSyncEnabled, projects, router, session],
   )
 
   /**
@@ -178,6 +267,9 @@ export function BuilderHome() {
   const handleGoogleSignIn = useCallback(async () => {
     setErrorMessage(null)
     try {
+      if (!cloudSyncEnabled) {
+        throw new Error('Auth is not configured for this deployment')
+      }
       const supabase = createSupabaseBrowserClient()
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -192,7 +284,7 @@ export function BuilderHome() {
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to start Google sign-in')
     }
-  }, [])
+  }, [cloudSyncEnabled])
 
   /**
    * Send a magic-link sign-in email through Supabase.
@@ -200,6 +292,9 @@ export function BuilderHome() {
    */
   const handleEmailSignIn = useCallback(async (email: string) => {
     setErrorMessage(null)
+    if (!cloudSyncEnabled) {
+      throw new Error('Auth is not configured for this deployment')
+    }
     const supabase = createSupabaseBrowserClient()
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -208,7 +303,7 @@ export function BuilderHome() {
       },
     })
     if (error) throw error
-  }, [])
+  }, [cloudSyncEnabled])
 
   /**
    * Sign the current user out of Supabase and refresh sidebar state.
@@ -220,6 +315,7 @@ export function BuilderHome() {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
       setSession(null)
+      clearActiveCloudProjectId()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to sign out')
     }
@@ -236,6 +332,7 @@ export function BuilderHome() {
   return (
     <div className="flex min-h-[100dvh]" style={{ background: 'var(--bg-base)' }}>
       <BuilderSidebar
+        authEnabled={authEnabled}
         session={session}
         projects={projects}
         onSignIn={() => setLoginOpen(true)}

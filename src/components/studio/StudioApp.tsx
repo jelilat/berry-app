@@ -43,6 +43,14 @@ import {
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { consumePendingAgentRun } from '@/lib/studio/session-bootstrap'
+import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
+import { hasSupabaseBrowserConfig, isAuthEnabled } from '@/lib/auth/config'
+import {
+  clearActiveCloudProjectId,
+  loadActiveCloudProjectId,
+  saveActiveCloudProjectId,
+  upsertCloudUserProject,
+} from '@/lib/projects/cloud-projects'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
 import { AIAssistantPanel, type SubmittedPrompt } from './AIAssistantPanel'
 import { ComponentTray } from './ComponentTray'
@@ -171,6 +179,7 @@ export function StudioApp() {
   )
   const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
   const skipNextPipelineResetRef = useRef(false)
+  const cloudAutosaveTimerRef = useRef<number | null>(null)
   const handleAgentRunRef = useRef<
     (prompt: string, mode?: 'auto' | 'deterministic' | 'real') => Promise<void>
   >(async () => {})
@@ -181,6 +190,8 @@ export function StudioApp() {
   const [projectChatKey, setProjectChatKey] = useState(() =>
     createProjectChatKey(initialProjectRef.current!),
   )
+  const [cloudProjectId, setCloudProjectId] = useState<string | null>(null)
+  const [cloudAutosaveReady, setCloudAutosaveReady] = useState(false)
 
   const {
     project,
@@ -232,6 +243,33 @@ export function StudioApp() {
       setTerminalOpen(true)
     }
   }, [buildLoading, buildResult, simulateLoading, simulationResult])
+
+  useEffect(() => {
+    if (!isAuthEnabled() || !hasSupabaseBrowserConfig()) {
+      setCloudProjectId(null)
+      setCloudAutosaveReady(true)
+      return
+    }
+
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const activeProjectId = loadActiveCloudProjectId()
+      setCloudProjectId(activeProjectId)
+      supabase.auth
+        .getUser()
+        .then(({ data }) => {
+          setCloudProjectId(data.user ? activeProjectId : null)
+          setCloudAutosaveReady(true)
+        })
+        .catch(() => {
+          setCloudProjectId(null)
+          setCloudAutosaveReady(true)
+        })
+    } catch {
+      setCloudProjectId(null)
+      setCloudAutosaveReady(true)
+    }
+  }, [])
 
   const handleSimulate = useCallback(async () => {
     if (validationHasErrors || simulateLoading || !hasSuccessfulBuildArtifact) return
@@ -391,9 +429,46 @@ export function StudioApp() {
   }, [resetProject])
 
   useEffect(() => {
-    if (status !== 'ready') return
+    if (status !== 'ready' || !cloudAutosaveReady) return
     saveProjectToStorage(project)
   }, [project, status])
+
+  useEffect(() => {
+    if (status !== 'ready') return
+
+    if (cloudAutosaveTimerRef.current) {
+      window.clearTimeout(cloudAutosaveTimerRef.current)
+    }
+
+    /**
+     * Save the current bench to Supabase for signed-in users.
+     */
+    async function saveProjectToCloud() {
+      try {
+        if (!isAuthEnabled() || !hasSupabaseBrowserConfig()) return
+        const supabase = createSupabaseBrowserClient()
+        const { data } = await supabase.auth.getUser()
+        if (!data.user) return
+        const entry = await upsertCloudUserProject(supabase, project, cloudProjectId)
+        if (entry.id !== cloudProjectId) {
+          saveActiveCloudProjectId(entry.id)
+          setCloudProjectId(entry.id)
+        }
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to save cloud project')
+      }
+    }
+
+    cloudAutosaveTimerRef.current = window.setTimeout(() => {
+      void saveProjectToCloud()
+    }, 900)
+
+    return () => {
+      if (cloudAutosaveTimerRef.current) {
+        window.clearTimeout(cloudAutosaveTimerRef.current)
+      }
+    }
+  }, [cloudAutosaveReady, cloudProjectId, project, status])
 
   useEffect(() => {
     if (status !== 'ready') return
@@ -402,6 +477,8 @@ export function StudioApp() {
 
   const handleNew = useCallback(() => {
     const nextProject = createStarterProject()
+    clearActiveCloudProjectId()
+    setCloudProjectId(null)
     resetProject(nextProject)
     setProjectChatKey(createProjectChatKey(nextProject))
     setFirmwareSource(createDefaultFirmwareSource(nextProject.board))
@@ -419,6 +496,8 @@ export function StudioApp() {
       if (!res.ok) throw new Error('Example file not found')
       const json = await res.text()
       const parsed = loadBerryProjectFromJson(json)
+      clearActiveCloudProjectId()
+      setCloudProjectId(null)
       resetProject(replaceProject(parsed))
       setProjectChatKey(createProjectChatKey(parsed))
       setFirmwareSource(createEsp32BlinkFirmwareSource())
@@ -433,7 +512,25 @@ export function StudioApp() {
   const handleSave = useCallback(() => {
     saveProjectToStorage(project)
     saveFirmwareSourceToStorage(firmwareSource)
-  }, [firmwareSource, project])
+    /**
+     * Save the current bench to Supabase when a signed-in user presses Save.
+     */
+    async function saveCloudNow() {
+      try {
+        if (!isAuthEnabled() || !hasSupabaseBrowserConfig()) return
+        const supabase = createSupabaseBrowserClient()
+        const { data } = await supabase.auth.getUser()
+        if (!data.user) return
+        const entry = await upsertCloudUserProject(supabase, project, cloudProjectId)
+        saveActiveCloudProjectId(entry.id)
+        setCloudProjectId(entry.id)
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to save cloud project')
+      }
+    }
+
+    void saveCloudNow()
+  }, [cloudProjectId, firmwareSource, project])
 
   const handleResetFirmwareSource = useCallback(() => {
     setFirmwareSource(createDefaultFirmwareSource(project.board))

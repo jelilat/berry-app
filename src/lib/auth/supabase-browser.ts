@@ -1,5 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { hasSupabaseBrowserConfig } from './config'
 
 let browserClient: SupabaseClient | null = null
 
@@ -14,6 +15,13 @@ function readSupabaseBrowserConfig(): { url: string; anonKey: string } {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
   return { url, anonKey }
+}
+
+/**
+ * Return whether a browser Supabase client can be created.
+ */
+export function canCreateSupabaseBrowserClient(): boolean {
+  return hasSupabaseBrowserConfig()
 }
 
 /**

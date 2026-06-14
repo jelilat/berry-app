@@ -17,6 +17,7 @@ import type { UserProjectEntry } from '@/lib/projects/user-projects'
  * @param props Sidebar state and callbacks.
  */
 export function BuilderSidebar({
+  authEnabled,
   session,
   projects,
   onSignIn,
@@ -24,6 +25,7 @@ export function BuilderSidebar({
   onOpenProject,
   onNewProject,
 }: {
+  authEnabled: boolean
   session: AuthSession | null
   projects: UserProjectEntry[]
   onSignIn: () => void
@@ -56,7 +58,7 @@ export function BuilderSidebar({
           Projects
         </p>
 
-        {session ? (
+        {authEnabled && session ? (
           <>
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
@@ -94,10 +96,48 @@ export function BuilderSidebar({
               )}
             </div>
           </>
-        ) : (
+        ) : authEnabled ? (
           <p className="rounded-xl px-3 py-2 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
             Sign in to see your projects.
           </p>
+        ) : (
+          <>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                Local projects
+              </span>
+              <button
+                type="button"
+                onClick={onNewProject}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-black/5"
+                aria-label="New project"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <Plus size={15} />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {projects.length === 0 ? (
+                <p className="rounded-xl px-3 py-2 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
+                  Projects save in this browser.
+                </p>
+              ) : (
+                projects.map((project) => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => onOpenProject(project.id)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors hover:bg-black/[0.04]"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    <Cpu size={14} style={{ color: 'var(--text-muted)' }} />
+                    <span className="truncate">{project.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -111,7 +151,7 @@ export function BuilderSidebar({
           Feedback
         </a> */}
 
-        {session ? (
+        {!authEnabled ? null : session ? (
           <button
             type="button"
             onClick={onSignOut}

@@ -121,3 +121,19 @@ export async function upsertCloudUserProject(
   if (error) throw error
   return cloudRowToProjectEntry(data as CloudProjectRow)
 }
+
+/**
+ * Delete one cloud project for the currently signed-in Supabase user.
+ * @param supabase Browser Supabase client with an active user session.
+ * @param projectId Supabase project row id.
+ */
+export async function deleteCloudUserProject(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<void> {
+  const { error } = await supabase.from('projects').delete().eq('id', projectId)
+  if (error) throw error
+  if (loadActiveCloudProjectId() === projectId) {
+    clearActiveCloudProjectId()
+  }
+}

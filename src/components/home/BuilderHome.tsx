@@ -15,11 +15,13 @@ import {
 } from '@/lib/auth/config'
 import {
   loadUserProjects,
+  removeUserProject,
   upsertUserProject,
   type UserProjectEntry,
 } from '@/lib/projects/user-projects'
 import {
   clearActiveCloudProjectId,
+  deleteCloudUserProject,
   loadCloudUserProjects,
   saveActiveCloudProjectId,
   upsertCloudUserProject,
@@ -351,6 +353,30 @@ export function BuilderHome() {
     textareaRef.current?.focus()
   }, [])
 
+  /**
+   * Delete a saved project from cloud or local storage.
+   * @param projectId Saved project id.
+   */
+  const handleDeleteProject = useCallback(
+    async (projectId: string) => {
+      setErrorMessage(null)
+      try {
+        if (session && cloudSyncEnabled) {
+          const supabase = createSupabaseBrowserClient()
+          await deleteCloudUserProject(supabase, projectId)
+          await refreshProjects(true)
+          return
+        }
+
+        removeUserProject(projectId)
+        setProjects(loadUserProjects())
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to delete project')
+      }
+    },
+    [cloudSyncEnabled, refreshProjects, session],
+  )
+
   return (
     <div className="flex min-h-[100dvh]" style={{ background: 'var(--bg-base)' }}>
       <BuilderSidebar
@@ -361,6 +387,7 @@ export function BuilderHome() {
         onSignOut={handleSignOut}
         onOpenProject={handleOpenProject}
         onNewProject={handleNewProject}
+        onDeleteProject={handleDeleteProject}
       />
 
       <main className="relative flex min-w-0 flex-1 flex-col items-center justify-center px-6 py-10">

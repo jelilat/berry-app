@@ -7,6 +7,7 @@ import {
   LogIn,
   LogOut,
   Plus,
+  Trash2,
 } from 'lucide-react'
 import { brand } from '@/lib/brand'
 import type { AuthSession } from '@/lib/auth/session'
@@ -24,6 +25,7 @@ export function BuilderSidebar({
   onSignOut,
   onOpenProject,
   onNewProject,
+  onDeleteProject,
 }: {
   authEnabled: boolean
   session: AuthSession | null
@@ -32,6 +34,7 @@ export function BuilderSidebar({
   onSignOut: () => void
   onOpenProject: (projectId: string) => void
   onNewProject: () => void
+  onDeleteProject: (projectId: string) => void
 }) {
   return (
     <aside
@@ -82,16 +85,12 @@ export function BuilderSidebar({
                 </p>
               ) : (
                 projects.map((project) => (
-                  <button
+                  <ProjectRow
                     key={project.id}
-                    type="button"
-                    onClick={() => onOpenProject(project.id)}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors hover:bg-black/[0.04]"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    <Cpu size={14} style={{ color: 'var(--text-muted)' }} />
-                    <span className="truncate">{project.name}</span>
-                  </button>
+                    project={project}
+                    onOpen={() => onOpenProject(project.id)}
+                    onDelete={() => onDeleteProject(project.id)}
+                  />
                 ))
               )}
             </div>
@@ -124,16 +123,12 @@ export function BuilderSidebar({
                 </p>
               ) : (
                 projects.map((project) => (
-                  <button
+                  <ProjectRow
                     key={project.id}
-                    type="button"
-                    onClick={() => onOpenProject(project.id)}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors hover:bg-black/[0.04]"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    <Cpu size={14} style={{ color: 'var(--text-muted)' }} />
-                    <span className="truncate">{project.name}</span>
-                  </button>
+                    project={project}
+                    onOpen={() => onOpenProject(project.id)}
+                    onDelete={() => onDeleteProject(project.id)}
+                  />
                 ))
               )}
             </div>
@@ -177,6 +172,43 @@ export function BuilderSidebar({
         )}
       </div>
     </aside>
+  )
+}
+
+/**
+ * Render one saved project row with open and delete actions.
+ * @param props Project entry and row callbacks.
+ */
+function ProjectRow({
+  project,
+  onOpen,
+  onDelete,
+}: {
+  project: UserProjectEntry
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="group flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors hover:bg-black/[0.04]"
+        style={{ color: 'var(--text-primary)' }}
+      >
+        <Cpu size={14} style={{ color: 'var(--text-muted)' }} />
+        <span className="truncate">{project.name}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg opacity-0 transition-all hover:bg-black/[0.06] group-hover:opacity-100 group-focus-within:opacity-100"
+        aria-label={`Delete ${project.name}`}
+        style={{ color: 'var(--text-muted)' }}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
   )
 }
 

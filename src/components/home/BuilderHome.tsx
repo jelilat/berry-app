@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, ChevronDown } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown } from 'lucide-react'
 import { brand } from '@/lib/brand'
 import { authSessionFromUser, type AuthSession } from '@/lib/auth/session'
 import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
@@ -24,7 +24,7 @@ import {
   saveActiveCloudProjectId,
   upsertCloudUserProject,
 } from '@/lib/projects/cloud-projects'
-import { createStarterProject } from '@/lib/project/mutations'
+import { createEmptyProject } from '@/lib/project/mutations'
 import {
   bootstrapBuilderTemplate,
   bootstrapSavedProject,
@@ -35,9 +35,14 @@ import { createDefaultFirmwareSource } from '@/lib/firmware/source'
 import { BUILDER_TEMPLATES } from '@/lib/studio/templates'
 import {
   loadSelectedModelId,
+  loadSelectedReasoningId,
   resolveUserModel,
+  resolveUserReasoning,
   saveSelectedModelId,
+  saveSelectedReasoningId,
+  USER_REASONING_OPTIONS,
   USER_MODEL_OPTIONS,
+  type UserReasoningOption,
   type UserModelOption,
 } from '@/lib/studio/user-models'
 import { BuilderSidebar } from './BuilderSidebar'
@@ -56,13 +61,16 @@ export function BuilderHome() {
   const [projects, setProjects] = useState<UserProjectEntry[]>([])
   const [prompt, setPrompt] = useState('')
   const [selectedModelId, setSelectedModelId] = useState(USER_MODEL_OPTIONS[0]!.id)
+  const [selectedReasoningId, setSelectedReasoningId] = useState(loadSelectedReasoningId())
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
   const [bootstrapping, setBootstrapping] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [promptFocused, setPromptFocused] = useState(false)
 
   const selectedModel = resolveUserModel(selectedModelId)
+  const selectedReasoning = resolveUserReasoning(selectedReasoningId)
   const authMode = getAuthMode()
   const authEnabled = isAuthEnabled()
   const authRequired = isAuthRequired()
@@ -90,6 +98,7 @@ export function BuilderHome() {
   useEffect(() => {
     setProjects(loadUserProjects())
     setSelectedModelId(loadSelectedModelId())
+    setSelectedReasoningId(loadSelectedReasoningId())
 
     if (!authEnabled) {
       return
@@ -144,6 +153,7 @@ export function BuilderHome() {
     function handlePointerDown(event: MouseEvent) {
       if (!modelMenuRef.current?.contains(event.target as Node)) {
         setModelMenuOpen(false)
+        setReasoningMenuOpen(false)
       }
     }
     document.addEventListener('mousedown', handlePointerDown)
@@ -157,7 +167,18 @@ export function BuilderHome() {
   const handleSelectModel = useCallback((model: UserModelOption) => {
     setSelectedModelId(model.id)
     saveSelectedModelId(model.id)
+    setReasoningMenuOpen(true)
+  }, [])
+
+  /**
+   * Persist the selected reasoning preference.
+   * @param reasoning User-facing reasoning option.
+   */
+  const handleSelectReasoning = useCallback((reasoning: UserReasoningOption) => {
+    setSelectedReasoningId(reasoning.id)
+    saveSelectedReasoningId(reasoning.id)
     setModelMenuOpen(false)
+    setReasoningMenuOpen(false)
   }, [])
 
   /**
@@ -172,7 +193,7 @@ export function BuilderHome() {
       try {
         const project = await bootstrapBuilderTemplate(templateId, { saveForUser: false })
         if (template) {
-          stashPendingAgentRun(template.prompt, selectedModel)
+          stashPendingAgentRun(template.prompt, selectedModel, selectedReasoning.id)
         }
         if (session && cloudSyncEnabled) {
           const supabase = createSupabaseBrowserClient()
@@ -190,7 +211,7 @@ export function BuilderHome() {
         setBootstrapping(false)
       }
     },
-    [cloudSyncEnabled, refreshProjects, router, selectedModel, session],
+    [cloudSyncEnabled, refreshProjects, router, selectedModel, selectedReasoning.id, session],
   )
 
   /**
@@ -205,12 +226,12 @@ export function BuilderHome() {
       return
     }
 
-    const starter = createStarterProject()
+    const starter = createEmptyProject()
     starter.metadata.name = cleanPrompt.slice(0, 64)
     starter.metadata.description = cleanPrompt
     saveProjectToStorage(starter)
     saveFirmwareSourceToStorage(createDefaultFirmwareSource(starter.board))
-    stashPendingAgentRun(cleanPrompt, selectedModel)
+    stashPendingAgentRun(cleanPrompt, selectedModel, selectedReasoning.id)
     if (session && cloudSyncEnabled) {
       setBootstrapping(true)
       setErrorMessage(null)
@@ -239,6 +260,7 @@ export function BuilderHome() {
     refreshProjects,
     router,
     selectedModel,
+    selectedReasoning.id,
     session,
   ])
 
@@ -405,42 +427,103 @@ export function BuilderHome() {
               <div ref={modelMenuRef} className="relative">
                 <button
                   type="button"
-                  onClick={() => setModelMenuOpen((open) => !open)}
+                  onClick={() => {
+                    setModelMenuOpen((open) => {
+                      const nextOpen = !open
+                      if (nextOpen) setReasoningMenuOpen(false)
+                      return nextOpen
+                    })
+                  }}
                   className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors hover:bg-black/[0.03]"
                   style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
                   aria-expanded={modelMenuOpen}
                   aria-haspopup="listbox"
                 >
-                  <SparklesDot />
-                  {selectedModel.label}
+                  {selectedModel.shortLabel} {selectedReasoning.label}
                   <ChevronDown size={14} />
                 </button>
 
                 {modelMenuOpen && (
-                  <div
-                    role="listbox"
-                    className="absolute bottom-full left-0 z-10 mb-2 min-w-[240px] overflow-hidden rounded-2xl py-1"
-                    style={{
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      boxShadow: 'var(--shadow-soft)',
-                    }}
-                  >
-                    {USER_MODEL_OPTIONS.map((model) => (
-                      <button
-                        key={model.id}
-                        type="button"
-                        role="option"
-                        aria-selected={model.id === selectedModelId}
-                        onClick={() => handleSelectModel(model)}
-                        className="flex w-full flex-col items-start px-4 py-3 text-left transition-colors hover:bg-black/[0.03]"
+                  <div className="absolute bottom-full left-0 z-10 mb-2 flex items-end gap-2">
+                    <div
+                      role="listbox"
+                      aria-label="Model"
+                      className="w-[240px] overflow-hidden rounded-[22px] p-2"
+                      style={{
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        boxShadow: 'var(--shadow-soft)',
+                      }}
+                    >
+                      <div
+                        className="px-3 py-2 text-[13px] font-semibold"
+                        style={{ color: 'var(--text-muted)' }}
                       >
-                        <span className="text-sm font-bold">{model.label}</span>
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          {model.description}
-                        </span>
-                      </button>
-                    ))}
+                        Model
+                      </div>
+                      {USER_MODEL_OPTIONS.map((model) => {
+                        const selected = model.id === selectedModelId
+                        return (
+                          <button
+                            key={model.id}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            onClick={() => handleSelectModel(model)}
+                            className="flex h-11 w-full items-center justify-between rounded-2xl px-3 text-left text-sm font-semibold transition-colors hover:bg-black/[0.04]"
+                            style={{
+                              background: selected ? 'rgba(214,51,108,0.10)' : 'transparent',
+                              color: 'var(--text-primary)',
+                            }}
+                          >
+                            {model.label}
+                            {selected && <Check size={17} style={{ color: brand.colors.berry }} />}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {reasoningMenuOpen && (
+                      <div
+                        role="listbox"
+                        aria-label="Reasoning"
+                        className="w-[218px] overflow-hidden rounded-[22px] p-2"
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          boxShadow: 'var(--shadow-soft)',
+                        }}
+                      >
+                        <div
+                          className="px-3 py-2 text-[13px] font-semibold"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          Reasoning
+                        </div>
+                        {USER_REASONING_OPTIONS.map((reasoning) => {
+                          const selected = reasoning.id === selectedReasoningId
+                          return (
+                            <button
+                              key={reasoning.id}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              onClick={() => handleSelectReasoning(reasoning)}
+                              className="flex h-11 w-full items-center justify-between rounded-2xl px-3 text-left text-sm font-semibold transition-colors hover:bg-black/[0.04]"
+                              style={{
+                                background: selected ? 'rgba(214,51,108,0.10)' : 'transparent',
+                                color: 'var(--text-primary)',
+                              }}
+                            >
+                              {reasoning.label}
+                              {selected && (
+                                <Check size={17} style={{ color: brand.colors.berry }} />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

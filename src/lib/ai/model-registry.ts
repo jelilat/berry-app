@@ -10,6 +10,9 @@ export type BerryAgentRole =
 /** Provider family for model calls made by Berry agents. */
 export type BerryModelProvider = 'mock' | 'openai' | 'anthropic' | 'google' | 'openrouter'
 
+/** Reasoning effort accepted by current OpenAI reasoning models. */
+export type BerryReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+
 /** Capability and runtime settings for one model option. */
 export interface BerryModelConfig {
   provider: BerryModelProvider
@@ -17,6 +20,7 @@ export interface BerryModelConfig {
   supportsTools: boolean
   supportsStructuredOutput: boolean
   temperature: number
+  reasoningEffort?: BerryReasoningEffort
 }
 
 /** Named model profiles used by agent roles. */
@@ -39,28 +43,28 @@ export const DEFAULT_MODEL_REGISTRY: BerryModelRegistry = {
   },
   fast_reasoning: {
     provider: 'openai',
-    model: process.env.BERRY_AI_FAST_MODEL?.trim() || 'gpt-5-mini',
+    model: process.env.BERRY_AI_FAST_MODEL?.trim() || 'gpt-5.4-mini',
     supportsTools: true,
     supportsStructuredOutput: true,
     temperature: 0.2,
   },
   strong_reasoning: {
     provider: 'openai',
-    model: process.env.BERRY_AI_STRONG_MODEL?.trim() || 'gpt-5',
+    model: process.env.BERRY_AI_STRONG_MODEL?.trim() || 'gpt-5.5',
     supportsTools: true,
     supportsStructuredOutput: true,
     temperature: 0.1,
   },
   code_reasoning: {
     provider: 'openai',
-    model: process.env.BERRY_AI_CODE_MODEL?.trim() || 'gpt-5',
+    model: process.env.BERRY_AI_CODE_MODEL?.trim() || 'gpt-5.5',
     supportsTools: true,
     supportsStructuredOutput: true,
     temperature: 0,
   },
   fast_writer: {
     provider: 'openai',
-    model: process.env.BERRY_AI_WRITER_MODEL?.trim() || 'gpt-5-mini',
+    model: process.env.BERRY_AI_WRITER_MODEL?.trim() || 'gpt-5.4-mini',
     supportsTools: false,
     supportsStructuredOutput: true,
     temperature: 0.4,

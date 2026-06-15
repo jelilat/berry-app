@@ -5,7 +5,7 @@ import { loadBerryProjectFromJson } from '@/lib/project/io'
 import {
   addComponent,
   connectTerminals,
-  createStarterProject,
+  createEmptyProject,
   moveComponent,
   removeComponent,
   removeWire,
@@ -181,11 +181,17 @@ export function StudioApp() {
   const skipNextPipelineResetRef = useRef(false)
   const cloudAutosaveTimerRef = useRef<number | null>(null)
   const handleAgentRunRef = useRef<
-    (prompt: string, mode?: 'auto' | 'deterministic' | 'real') => Promise<void>
+    (
+      prompt: string,
+      mode?: 'auto' | 'deterministic' | 'real',
+      provider?: string,
+      model?: string,
+      reasoningEffort?: string,
+    ) => Promise<void>
   >(async () => {})
   const initialProjectRef = useRef<BerryProject | null>(null)
   if (!initialProjectRef.current) {
-    initialProjectRef.current = createStarterProject()
+    initialProjectRef.current = createEmptyProject()
   }
   const [projectChatKey, setProjectChatKey] = useState(() =>
     createProjectChatKey(initialProjectRef.current!),
@@ -357,6 +363,9 @@ export function StudioApp() {
   const handleAgentRun = useCallback(async (
     prompt: string,
     mode: 'auto' | 'deterministic' | 'real' = 'auto',
+    provider?: string,
+    model?: string,
+    reasoningEffort?: string,
   ) => {
     if (agentLoading || prompt.trim().length === 0) return
     setAgentLoading(true)
@@ -366,7 +375,7 @@ export function StudioApp() {
       const response = await fetch('/api/agent/run', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, project, mode }),
+        body: JSON.stringify({ prompt, project, mode, provider, model, reasoningEffort }),
       })
       const json = await response.json()
       if (json.state) {
@@ -423,7 +432,13 @@ export function StudioApp() {
       const submission = { id: `main_${Date.now().toString(36)}`, text: pending.prompt }
       setSubmittedPrompt(submission)
       window.setTimeout(() => {
-        void handleAgentRunRef.current(pending.prompt, pending.mode)
+        void handleAgentRunRef.current(
+          pending.prompt,
+          pending.mode,
+          pending.provider,
+          pending.model,
+          pending.reasoningEffort,
+        )
       }, 0)
     }
   }, [resetProject])
@@ -476,7 +491,7 @@ export function StudioApp() {
   }, [firmwareSource, status])
 
   const handleNew = useCallback(() => {
-    const nextProject = createStarterProject()
+    const nextProject = createEmptyProject()
     clearActiveCloudProjectId()
     setCloudProjectId(null)
     resetProject(nextProject)

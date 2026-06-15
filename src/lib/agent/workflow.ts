@@ -9,7 +9,11 @@ import {
   DeterministicModelClient,
   type BerryModelClient,
 } from '@/lib/ai/model-client'
-import { resolveAgentModel } from '@/lib/ai/model-registry'
+import {
+  resolveAgentModel,
+  type BerryAgentRole,
+  type BerryModelConfig,
+} from '@/lib/ai/model-registry'
 import { appendTimelineEvent } from './events'
 import {
   AgentBuildPlanStructuredSchema,
@@ -212,7 +216,7 @@ async function clarifyGoal(
 
   return modelClient.callStructured({
     role: 'clarifier',
-    model: resolveAgentModel('clarifier'),
+    model: resolveWorkflowAgentModel(input, 'clarifier'),
     messages: [
       { role: 'system', content: clarifierSystemPrompt() },
       { role: 'user', content: clarifierUserPrompt(input.prompt, input.answers) },
@@ -224,10 +228,12 @@ async function clarifyGoal(
 
 /**
  * Produce a deterministic build plan for the first supported reference circuit.
+ * @param input Agent run input.
  * @param clarification Clarifier output.
  * @param modelClient Provider-neutral model client.
  */
 async function planBuild(
+  input: AgentRunInput,
   clarification: Extract<ClarificationResult, { status: 'ready' }>,
   modelClient: BerryModelClient,
 ): Promise<AgentBuildPlan> {
@@ -257,7 +263,7 @@ async function planBuild(
 
   return modelClient.callStructured({
     role: 'planner',
-    model: resolveAgentModel('planner'),
+    model: resolveWorkflowAgentModel(input, 'planner'),
     messages: [
       { role: 'system', content: plannerSystemPrompt() },
       { role: 'user', content: plannerUserPrompt(clarification) },
@@ -269,10 +275,12 @@ async function planBuild(
 
 /**
  * Ask the circuit design agent to select a bounded implementation strategy.
+ * @param input Agent run input.
  * @param plan Hardware build plan.
  * @param modelClient Provider-neutral model client.
  */
 async function selectCircuitIntent(
+  input: AgentRunInput,
   plan: AgentBuildPlan,
   modelClient: BerryModelClient,
 ): Promise<AgentCircuitIntent> {
@@ -305,7 +313,7 @@ async function selectCircuitIntent(
 
   return modelClient.callStructured({
     role: 'circuit_designer',
-    model: resolveAgentModel('circuit_designer'),
+    model: resolveWorkflowAgentModel(input, 'circuit_designer'),
     messages: [
       { role: 'system', content: circuitDesignerSystemPrompt() },
       { role: 'user', content: circuitDesignerUserPrompt(plan) },
@@ -515,7 +523,7 @@ export async function runAgentWorkflow(
     'success',
   )
 
-  const plan = await planBuild(clarification, client)
+  const plan = await planBuild(input, clarification, client)
   state = { ...state, plan }
   state = appendTimelineEvent(
     state,
@@ -526,7 +534,7 @@ export async function runAgentWorkflow(
   )
 
   try {
-    const circuitIntent = await selectCircuitIntent(plan, client)
+    const circuitIntent = await selectCircuitIntent(input, plan, client)
     state = { ...state, circuitIntent }
     const isSupportedReference =
       circuitIntent.referenceCircuit === 'esp32_led_blink' ||
@@ -665,7 +673,7 @@ export async function runAgentWorkflow(
     const deterministicGuide = generateWiringGuide(state.project, codegenResult, validationResults)
     const guideDraft = await client.callStructured({
       role: 'wiring_guide',
-      model: resolveAgentModel('wiring_guide'),
+      model: resolveWorkflowAgentModel(input, 'wiring_guide'),
       messages: [
         { role: 'system', content: wiringGuideSystemPrompt() },
         { role: 'user', content: wiringGuideUserPrompt(deterministicGuide) },
@@ -688,6 +696,27 @@ export async function runAgentWorkflow(
     const message = error instanceof Error ? error.message : 'Agent workflow failed'
     state = appendTimelineEvent(state, 'Agent workflow', 'Run failed', message, 'error')
     return { ok: false, status: 'failed', state, error: message }
+  }
+}
+
+/**
+ * Resolve the model config for one workflow role, applying user-selected overrides.
+ * @param input Agent run input.
+ * @param role Agent role that needs a model.
+ */
+function resolveWorkflowAgentModel(
+  input: AgentRunInput,
+  role: BerryAgentRole,
+): BerryModelConfig {
+  const base = resolveAgentModel(role)
+  if (!input.model) {
+    return input.reasoningEffort ? { ...base, reasoningEffort: input.reasoningEffort } : base
+  }
+  return {
+    ...base,
+    provider: input.provider ?? 'openai',
+    model: input.model,
+    reasoningEffort: input.reasoningEffort,
   }
 }
 

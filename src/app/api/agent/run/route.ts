@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { runAgentWorkflow } from '@/lib/agent/workflow'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import type { AgentRunInput } from '@/lib/agent/types'
+import type { BerryModelProvider } from '@/lib/ai/model-registry'
+import { resolveUserReasoning, USER_MODEL_OPTIONS } from '@/lib/studio/user-models'
 
 export const runtime = 'edge'
 
@@ -11,6 +13,23 @@ export const runtime = 'edge'
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Resolve a request model to an allowed OpenAI model id.
+ * @param model Raw model string from the request.
+ */
+function parseRequestedModel(
+  provider: unknown,
+  model: unknown,
+): { provider: BerryModelProvider; model: string } | undefined {
+  if (typeof model !== 'string') return undefined
+  const option = USER_MODEL_OPTIONS.find(
+    (candidate) =>
+      candidate.model === model &&
+      (typeof provider !== 'string' || candidate.provider === provider),
+  )
+  return option ? { provider: option.provider, model: option.model } : undefined
 }
 
 /**
@@ -34,6 +53,14 @@ function parseAgentRunInput(body: unknown): AgentRunInput {
       mode === 'real' || mode === 'deterministic' || mode === 'auto'
         ? mode
         : 'auto',
+  }
+  const model = parseRequestedModel(body.provider, body.model)
+  if (model) {
+    input.provider = model.provider
+    input.model = model.model
+  }
+  if (typeof body.reasoningEffort === 'string') {
+    input.reasoningEffort = resolveUserReasoning(body.reasoningEffort).id
   }
   if ('project' in body && body.project !== undefined) {
     input.project = parseBerryProject(body.project)

@@ -24,6 +24,12 @@ interface BenchChat {
   updatedAt: string
 }
 
+interface AssistantChoiceRequest {
+  id: string
+  label: string
+  options: string[]
+}
+
 /** Prompt forwarded from home into the bench chat (already running or about to). */
 export interface SubmittedPrompt {
   id: string
@@ -56,6 +62,8 @@ export function AIAssistantPanel({
     () => chats.find((chat) => chat.id === activeChatId) ?? chats[0],
     [activeChatId, chats],
   )
+
+  const choiceRequest = useMemo(() => choiceRequestFromResult(result), [result])
 
   useEffect(() => {
     const nextChats = loadChats(projectChatKey)
@@ -152,7 +160,39 @@ export function AIAssistantPanel({
           : item,
       ),
     )
+    setPrompt('')
     onSubmit(promptForWorkflow(chat.messages, cleanPrompt))
+  }
+
+  /**
+   * Submit a structured assistant choice without requiring typed text.
+   * @param option Selected option label.
+   */
+  function handleSelectChoice(option: string) {
+    if (loading) return
+    const cleanOption = option.trim()
+    if (!cleanOption) return
+    const chat = activeChat ?? createChat()
+    if (!activeChat) {
+      setChats((current) => [chat, ...current])
+      setActiveChatId(chat.id)
+    }
+    setChats((current) =>
+      current.map((item) =>
+        item.id === chat.id
+          ? {
+              ...item,
+              title: item.messages.length === 0 ? titleFromPrompt(cleanOption) : item.title,
+              messages: [
+                ...item.messages,
+                { id: `user_choice_${Date.now()}`, role: 'user', text: cleanOption },
+              ],
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    )
+    onSubmit(promptForChoiceWorkflow(result, chat.messages, cleanOption))
   }
 
   return (
@@ -203,6 +243,13 @@ export function AIAssistantPanel({
             {activeChat.messages.map((message) => (
               <ChatBubble key={message.id} message={message} />
             ))}
+            {choiceRequest ? (
+              <AssistantChoiceField
+                choiceRequest={choiceRequest}
+                disabled={loading}
+                onSelect={handleSelectChoice}
+              />
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3">
@@ -277,6 +324,45 @@ function ChatBubble({ message }: { message: BenchMessage }) {
         {isUser ? 'You' : ASSISTANT_NAME}
       </div>
       <div className="whitespace-pre-wrap">{message.text}</div>
+    </div>
+  )
+}
+
+/**
+ * Render assistant-provided choices as a direct selection control.
+ * @param props Choice prompt, disabled state, and selection callback.
+ */
+function AssistantChoiceField({
+  choiceRequest,
+  disabled,
+  onSelect,
+}: {
+  choiceRequest: AssistantChoiceRequest
+  disabled: boolean
+  onSelect: (option: string) => void
+}) {
+  return (
+    <div
+      className="mr-7 rounded-xl p-3"
+      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+    >
+      <div className="mb-2 text-xs font-extrabold" style={{ color: 'var(--text-muted)' }}>
+        {choiceRequest.label}
+      </div>
+      <div className="grid gap-2">
+        {choiceRequest.options.map((option) => (
+          <button
+            key={`${choiceRequest.id}_${option}`}
+            type="button"
+            disabled={disabled}
+            onClick={() => onSelect(option)}
+            className="flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+          >
+            <span>{option}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -382,10 +468,6 @@ function renderScriptedStarterResponse(result: AgentRunResult): string {
       '',
       'Next question:',
       'Should I generate the first firmware draft now, or adjust the wiring before code?',
-      '',
-      'Options:',
-      '- Generate firmware',
-      '- Adjust wiring',
     ].join('\n')
   }
 
@@ -396,12 +478,7 @@ function renderScriptedStarterResponse(result: AgentRunResult): string {
       renderStarterPlan(project),
       '',
       'What should change?',
-      '- Button count or button labels',
-      '- Display module',
-      '- Controller board',
-      '- Pin assignments',
-      '',
-      'Reply with the change and I’ll update the bench.',
+      'Describe the change and I’ll update the bench.',
     ].join('\n')
   }
 
@@ -418,11 +495,6 @@ function renderScriptedStarterResponse(result: AgentRunResult): string {
     '',
     'Next question:',
     'What do you want Pip to do next?',
-    '',
-    'Options:',
-    '- Explain the wiring step by step',
-    '- Generate firmware',
-    '- Change the circuit',
   ].join('\n')
 }
 
@@ -525,12 +597,49 @@ function renderClarificationFeedback(result: AgentRunResult): string {
     'I need one detail before I change the bench.',
     '',
     question.question,
-    question.options?.length
-      ? ['', 'Options:', ...question.options.map((option) => `- ${option}`)].join('\n')
-      : null,
     '',
-    'Reply with one option and I’ll continue from this chat.',
+    question.options?.length ? 'Choose an option below and I’ll continue from this chat.' : null,
   ].filter((line): line is string => line !== null).join('\n')
+}
+
+/**
+ * Build a selectable choice request from the latest assistant result.
+ * @param result Latest agent result.
+ */
+function choiceRequestFromResult(result: AgentRunResult | null): AssistantChoiceRequest | null {
+  if (!result) return null
+
+  if (
+    result.status === 'needs_clarification' &&
+    result.state.clarification.status === 'needs_clarification'
+  ) {
+    const question = result.state.clarification.questions[0]
+    if (!question?.options?.length) return null
+    return {
+      id: question.id,
+      label: question.question,
+      options: question.options,
+    }
+  }
+
+  if (!isScriptedStarterResult(result)) return null
+
+  const promptIntent = starterFollowUpIntent(result.state.userPrompt)
+  if (promptIntent === 'firmware') {
+    return {
+      id: 'starter_firmware_next',
+      label: 'Choose the next step',
+      options: ['Generate firmware', 'Adjust wiring'],
+    }
+  }
+
+  if (promptIntent === 'modify') return null
+
+  return {
+    id: 'starter_next',
+    label: 'Choose the next step',
+    options: ['Explain the wiring step by step', 'Generate firmware', 'Change the circuit'],
+  }
 }
 
 /**
@@ -747,7 +856,7 @@ function promptForWorkflow(messages: BenchMessage[], cleanPrompt: string): strin
   const firstUserPrompt = messages.find((message) => message.role === 'user')?.text
   const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant')
   const isClarificationReply =
-    lastAssistant?.text.includes('Reply with one option') ||
+    lastAssistant?.text.includes('Choose an option below') ||
     lastAssistant?.text.includes('What do you want Pip to do next?') ||
     lastAssistant?.text.includes('Should I generate the first firmware draft now')
 
@@ -758,6 +867,28 @@ function promptForWorkflow(messages: BenchMessage[], cleanPrompt: string): strin
     '',
     `Clarification answer: ${cleanPrompt}`,
   ].join('\n')
+}
+
+/**
+ * Build the workflow prompt for a clicked assistant choice.
+ * @param result Latest agent result, when available.
+ * @param messages Existing chat messages before the selected choice.
+ * @param cleanPrompt Selected option text.
+ */
+function promptForChoiceWorkflow(
+  result: AgentRunResult | null,
+  messages: BenchMessage[],
+  cleanPrompt: string,
+): string {
+  if (choiceRequestFromResult(result)) {
+    return [
+      result!.state.userPrompt,
+      '',
+      `Clarification answer: ${cleanPrompt}`,
+    ].join('\n')
+  }
+
+  return promptForWorkflow(messages, cleanPrompt)
 }
 
 /**

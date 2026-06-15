@@ -12,7 +12,8 @@ import {
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { upsertUserProject } from '@/lib/projects/user-projects'
-import type { UserModelOption } from '@/lib/studio/user-models'
+import type { UserModelOption, UserReasoningEffort } from '@/lib/studio/user-models'
+import { resolveUserModel, resolveUserReasoning } from '@/lib/studio/user-models'
 
 /** sessionStorage key for a prompt to run after opening Studio. */
 export const PENDING_PROMPT_KEY = 'berry-studio-pending-prompt'
@@ -20,33 +21,64 @@ export const PENDING_PROMPT_KEY = 'berry-studio-pending-prompt'
 /** sessionStorage key for the selected model on the next agent run. */
 export const PENDING_MODEL_MODE_KEY = 'berry-studio-pending-model-mode'
 
+/** sessionStorage key for the selected model id on the next agent run. */
+export const PENDING_MODEL_ID_KEY = 'berry-studio-pending-model-id'
+
+/** sessionStorage key for the selected model provider on the next agent run. */
+export const PENDING_MODEL_PROVIDER_KEY = 'berry-studio-pending-model-provider'
+
+/** sessionStorage key for the selected reasoning effort on the next agent run. */
+export const PENDING_REASONING_KEY = 'berry-studio-pending-reasoning'
+
 /**
  * Store a custom prompt and model mode for Studio to pick up on load.
  * @param prompt Builder prompt text.
  * @param model Selected user model option.
  */
-export function stashPendingAgentRun(prompt: string, model: UserModelOption): void {
+export function stashPendingAgentRun(
+  prompt: string,
+  model: UserModelOption,
+  reasoningEffort: UserReasoningEffort = 'medium',
+): void {
   if (typeof window === 'undefined') return
   window.sessionStorage.setItem(PENDING_PROMPT_KEY, prompt.trim())
   window.sessionStorage.setItem(PENDING_MODEL_MODE_KEY, model.mode)
+  window.sessionStorage.setItem(PENDING_MODEL_ID_KEY, model.id)
+  window.sessionStorage.setItem(PENDING_MODEL_PROVIDER_KEY, model.provider)
+  window.sessionStorage.setItem(PENDING_REASONING_KEY, reasoningEffort)
 }
 
 /**
  * Read and clear a pending Studio agent prompt, if present.
  */
-export function consumePendingAgentRun(): { prompt: string; mode: UserModelOption['mode'] } | null {
+export function consumePendingAgentRun(): {
+  prompt: string
+  mode: UserModelOption['mode']
+  provider: UserModelOption['provider']
+  model: string
+  reasoningEffort: string
+} | null {
   if (typeof window === 'undefined') return null
   const prompt = window.sessionStorage.getItem(PENDING_PROMPT_KEY)?.trim()
   const mode = window.sessionStorage.getItem(PENDING_MODEL_MODE_KEY)
+  const modelId = window.sessionStorage.getItem(PENDING_MODEL_ID_KEY)
+  const reasoningId = window.sessionStorage.getItem(PENDING_REASONING_KEY)
   window.sessionStorage.removeItem(PENDING_PROMPT_KEY)
   window.sessionStorage.removeItem(PENDING_MODEL_MODE_KEY)
+  window.sessionStorage.removeItem(PENDING_MODEL_ID_KEY)
+  window.sessionStorage.removeItem(PENDING_MODEL_PROVIDER_KEY)
+  window.sessionStorage.removeItem(PENDING_REASONING_KEY)
   if (!prompt) return null
+  const model = resolveUserModel(modelId)
   return {
     prompt,
     mode:
       mode === 'real' || mode === 'deterministic' || mode === 'auto'
         ? mode
         : 'auto',
+    provider: model.provider,
+    model: model.model,
+    reasoningEffort: resolveUserReasoning(reasoningId).id,
   }
 }
 

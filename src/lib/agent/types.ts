@@ -1,5 +1,6 @@
 import type { BuildResult, FirmwareSourceFiles } from '@/lib/build/types'
 import type { CodegenResult } from '@/lib/codegen/types'
+import type { BerryModelProvider, BerryReasoningEffort } from '@/lib/ai/model-registry'
 import type { BerryProject, BoardId, ComponentTypeId } from '@/lib/project/types'
 import type { SimulationResult } from '@/lib/simulation'
 import type { ValidationResult } from '@/lib/validation'
@@ -88,6 +89,9 @@ export interface AgentRunInput {
   project?: BerryProject
   answers?: Record<string, string>
   mode?: 'auto' | 'deterministic' | 'real'
+  provider?: BerryModelProvider
+  model?: string
+  reasoningEffort?: BerryReasoningEffort
 }
 
 /** Shared state carried through a Phase 6 agent workflow. */

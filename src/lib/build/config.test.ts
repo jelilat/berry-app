@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getBuildBackend, resolveCompilerAdapter } from './config'
+import { getBuildBackend, resolveEdgeCompilerAdapter } from './config'
 import { mockCompilerAdapter } from './mock'
-import { localPlatformIOAdapter } from './platformio'
 import { remoteCompilerAdapter } from './remote'
 
 const ORIGINAL_ENV = process.env.BERRY_BUILD_BACKEND
+const ORIGINAL_CF_PAGES = process.env.CF_PAGES
 
 afterEach(() => {
   if (ORIGINAL_ENV === undefined) {
@@ -12,12 +12,24 @@ afterEach(() => {
   } else {
     process.env.BERRY_BUILD_BACKEND = ORIGINAL_ENV
   }
+  if (ORIGINAL_CF_PAGES === undefined) {
+    delete process.env.CF_PAGES
+  } else {
+    process.env.CF_PAGES = ORIGINAL_CF_PAGES
+  }
 })
 
 describe('getBuildBackend', () => {
-  it('defaults to local when unset', () => {
+  it('defaults to local when unset outside Cloudflare Pages', () => {
     delete process.env.BERRY_BUILD_BACKEND
+    delete process.env.CF_PAGES
     expect(getBuildBackend()).toBe('local')
+  })
+
+  it('defaults to mock on Cloudflare Pages when unset', () => {
+    delete process.env.BERRY_BUILD_BACKEND
+    process.env.CF_PAGES = '1'
+    expect(getBuildBackend()).toBe('mock')
   })
 
   it('returns mock when configured', () => {
@@ -32,23 +44,25 @@ describe('getBuildBackend', () => {
 
   it('falls back to local for unknown values', () => {
     process.env.BERRY_BUILD_BACKEND = 'unknown'
+    delete process.env.CF_PAGES
     expect(getBuildBackend()).toBe('local')
   })
 })
 
-describe('resolveCompilerAdapter', () => {
+describe('resolveEdgeCompilerAdapter', () => {
   it('selects the mock adapter when backend is mock', () => {
     process.env.BERRY_BUILD_BACKEND = 'mock'
-    expect(resolveCompilerAdapter()).toBe(mockCompilerAdapter)
+    expect(resolveEdgeCompilerAdapter()).toBe(mockCompilerAdapter)
   })
 
   it('selects the remote adapter when backend is remote', () => {
     process.env.BERRY_BUILD_BACKEND = 'remote'
-    expect(resolveCompilerAdapter()).toBe(remoteCompilerAdapter)
+    expect(resolveEdgeCompilerAdapter()).toBe(remoteCompilerAdapter)
   })
 
-  it('selects the local adapter by default', () => {
+  it('selects the mock adapter when backend is local', () => {
     delete process.env.BERRY_BUILD_BACKEND
-    expect(resolveCompilerAdapter()).toBe(localPlatformIOAdapter)
+    delete process.env.CF_PAGES
+    expect(resolveEdgeCompilerAdapter()).toBe(mockCompilerAdapter)
   })
 })

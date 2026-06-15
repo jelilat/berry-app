@@ -1,3 +1,4 @@
+export { compileFirmwareEdge } from './compile-edge'
 export { loadBuildArtifact, loadBuildArtifactBinary, persistBuildArtifact } from './artifacts'
 export { compileFirmware } from './build'
 export { computeFirmwareHash } from './hash'

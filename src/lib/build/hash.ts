@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type { BerryProject } from '@/lib/project/types'
 import type { FirmwareSourceFiles } from './types'
 
@@ -21,15 +20,27 @@ function stableStringify(value: unknown): string {
 }
 
 /**
+ * Encode a SHA-256 digest as lowercase hex (Edge-compatible via Web Crypto).
+ * @param data Bytes to hash.
+ */
+async function sha256Hex(data: Uint8Array): Promise<string> {
+  const copy = new Uint8Array(data)
+  const digest = await crypto.subtle.digest('SHA-256', copy)
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/**
  * Compute the content hash tying a project graph to the firmware files built from it.
  * @param project Parsed Berry project.
  * @param files Firmware source files included in the build.
  */
-export function computeFirmwareHash(project: BerryProject, files: FirmwareSourceFiles): string {
+export async function computeFirmwareHash(
+  project: BerryProject,
+  files: FirmwareSourceFiles,
+): Promise<string> {
   const normalizedFiles = Object.fromEntries(
     Object.entries(files).sort(([left], [right]) => left.localeCompare(right)),
   )
-  return createHash('sha256')
-    .update(stableStringify({ project, files: normalizedFiles }))
-    .digest('hex')
+  const payload = stableStringify({ project, files: normalizedFiles })
+  return sha256Hex(new TextEncoder().encode(payload))
 }

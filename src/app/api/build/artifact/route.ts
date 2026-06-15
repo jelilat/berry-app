@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { loadBuildArtifact } from '@/lib/build/artifacts'
 
+export const runtime = 'edge'
+
 /**
  * GET /api/build/artifact?hash=... — download a cached firmware binary by hash.
  */

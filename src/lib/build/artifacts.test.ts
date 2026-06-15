@@ -4,7 +4,7 @@ import { loadBuildArtifact, persistBuildArtifact } from './artifacts'
 describe('persistBuildArtifact', () => {
   it('stores and reloads firmware bytes by hash', async () => {
     const hash = 'test-hash-' + Date.now()
-    const binary = Buffer.from([0x01, 0x02, 0x03, 0x04])
+    const binary = new Uint8Array([0x01, 0x02, 0x03, 0x04])
 
     const stored = await persistBuildArtifact(
       hash,
@@ -17,7 +17,7 @@ describe('persistBuildArtifact', () => {
     expect(stored.downloadUrl).toContain(encodeURIComponent(hash))
 
     const loaded = await loadBuildArtifact(hash)
-    expect(loaded?.binary.equals(binary)).toBe(true)
+    expect(loaded?.binary).toEqual(binary)
     expect(loaded?.filename).toBe('firmware.bin')
   })
 })

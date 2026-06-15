@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { computeFirmwareHash, loadBuildArtifact, type FirmwareSourceFiles } from '@/lib/build'
+import { computeFirmwareHash } from '@/lib/build/hash'
+import { loadBuildArtifact } from '@/lib/build/artifacts'
+import type { FirmwareSourceFiles } from '@/lib/build/types'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import {
   SimulationInputError,
@@ -9,6 +11,8 @@ import {
 } from '@/lib/simulation'
 import { hasValidationErrors, validate } from '@/lib/validation'
 import type { ValidationResult } from '@/lib/validation'
+
+export const runtime = 'edge'
 
 /**
  * Type guard: value is a non-null, non-array object.
@@ -101,7 +105,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const expectedHash = computeFirmwareHash(project, files)
+    const expectedHash = await computeFirmwareHash(project, files)
     if (artifact.firmwareHash !== expectedHash) {
       return NextResponse.json(
         {

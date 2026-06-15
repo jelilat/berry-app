@@ -5,11 +5,11 @@ import type { BuildArtifact, CachedBuildArtifact } from './types'
 const artifactCache = new Map<string, CachedBuildArtifact>()
 
 /**
- * Convert binary-like input into a standalone byte array.
+ * Normalize binary input into a standalone byte array.
  * @param binary Compiled firmware bytes.
  */
-function toBuffer(binary: Uint8Array): Buffer {
-  return Buffer.from(binary)
+function toBytes(binary: Uint8Array): Uint8Array {
+  return binary.slice()
 }
 
 /**
@@ -35,7 +35,7 @@ export async function persistBuildArtifact(
   binaryPath: string,
   files: string[] = ['src/main.cpp', 'platformio.ini'],
 ): Promise<BuildArtifact> {
-  const bytes = toBuffer(binary)
+  const bytes = toBytes(binary)
   const filename = binaryPath.split('/').pop() ?? 'firmware.bin'
   const artifact: CachedBuildArtifact = {
     board,
@@ -68,5 +68,5 @@ export async function loadBuildArtifact(firmwareHash: string): Promise<CachedBui
  */
 export async function loadBuildArtifactBinary(firmwareHash: string): Promise<Uint8Array | null> {
   const binary = artifactCache.get(firmwareHash)?.binary
-  return binary ? toBuffer(binary) : null
+  return binary ? toBytes(binary) : null
 }

@@ -252,7 +252,7 @@ export async function compileWithPlatformIO(input: BuildInput): Promise<BuildRes
     }
 
     const binary = await readFile(artifactPath)
-    const firmwareHash = computeFirmwareHash(project, files)
+    const firmwareHash = await computeFirmwareHash(project, files)
     const stored = await persistBuildArtifact(
       firmwareHash,
       project.board,

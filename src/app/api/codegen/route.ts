@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { generateFirmwareFromProject } from '@/lib/codegen/generate'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 
+export const runtime = 'edge'
+
 /**
  * Type guard: value is a non-null, non-array object.
  * @param value Untrusted JSON value.

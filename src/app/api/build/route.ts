@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
-import { compileFirmware, type FirmwareSourceFiles } from '@/lib/build'
+import { compileFirmwareEdge } from '@/lib/build/compile-edge'
+import type { FirmwareSourceFiles } from '@/lib/build/types'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import { hasValidationErrors, validate } from '@/lib/validation'
 import type { ValidationResult } from '@/lib/validation'
+
+export const runtime = 'edge'
 
 /**
  * Type guard: value is a non-null, non-array object.
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const result = await compileFirmware({ project, files })
+    const result = await compileFirmwareEdge({ project, files })
     return NextResponse.json(result, { status: result.ok ? 200 : 400 })
   } catch (error) {
     if (error instanceof ProjectParseError) {

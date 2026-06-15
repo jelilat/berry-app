@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseRouteClient } from '@/lib/auth/supabase-server'
 
+export const runtime = 'edge'
+
 /**
  * GET /auth/callback exchanges a Google OAuth code for Supabase session cookies.
  * @param request OAuth callback request from Supabase.

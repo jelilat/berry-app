@@ -31,7 +31,7 @@ export interface BuildArtifact {
   filename?: string
   downloadUrl?: string
   contentType?: string
-  binary?: Buffer
+  binary?: Uint8Array
   createdAt: string
 }
 
@@ -40,7 +40,7 @@ export interface CachedBuildArtifact extends BuildArtifact {
   filename: string
   downloadUrl: string
   contentType: string
-  binary: Buffer
+  binary: Uint8Array
 }
 
 /** Result returned by the build API and agent workflow. */

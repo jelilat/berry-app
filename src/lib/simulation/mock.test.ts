@@ -27,7 +27,9 @@ function loadEsp32BlinkProject() {
  * Compute a firmware hash for the example blink project.
  * @param project Parsed example project.
  */
-function exampleFirmwareHash(project: ReturnType<typeof loadEsp32BlinkProject>): string {
+async function exampleFirmwareHash(
+  project: ReturnType<typeof loadEsp32BlinkProject>,
+): Promise<string> {
   return computeFirmwareHash(project, {
     'src/main.cpp': createEsp32BlinkFirmwareSource(),
   })
@@ -41,9 +43,9 @@ function exampleFirmwareFiles() {
 }
 
 describe('simulation result contract', () => {
-  it('returns passed status with firmwareHash, logs, and errors array', () => {
+  it('returns passed status with firmwareHash, logs, and errors array', async () => {
     const project = loadEsp32BlinkProject()
-    const firmwareHash = exampleFirmwareHash(project)
+    const firmwareHash = await exampleFirmwareHash(project)
     const result = simulateProject({
       project,
       artifact: { firmwareHash },
@@ -88,10 +90,10 @@ describe('detectEsp32LedBlinkCircuit', () => {
 })
 
 describe('simulateProject (Arduino Uno)', () => {
-  it('passes mock blink simulation for the Arduino Uno reference circuit', () => {
+  it('passes mock blink simulation for the Arduino Uno reference circuit', async () => {
     const { project } = studioCreateArduinoUnoLedBlinkProject()
     const files = { 'src/main.cpp': generateFirmwareFromProject(project).source }
-    const firmwareHash = computeFirmwareHash(project, files)
+    const firmwareHash = await computeFirmwareHash(project, files)
 
     const result = simulateProject({
       project,
@@ -107,9 +109,9 @@ describe('simulateProject (Arduino Uno)', () => {
 })
 
 describe('simulateProject', () => {
-  it('passes mock blink simulation for the ESP32 LED example with deterministic logs', () => {
+  it('passes mock blink simulation for the ESP32 LED example with deterministic logs', async () => {
     const project = loadEsp32BlinkProject()
-    const firmwareHash = exampleFirmwareHash(project)
+    const firmwareHash = await exampleFirmwareHash(project)
     const first = simulateProject({
       project,
       artifact: { firmwareHash },
@@ -127,9 +129,9 @@ describe('simulateProject', () => {
     expect(first).toEqual(second)
   })
 
-  it('returns unsupported for projects outside the demo circuit profile', () => {
+  it('returns unsupported for projects outside the demo circuit profile', async () => {
     const project = createStarterProject()
-    const firmwareHash = computeFirmwareHash(project, {
+    const firmwareHash = await computeFirmwareHash(project, {
       'src/main.cpp': '#include <Arduino.h>\n',
     })
     const result = simulateProject({
@@ -168,9 +170,9 @@ describe('simulateProject', () => {
     expect(result.firmwareHash).toBe(firmwareHash)
   })
 
-  it('returns unsupported when blink source behavior is absent', () => {
+  it('returns unsupported when blink source behavior is absent', async () => {
     const project = loadEsp32BlinkProject()
-    const firmwareHash = computeFirmwareHash(project, {
+    const firmwareHash = await computeFirmwareHash(project, {
       'src/main.cpp': '#include <Arduino.h>\nvoid setup() {}\nvoid loop() {}\n',
     })
     const result = simulateProject({

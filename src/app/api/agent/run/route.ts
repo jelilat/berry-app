@@ -3,6 +3,8 @@ import { runAgentWorkflow } from '@/lib/agent/workflow'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import type { AgentRunInput } from '@/lib/agent/types'
 
+export const runtime = 'edge'
+
 /**
  * Type guard: value is a non-null, non-array object.
  * @param value Untrusted JSON value.

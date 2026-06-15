@@ -132,7 +132,7 @@ describe('POST /api/simulate', () => {
     const project = loadExampleProject()
     const parsedProject = parseBerryProject(project)
     const files = exampleFirmwareFiles()
-    const firmwareHash = computeFirmwareHash(parsedProject, files)
+    const firmwareHash = await computeFirmwareHash(parsedProject, files)
     await cacheExampleArtifact(firmwareHash)
 
     const response = await POST(
@@ -155,7 +155,7 @@ describe('POST /api/simulate', () => {
     const project = loadExampleProject()
     const parsedProject = parseBerryProject(project)
     const files = exampleFirmwareFiles()
-    const firmwareHash = computeFirmwareHash(parsedProject, files)
+    const firmwareHash = await computeFirmwareHash(parsedProject, files)
     await cacheExampleArtifact(firmwareHash)
 
     const response = await POST(
@@ -189,7 +189,7 @@ describe('POST /api/simulate', () => {
     const project = loadExampleProject()
     const parsedProject = parseBerryProject(project)
     const files = { 'src/main.cpp': `${createEsp32BlinkFirmwareSource()}\n// uncached ${Date.now()}\n` }
-    const firmwareHash = computeFirmwareHash(parsedProject, files)
+    const firmwareHash = await computeFirmwareHash(parsedProject, files)
 
     const response = await POST(
       simulateRequest({

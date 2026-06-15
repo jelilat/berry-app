@@ -23,7 +23,7 @@ function hasMockCompileErrorMarker(source: string): boolean {
  */
 function createMockFirmwareBinary(firmwareHash: string): Uint8Array {
   const header = `berry.mock-firmware:${firmwareHash}\n`
-  return Buffer.from(header.repeat(1024), 'utf8')
+  return new TextEncoder().encode(header.repeat(1024))
 }
 
 /**
@@ -78,7 +78,7 @@ export async function compileWithMock(input: MockCompileInput): Promise<BuildRes
     ...input.files,
     'platformio.ini': input.files['platformio.ini'] ?? resolvePlatformioIni(input.project.board),
   }
-  const firmwareHash = computeFirmwareHash(input.project, files)
+  const firmwareHash = await computeFirmwareHash(input.project, files)
   const environment = resolvePlatformioEnvironment(input.project.board)
   const binaryPath = `.pio/build/${environment}/firmware.bin`
   const artifact = await persistBuildArtifact(

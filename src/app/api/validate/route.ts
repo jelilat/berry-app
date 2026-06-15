@@ -3,6 +3,8 @@ import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import { hasValidationErrors, validate } from '@/lib/validation'
 import type { ValidationResult } from '@/lib/validation'
 
+export const runtime = 'edge'
+
 /**
  * Type guard: value is a non-null, non-array object.
  * @param value Untrusted JSON value.

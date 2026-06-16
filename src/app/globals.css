@@ -81,6 +81,109 @@ body {
   animation: draw 1.7s ease-out forwards;
 }
 
+@keyframes build-hammer {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  18% {
+    transform: rotate(-14deg) translateY(1px);
+  }
+  36% {
+    transform: rotate(10deg) translateY(-1px);
+  }
+  54% {
+    transform: rotate(-8deg) translateY(0);
+  }
+  72% {
+    transform: rotate(5deg) translateY(0);
+  }
+}
+
+@keyframes build-glow {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(214, 51, 108, 0);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(214, 51, 108, 0.18);
+  }
+}
+
+@keyframes build-stack {
+  0%,
+  12% {
+    opacity: 0.28;
+    transform: scaleY(0.35);
+  }
+  28%,
+  72% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  88%,
+  100% {
+    opacity: 0.28;
+    transform: scaleY(0.35);
+  }
+}
+
+@keyframes build-scan {
+  0% {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+}
+
+.brand-build-badge {
+  animation: build-glow 2.4s ease-in-out infinite;
+}
+
+.brand-build-icon {
+  transform-origin: 70% 85%;
+  animation: build-hammer 1.8s ease-in-out infinite;
+}
+
+.brand-build-block {
+  display: block;
+  width: 5px;
+  border-radius: 1px;
+  background: var(--accent);
+  transform-origin: bottom center;
+  animation: build-stack 1.8s ease-in-out infinite;
+}
+
+.brand-build-scan {
+  position: absolute;
+  inset-inline: 0;
+  height: 40%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(214, 51, 108, 0.14) 48%,
+    transparent 100%
+  );
+  animation: build-scan 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-build-badge,
+  .brand-build-icon,
+  .brand-build-block,
+  .brand-build-scan {
+    animation: none !important;
+  }
+}
+
 /* Studio bench: selection ring lives on the part, not React Flow's group rect */
 .berry-studio-flow .react-flow__nodesselection {
   display: none;

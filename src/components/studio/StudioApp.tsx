@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AiComingSoonModal } from '@/components/AiComingSoonModal'
 import { loadBerryProjectFromJson } from '@/lib/project/io'
 import {
   addComponent,
@@ -43,6 +44,7 @@ import {
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { consumePendingAgentRun } from '@/lib/studio/session-bootstrap'
+import { isLedBlinkPrompt } from '@/lib/studio/ai-availability'
 import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
 import { hasSupabaseBrowserConfig, isAuthEnabled } from '@/lib/auth/config'
 import {
@@ -172,6 +174,7 @@ export function StudioApp() {
   const [agentLoading, setAgentLoading] = useState(false)
   const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
   const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPrompt | null>(null)
+  const [comingSoonOpen, setComingSoonOpen] = useState(false)
   const [validationFlyoutOpen, setValidationFlyoutOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
@@ -368,6 +371,12 @@ export function StudioApp() {
     reasoningEffort?: string,
   ) => {
     if (agentLoading || prompt.trim().length === 0) return
+    if (!isLedBlinkPrompt(prompt)) {
+      setComingSoonOpen(true)
+      setAgentResult(null)
+      setErrorMessage(null)
+      return
+    }
     setAgentLoading(true)
     setAgentResult(null)
     setErrorMessage(null)
@@ -949,6 +958,11 @@ export function StudioApp() {
           onOpenChange={setTerminalOpen}
           onClearBuild={() => setBuildResult(null)}
           onClearSimulation={() => setSimulationResult(null)}
+        />
+
+        <AiComingSoonModal
+          open={comingSoonOpen}
+          onClose={() => setComingSoonOpen(false)}
         />
 
         {/* {viewMode === '2d' && !isEmpty && (

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Check, ChevronDown } from 'lucide-react'
 import { brand } from '@/lib/brand'
+import { AiComingSoonModal } from '@/components/AiComingSoonModal'
 import { authSessionFromUser, type AuthSession } from '@/lib/auth/session'
 import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
 import {
@@ -32,6 +33,7 @@ import {
   bootstrapSavedProject,
   stashPendingAgentRun,
 } from '@/lib/studio/session-bootstrap'
+import { isLedBlinkPrompt } from '@/lib/studio/ai-availability'
 import { saveFirmwareSourceToStorage, saveProjectToStorage } from '@/lib/studio/storage'
 import { createDefaultFirmwareSource } from '@/lib/firmware/source'
 import { BUILDER_TEMPLATES } from '@/lib/studio/templates'
@@ -67,6 +69,7 @@ export function BuilderHome() {
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
+  const [comingSoonOpen, setComingSoonOpen] = useState(false)
   const [bootstrapping, setBootstrapping] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [promptFocused, setPromptFocused] = useState(false)
@@ -222,6 +225,11 @@ export function BuilderHome() {
   const handleSubmitPrompt = useCallback(async () => {
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || bootstrapping) return
+
+    if (!isLedBlinkPrompt(cleanPrompt)) {
+      setComingSoonOpen(true)
+      return
+    }
 
     if (authRequired && !session) {
       setLoginOpen(true)
@@ -613,6 +621,10 @@ export function BuilderHome() {
         onClose={() => setLoginOpen(false)}
         onGoogleSignIn={handleGoogleSignIn}
         onEmailSignIn={handleEmailSignIn}
+      />
+      <AiComingSoonModal
+        open={comingSoonOpen}
+        onClose={() => setComingSoonOpen(false)}
       />
     </div>
   )

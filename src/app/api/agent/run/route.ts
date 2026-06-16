@@ -4,6 +4,7 @@ import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import type { AgentRunInput } from '@/lib/agent/types'
 import type { BerryModelProvider } from '@/lib/ai/model-registry'
 import { resolveUserReasoning, USER_MODEL_OPTIONS } from '@/lib/studio/user-models'
+import { AI_COMING_SOON_MESSAGE, isLedBlinkPrompt } from '@/lib/studio/ai-availability'
 
 export const runtime = 'edge'
 
@@ -86,6 +87,12 @@ export async function POST(request: Request) {
 
   try {
     const input = parseAgentRunInput(body)
+    if (!isLedBlinkPrompt(input.prompt)) {
+      return NextResponse.json(
+        { error: AI_COMING_SOON_MESSAGE, status: 'coming_soon' },
+        { status: 501 },
+      )
+    }
     const result = await runAgentWorkflow(input)
     const status = result.status === 'failed' ? 500 : 200
     return NextResponse.json(result, { status })

@@ -36,6 +36,15 @@ describe('POST /api/agent/run', () => {
     expect(json.state.simulationResult.status).toBe('passed')
   })
 
+  it('returns coming soon for non-blink AI prompts', async () => {
+    const response = await POST(agentRunRequest({ prompt: 'Build a smart plant monitor' }))
+    const json = await response.json()
+
+    expect(response.status).toBe(501)
+    expect(json.status).toBe('coming_soon')
+    expect(json.error).toContain('coming soon')
+  })
+
   it('returns 400 when prompt is missing', async () => {
     const response = await POST(agentRunRequest({}))
     const json = await response.json()

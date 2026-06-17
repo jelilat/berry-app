@@ -192,14 +192,10 @@ export function BuilderHome() {
    */
   const handleTemplateSelect = useCallback(
     async (templateId: string) => {
-      const template = BUILDER_TEMPLATES.find((candidate) => candidate.id === templateId)
       setBootstrapping(true)
       setErrorMessage(null)
       try {
         const project = await bootstrapBuilderTemplate(templateId, { saveForUser: false })
-        if (template) {
-          stashPendingAgentRun(template.prompt, selectedModel, selectedReasoning.id)
-        }
         if (session && cloudSyncEnabled) {
           const supabase = createSupabaseBrowserClient()
           const entry = await upsertCloudUserProject(supabase, project)
@@ -216,7 +212,7 @@ export function BuilderHome() {
         setBootstrapping(false)
       }
     },
-    [cloudSyncEnabled, refreshProjects, router, selectedModel, selectedReasoning.id, session],
+    [cloudSyncEnabled, refreshProjects, router, session],
   )
 
   /**

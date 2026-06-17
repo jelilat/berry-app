@@ -95,6 +95,7 @@ function resolveBlinkBoard(text: string): BoardId {
  * @param board Target board id.
  */
 function boardName(board: BoardId): string {
+  if (board === 'esp32-devkit-v1') return 'ESP32'
   return getBoardProfile(board).name
 }
 

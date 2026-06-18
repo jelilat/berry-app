@@ -398,6 +398,17 @@ describe("connectTerminals", () => {
     ).toThrow(/F–F/);
   });
 
+  it("rejects M–M when connecting a male component pin to a breadboard hole", () => {
+    expect(() =>
+      connectTerminals(
+        breadboardProject(),
+        { componentId: "led_1", terminalId: "anode" },
+        { breadboardId: "breadboard_1", site: breadboardHole("a", 30) },
+        { connectors: { start: "male", end: "male" } },
+      ),
+    ).toThrow(/M–F/);
+  });
+
   it("stores visual wire endpoints for rerouting", () => {
     const p = connectTerminals(
       minimalProject(),

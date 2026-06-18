@@ -2,7 +2,6 @@ import type { Node } from '@xyflow/react'
 import type { BerryProject, Wire, Vec3 } from '@/lib/project/types'
 import type { WireEndpointRef } from '@/lib/project/mutations'
 import {
-  anchorWireRoutePoints,
   isBreadboardHoleRef,
   resolveWireTerminalRefs,
   wireHasBreadboardEndpoint,
@@ -98,6 +97,68 @@ export function buildVisualWireCanvasPoints(
 }
 
 /**
+ * Keep stored interior bends while pinning endpoints to visual pin/hole positions.
+ * @param project Berry project.
+ * @param from Start endpoint.
+ * @param to End endpoint.
+ * @param points Stored wire polyline in scene space.
+ * @param registry Runtime Wokwi pin layouts.
+ * @param scale Pixels per scene unit.
+ * @param positionOverrides Optional component top-left overrides (scene units).
+ */
+function anchorVisualWireCanvasPoints(
+  project: BerryProject,
+  from: WireEndpointRef,
+  to: WireEndpointRef,
+  points: Vec3[],
+  registry: PinLayoutRegistry,
+  scale: number,
+  positionOverrides?: Map<string, { x: number; y: number }>,
+): { x: number; y: number }[] | null {
+  const start = endpointCanvasPosition(project, from, registry, scale, positionOverrides)
+  const end = endpointCanvasPosition(project, to, registry, scale, positionOverrides)
+  if (!start || !end) return null
+  if (points.length < 2) return orthogonalWireRoute(start, end)
+
+  return points.map((point, index) => {
+    if (index === 0) return start
+    if (index === points.length - 1) return end
+    return { x: point.x * scale, y: point.y * scale }
+  })
+}
+
+/**
+ * Scene-space wrapper for {@link anchorVisualWireCanvasPoints}.
+ * @param project Berry project.
+ * @param from Start endpoint.
+ * @param to End endpoint.
+ * @param points Stored wire polyline in scene space.
+ * @param registry Runtime Wokwi pin layouts.
+ * @param scale Pixels per scene unit.
+ */
+function anchorVisualWirePoints(
+  project: BerryProject,
+  from: WireEndpointRef,
+  to: WireEndpointRef,
+  points: Vec3[],
+  registry: PinLayoutRegistry,
+  scale: number,
+): Vec3[] {
+  const canvasPoints = anchorVisualWireCanvasPoints(
+    project,
+    from,
+    to,
+    points,
+    registry,
+    scale,
+  )
+  if (!canvasPoints) {
+    throw new Error('Terminal not found for visual wire points')
+  }
+  return canvasPoints.map((p) => position2d(p.x / scale, p.y / scale))
+}
+
+/**
  * Canvas pixel position of a wire endpoint (component terminal or breadboard hole).
  * @param project Berry project.
  * @param ref Wire endpoint reference.
@@ -164,7 +225,7 @@ export function rerouteWiresVisual(
 
     const nextPoints =
       wire.route === 'manual' || wireHasBreadboardEndpoint(wire)
-        ? anchorWireRoutePoints(project, from, to, wire.points)
+        ? anchorVisualWirePoints(project, from, to, wire.points, registry, scale)
         : buildVisualWirePoints(project, from, to, registry, scale)
     if (wirePointsEqual(wire.points, nextPoints)) return wire
 
@@ -282,8 +343,15 @@ export function wireOverlayCanvasPoints(
   positionOverrides?: Map<string, { x: number; y: number }>,
 ): { x: number; y: number }[] | null {
   if (wireHasBreadboardEndpoint(wire) || wire.route === 'manual') {
-    const scenePoints = anchorWireRoutePoints(project, from, to, wire.points)
-    return scenePoints.map((p) => ({ x: p.x * scale, y: p.y * scale }))
+    return anchorVisualWireCanvasPoints(
+      project,
+      from,
+      to,
+      wire.points,
+      registry,
+      scale,
+      positionOverrides,
+    )
   }
   return buildVisualWireCanvasPoints(
     project,

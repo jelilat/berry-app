@@ -13,6 +13,7 @@ import {
 import { projectToFlowNodes } from '@/lib/studio/flow-map'
 import { SCENE_SCALE } from '@/lib/studio/constants'
 import { sceneToFlowPosition } from '@/lib/studio/layout'
+import { terminalCanvasPosition } from '@/lib/studio/studio-terminal-layout'
 
 function minimalProject(): BerryProject {
   return parseBerryProject({
@@ -127,5 +128,58 @@ describe('wire-routing', () => {
     const overlay = projectToLiveWireOverlay(wired, new PinLayoutRegistry(), SCENE_SCALE)
     expect(overlay[0].points).toHaveLength(4)
     expect(overlay[0].points[1].x).toBeCloseTo(0.4 * SCENE_SCALE, 4)
+  })
+
+  it('anchors component-to-breadboard wires to visual component pins', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'button wire' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0.1, y: 0.1, z: 0 } },
+        },
+        {
+          id: 'button_1',
+          type: 'push-button',
+          transform: { position: { x: 0.3, y: 0.02, z: 0 } },
+        },
+      ],
+      nets: [],
+      wires: [],
+    })
+    const registry = new PinLayoutRegistry()
+    registry.merge('button_1', {
+      pin1: { x: 0.25, y: 0.25 },
+      pin2: { x: 0.25, y: 0.75 },
+    })
+    const wired = connectTerminals(
+      project,
+      { componentId: 'button_1', terminalId: 'pin2' },
+      { breadboardId: 'breadboard_1', site: breadboardHole('b', 18) },
+      {
+        connectors: { start: 'male', end: 'female' },
+        points: [
+          { x: 0, y: 0, z: 0 },
+          { x: 0.22, y: 0.2, z: 0 },
+          { x: 0.3, y: 0.3, z: 0 },
+        ],
+      },
+    )
+
+    const overlay = projectToLiveWireOverlay(wired, registry, SCENE_SCALE)
+    const visualPin = terminalCanvasPosition(
+      wired,
+      'button_1',
+      'pin2',
+      SCENE_SCALE,
+      registry,
+    )
+
+    expect(visualPin).not.toBeNull()
+    expect(overlay[0].points[0]).toEqual(visualPin)
+    expect(overlay[0].points[1]).toEqual({ x: 0.22 * SCENE_SCALE, y: 0.2 * SCENE_SCALE })
   })
 })

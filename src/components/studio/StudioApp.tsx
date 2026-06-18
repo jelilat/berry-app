@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AiComingSoonModal } from '@/components/AiComingSoonModal'
 import { loadBerryProjectFromJson } from '@/lib/project/io'
 import {
   addComponent,
@@ -19,7 +18,7 @@ import {
 } from '@/lib/project/mutations'
 import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
 import { getComponentDefinition, getWireTemplate } from '@/lib/project/catalog'
-import type { BerryProject, BreadboardSite, ComponentTypeId } from '@/lib/project/types'
+import type { BerryProject, BreadboardSite, ComponentTypeId, WireTypeId } from '@/lib/project/types'
 import {
   createDefaultFirmwareSource,
   createEsp32BlinkFirmwareSource,
@@ -27,7 +26,12 @@ import {
 } from '@/lib/firmware/source'
 import type { BuildResult } from '@/lib/build/types'
 import type { SimulationResult } from '@/lib/simulation'
-import type { AgentRunResult } from '@/lib/agent/types'
+import type {
+  AgentAnswerSubmission,
+  AgentBackendRunAccepted,
+  AgentBackendRunRecord,
+  AgentRunResult,
+} from '@/lib/agent/types'
 import {
   isEditableFirmwareWorktreePath,
   isPreviewFirmwareWorktreePath,
@@ -44,7 +48,6 @@ import {
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { consumePendingAgentRun } from '@/lib/studio/session-bootstrap'
-import { isLedBlinkPrompt } from '@/lib/studio/ai-availability'
 import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
 import { hasSupabaseBrowserConfig, isAuthEnabled } from '@/lib/auth/config'
 import {
@@ -67,6 +70,92 @@ import type { StudioViewMode } from './ViewModeToggle'
 import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
+
+const AGENT_POLL_INTERVAL_MS = 1200
+const AGENT_MAX_POLL_ATTEMPTS = 75
+
+/**
+ * Wait for a fixed number of milliseconds.
+ * @param ms Delay duration in milliseconds.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+/**
+ * Parse a fetch response as JSON, returning a stable error object when parsing fails.
+ * @param response Fetch response to parse.
+ */
+async function parseJsonResponse(response: Response): Promise<unknown> {
+  return response.json().catch(() => ({ error: 'Agent API returned invalid JSON' }))
+}
+
+/**
+ * True when a backend run status no longer needs polling.
+ * @param record Hosted agent run record.
+ */
+function isTerminalAgentRun(record: AgentBackendRunRecord): boolean {
+  return (
+    record.status === 'needs_clarification' ||
+    record.status === 'completed' ||
+    record.status === 'failed'
+  )
+}
+
+/**
+ * Poll the local proxy until a hosted agent run reaches a terminal status.
+ * @param runId Hosted backend run id.
+ * @throws Error when polling fails or times out.
+ */
+async function pollAgentRun(runId: string): Promise<AgentBackendRunRecord> {
+  for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await sleep(AGENT_POLL_INTERVAL_MS)
+    }
+    const response = await fetch(`/api/agent/run/${encodeURIComponent(runId)}`)
+    const json = await parseJsonResponse(response)
+    if (!response.ok) {
+      const error = json as { error?: string }
+      throw new Error(error.error ?? 'Agent status request failed')
+    }
+    const record = json as AgentBackendRunRecord
+    if (isTerminalAgentRun(record)) {
+      return record
+    }
+  }
+  throw new Error('Agent run timed out while waiting for the backend')
+}
+
+/**
+ * Extract the workflow result from a terminal hosted run record.
+ * @param record Hosted agent run record.
+ */
+function resultFromRunRecord(record: AgentBackendRunRecord): AgentRunResult | null {
+  if (record.result?.state) {
+    return record.result
+  }
+  if (record.status === 'failed') {
+    return {
+      ok: false,
+      status: 'failed',
+      error: record.error ?? 'Agent workflow failed',
+      state: {
+        runId: record.runId,
+        userPrompt: record.input?.prompt ?? '',
+        clarification: {
+          status: 'ready',
+          normalizedGoal: record.input?.prompt ?? '',
+          assumptions: [],
+        },
+        project: createEmptyProject(),
+        firmwareFiles: {},
+        validationResults: [],
+        timeline: [],
+      },
+    }
+  }
+  return null
+}
 
 /**
  * Create the local chat namespace for a loaded bench project.
@@ -163,7 +252,7 @@ export function StudioApp() {
   const [status, setStatus] = useState<StudioStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<StudioViewMode>('2d')
-  const [activeWireType, setActiveWireType] = useState<ComponentTypeId>('jumper-mm')
+  const [activeWireType, setActiveWireType] = useState<WireTypeId>('jumper-mm')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
   const [pipelineNotice, setPipelineNotice] = useState<string | null>(null)
@@ -172,9 +261,9 @@ export function StudioApp() {
   const [simulateLoading, setSimulateLoading] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [agentLoading, setAgentLoading] = useState(false)
+  const [agentWaitingForAnswers, setAgentWaitingForAnswers] = useState(false)
   const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
   const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPrompt | null>(null)
-  const [comingSoonOpen, setComingSoonOpen] = useState(false)
   const [validationFlyoutOpen, setValidationFlyoutOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
@@ -190,6 +279,7 @@ export function StudioApp() {
       provider?: string,
       model?: string,
       reasoningEffort?: string,
+      answerSubmission?: AgentAnswerSubmission,
     ) => Promise<void>
   >(async () => {})
   const initialProjectRef = useRef<BerryProject | null>(null)
@@ -369,58 +459,70 @@ export function StudioApp() {
     provider?: string,
     model?: string,
     reasoningEffort?: string,
+    answerSubmission?: AgentAnswerSubmission,
   ) => {
     if (agentLoading || prompt.trim().length === 0) return
-    if (!isLedBlinkPrompt(prompt)) {
-      setComingSoonOpen(true)
-      setAgentResult(null)
-      setErrorMessage(null)
-      return
-    }
+    if (agentWaitingForAnswers && !answerSubmission) return
     setAgentLoading(true)
+    setAgentWaitingForAnswers(false)
     setAgentResult(null)
     setErrorMessage(null)
     try {
-      const response = await fetch('/api/agent/run', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, project, mode, provider, model, reasoningEffort }),
-      })
-      const json = await response.json()
-      if (json.state) {
-        const result = json as AgentRunResult
-        setAgentResult(result)
-        if (result.status === 'completed') {
-          skipNextPipelineResetRef.current = true
-          const completedProject = replaceProject(
-            preserveProjectIdentity(project, result.state.project),
-          )
-          resetProject(completedProject)
-          setProjectChatKey(createProjectChatKey(completedProject))
-          const source = result.state.firmwareFiles[DEFAULT_FIRMWARE_PATH]
-          if (source) {
-            setFirmwareSource(source)
-            setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
-          }
-          setBuildResult(result.state.buildResult ?? null)
-          setSimulationResult(result.state.simulationResult ?? null)
-          setViewMode('2d')
-          setPipelineNotice('AI build loop completed')
-        }
-        if (result.status === 'failed') {
-          setErrorMessage(result.error ?? 'Agent workflow failed')
-        }
+      const response = answerSubmission
+        ? await fetch(`/api/agent/run/${encodeURIComponent(answerSubmission.runId)}/answers`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ answers: answerSubmission.answers }),
+          })
+        : await fetch('/api/agent/run', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ prompt, project, mode, provider, model, reasoningEffort }),
+          })
+      const json = await parseJsonResponse(response)
+      if (!response.ok) {
+        const error = json as { error?: string }
+        setErrorMessage(error.error ?? 'Agent request failed')
         return
       }
-      if (!response.ok) {
-        setErrorMessage(json.error ?? 'Agent request failed')
+
+      const accepted = json as AgentBackendRunAccepted
+      const record = await pollAgentRun(accepted.runId)
+      const result = resultFromRunRecord(record)
+      if (!result) {
+        setErrorMessage(record.error ?? 'Agent run finished without a workflow result')
+        return
+      }
+
+      setAgentResult(result)
+      setAgentWaitingForAnswers(result.status === 'needs_clarification')
+      if (result.status === 'completed') {
+        skipNextPipelineResetRef.current = true
+        const completedProject = replaceProject(
+          preserveProjectIdentity(project, result.state.project),
+        )
+        resetProject(completedProject)
+        setProjectChatKey(createProjectChatKey(completedProject))
+        const source = result.state.firmwareFiles[DEFAULT_FIRMWARE_PATH]
+        if (source) {
+          setFirmwareSource(source)
+          setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+        }
+        setBuildResult(result.state.buildResult ?? null)
+        setSimulationResult(result.state.simulationResult ?? null)
+        setViewMode('2d')
+        setPipelineNotice('AI build loop completed')
+      }
+      if (result.status === 'failed') {
+        setAgentWaitingForAnswers(false)
+        setErrorMessage(result.error ?? 'Agent workflow failed')
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Agent request failed')
     } finally {
       setAgentLoading(false)
     }
-  }, [agentLoading, project, resetProject])
+  }, [agentLoading, agentWaitingForAnswers, project, resetProject])
 
   handleAgentRunRef.current = handleAgentRun
 
@@ -455,7 +557,7 @@ export function StudioApp() {
   useEffect(() => {
     if (status !== 'ready' || !cloudAutosaveReady) return
     saveProjectToStorage(project)
-  }, [project, status])
+  }, [cloudAutosaveReady, project, status])
 
   useEffect(() => {
     if (status !== 'ready') return
@@ -508,6 +610,8 @@ export function StudioApp() {
     setFirmwareSource(createDefaultFirmwareSource(nextProject.board))
     setSelectedNodeId(null)
     setSelectedWireId(null)
+    setAgentWaitingForAnswers(false)
+    setAgentResult(null)
     setErrorMessage(null)
     setViewMode('2d')
   }, [resetProject])
@@ -525,6 +629,8 @@ export function StudioApp() {
       resetProject(replaceProject(parsed))
       setProjectChatKey(createProjectChatKey(parsed))
       setFirmwareSource(createEsp32BlinkFirmwareSource())
+      setAgentWaitingForAnswers(false)
+      setAgentResult(null)
       setViewMode('2d')
       setStatus('ready')
     } catch (e) {
@@ -601,6 +707,7 @@ export function StudioApp() {
         const next = connectTerminals(project, from, to, {
           color: wireTemplate.defaultColor,
           connectors: wireTemplate.connectors,
+          type: activeWireType,
           points,
         })
         const newErrors = newValidationErrors(validationResults, validate(next))
@@ -857,6 +964,7 @@ export function StudioApp() {
               <>
                 <ComponentTray
                   onAddPart={handleAddPart}
+                  onWireTypeChange={setActiveWireType}
                   activeWireType={activeWireType}
                 />
                 <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -958,11 +1066,6 @@ export function StudioApp() {
           onOpenChange={setTerminalOpen}
           onClearBuild={() => setBuildResult(null)}
           onClearSimulation={() => setSimulationResult(null)}
-        />
-
-        <AiComingSoonModal
-          open={comingSoonOpen}
-          onClose={() => setComingSoonOpen(false)}
         />
 
         {/* {viewMode === '2d' && !isEmpty && (

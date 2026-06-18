@@ -31,6 +31,9 @@ export interface ProjectMetadata {
 
 export type BoardId = 'esp32-devkit-v1' | 'arduino-uno'
 
+/** Catalog ids for physical jumper wire templates. */
+export type WireTypeId = 'jumper-mm' | 'jumper-mf' | 'jumper-ff'
+
 export type ComponentTypeId =
   | 'breadboard-full'
   | 'esp32-devkit-v1'
@@ -45,9 +48,7 @@ export type ComponentTypeId =
   | 'servo-sg90'
   | 'lcd-1602-i2c'
   | 'max7219-led-matrix'
-  | 'jumper-mm'
-  | 'jumper-mf'
-  | 'jumper-ff'
+  | WireTypeId
 
 export type TerminalKind =
   | 'power_in'
@@ -192,6 +193,8 @@ export type WireRouteMode = 'auto' | 'manual'
  */
 export interface Wire {
   id: string
+  /** Catalog jumper template id, e.g. `jumper-mm`, used for project JSON and UI labels. */
+  type?: WireTypeId
   /** Id of the `Net` this wire draws. */
   net: string
   color?: WireColor

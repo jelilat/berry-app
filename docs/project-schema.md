@@ -117,6 +117,7 @@ Wires are 3D polylines for rendering. Each wire belongs to exactly one net.
 ```json
 {
   "id": "wire_1",
+  "type": "jumper-mm",
   "net": "net_trig",
   "color": "yellow",
   "points": [
@@ -130,9 +131,10 @@ Wires are 3D polylines for rendering. Each wire belongs to exactly one net.
 | Field | Required | Notes |
 |-------|----------|-------|
 | `id` | yes | Unique wire id |
+| `type` | no | Jumper template id: `jumper-mm`, `jumper-mf`, or `jumper-ff`. Studio uses this to tell builders which physical wire to use. |
 | `net` | yes | References `nets[].id` |
 | `color` | no | Studio palette name or hex |
-| `connectors` | no | Jumper ends: `{ "start": "male"|"female", "end": "male"|"female" }` |
+| `connectors` | no | Oriented jumper ends: `{ "start": "male"|"female", "end": "male"|"female" }`. If omitted and `type` is present, Studio derives this from the template. |
 | `from` / `to` | no | Endpoints for rerouting: a component terminal `{ "component", "terminal" }` or a bare breadboard hole `{ "breadboard", "site": { ... } }` |
 | `points` | yes | At least 2 points; path in scene space |
 

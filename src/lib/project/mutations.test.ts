@@ -371,9 +371,11 @@ describe("connectTerminals", () => {
       {
         color: "orange",
         connectors: { start: "female", end: "female" },
+        type: "jumper-ff",
       },
     );
     expect(p.wires[0].color).toBe("orange");
+    expect(p.wires[0].type).toBe("jumper-ff");
     expect(p.wires[0].connectors).toEqual({ start: "female", end: "female" });
   });
 

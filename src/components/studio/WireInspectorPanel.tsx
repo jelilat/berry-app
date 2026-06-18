@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from 'react'
 import { Cable, GripVertical, X } from 'lucide-react'
 import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
+import { getComponentDefinition } from '@/lib/project/catalog'
 import type { BerryProject } from '@/lib/project/types'
 import {
   INSPECTOR_WIDTH_MAX,
@@ -42,6 +43,7 @@ export function WireInspectorPanel({
   })
 
   if (!model) return null
+  const wireTypeName = model.type ? getComponentDefinition(model.type).name : 'Jumper'
 
   return (
     <aside
@@ -89,7 +91,7 @@ export function WireInspectorPanel({
             className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
             style={{ background: 'rgba(214,51,108,0.1)', color: 'var(--accent)' }}
           >
-            Jumper
+            {wireTypeName}
           </span>
           <p
             className="mt-1 truncate text-sm font-extrabold tracking-tight"
@@ -126,6 +128,7 @@ export function WireInspectorPanel({
               {model.color}
             </span>
           </WireRow>
+          {model.type && <WireRow label="Type">{wireTypeName}</WireRow>}
           {model.connectors && (
             <WireRow label="Ends">
               {model.connectors.start.toUpperCase()} → {model.connectors.end.toUpperCase()}

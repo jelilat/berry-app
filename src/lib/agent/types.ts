@@ -6,8 +6,16 @@ import type { SimulationResult } from '@/lib/simulation'
 import type { ValidationResult } from '@/lib/validation'
 import type { StudioToolCall } from './tools/calls'
 
-/** Agent workflow status returned to Studio. */
+/** Terminal agent workflow status returned to Studio. */
 export type AgentRunStatus = 'completed' | 'needs_clarification' | 'failed'
+
+/** Hosted backend run status used while polling an asynchronous agent run. */
+export type AgentBackendRunStatus =
+  | 'queued'
+  | 'running'
+  | 'needs_clarification'
+  | 'completed'
+  | 'failed'
 
 /** Timeline event severity for the AI build panel. */
 export type AgentTimelineTone = 'info' | 'success' | 'warning' | 'error'
@@ -117,4 +125,36 @@ export interface AgentRunResult {
   status: AgentRunStatus
   state: AgentRunState
   error?: string
+}
+
+/** Public run record returned by the hosted Berry agent API. */
+export interface AgentBackendRunRecord {
+  runId: string
+  status: AgentBackendRunStatus
+  input?: {
+    prompt: string
+    provider: BerryModelProvider
+    model: string
+    reasoningEffort?: BerryReasoningEffort
+    answers?: Record<string, string>
+  }
+  answers?: Record<string, string>
+  result?: AgentRunResult
+  error?: string
+  usageEvents?: unknown[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** Accepted response returned when creating or resuming a backend agent run. */
+export interface AgentBackendRunAccepted {
+  runId: string
+  status: Extract<AgentBackendRunStatus, 'queued' | 'running'>
+  statusUrl: string
+}
+
+/** Clarification answers submitted against an existing backend run. */
+export interface AgentAnswerSubmission {
+  runId: string
+  answers: Record<string, string>
 }

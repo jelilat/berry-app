@@ -37,8 +37,7 @@ import {
 } from '@/lib/project/mutations'
 import { breadboardPhysicalSiteKey } from '@/lib/project/breadboard-nets'
 import { snapPositionToBreadboardHole } from '@/lib/studio/breadboard-layout'
-import type { BerryProject } from '@/lib/project/types'
-import type { ComponentTypeId } from '@/lib/project/types'
+import type { BerryProject, ComponentTypeId, WireTypeId } from '@/lib/project/types'
 import { COMPONENT_NODE_TYPE, SCENE_SCALE } from '@/lib/studio/constants'
 import type { ComponentNodeData, TerminalSelection } from '@/lib/studio/flow-map'
 import { projectToFlowNodes } from '@/lib/studio/flow-map'
@@ -106,7 +105,7 @@ export function StudioCanvas({
   onPlacementError,
 }: {
   project: BerryProject
-  activeWireType: ComponentTypeId
+  activeWireType: WireTypeId
   selectedNodeId: string | null
   selectedWireId: string | null
   validationResults?: ValidationResult[]
@@ -157,7 +156,7 @@ function StudioCanvasInner({
   onPlacementError,
 }: {
   project: BerryProject
-  activeWireType: ComponentTypeId
+  activeWireType: WireTypeId
   selectedNodeId: string | null
   selectedWireId: string | null
   validationResults?: ValidationResult[]

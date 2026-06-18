@@ -14,6 +14,7 @@ import type {
   WireColor,
   WireConnectors,
   WireEndpoint,
+  WireTypeId,
 } from "./types";
 import { BERRY_PROJECT_VERSION } from "./types";
 import { getComponentDefinition as getDef } from "./catalog";
@@ -764,6 +765,7 @@ export function connectTerminals(
   options?: {
     color?: WireColor;
     connectors?: WireConnectors;
+    type?: WireTypeId;
     points?: Vec3[];
   },
 ): BerryProject {
@@ -833,6 +835,7 @@ export function connectTerminals(
   const wireIds = collectProjectIds(working);
   const wire: Wire = {
     id: uniqueId("wire", wireIds),
+    type: options?.type,
     net: netId,
     color: options?.color ?? "yellow",
     connectors: orientedConnectors,

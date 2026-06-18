@@ -2,7 +2,7 @@
 
 import { Bot, Check, Clock3, MessageSquare, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AgentRunResult } from '@/lib/agent/types'
+import type { AgentAnswerSubmission, AgentRunResult, ClarifyingQuestion } from '@/lib/agent/types'
 import { getBoardProfile } from '@/lib/project/boards'
 import { getComponentDefinition } from '@/lib/project/catalog'
 import type { BerryProject, Net } from '@/lib/project/types'
@@ -30,6 +30,12 @@ interface AssistantChoiceRequest {
   options: string[]
 }
 
+interface ClarificationFormRequest {
+  runId: string
+  userPrompt: string
+  questions: ClarifyingQuestion[]
+}
+
 /** Prompt forwarded from home into the bench chat (already running or about to). */
 export interface SubmittedPrompt {
   id: string
@@ -51,9 +57,17 @@ export function AIAssistantPanel({
   projectChatKey: string
   submittedPrompt?: SubmittedPrompt | null
   result: AgentRunResult | null
-  onSubmit: (prompt: string) => void | Promise<void>
+  onSubmit: (
+    prompt: string,
+    mode?: 'auto' | 'deterministic' | 'real',
+    provider?: string,
+    model?: string,
+    reasoningEffort?: string,
+    answerSubmission?: AgentAnswerSubmission,
+  ) => void | Promise<void>
 }) {
   const [prompt, setPrompt] = useState('')
+  const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({})
   const [chats, setChats] = useState<BenchChat[]>(() => loadChats(projectChatKey))
   const [activeChatId, setActiveChatId] = useState(() => chats[0]?.id ?? createChat().id)
   const skipNextSaveRef = useRef(false)
@@ -64,6 +78,11 @@ export function AIAssistantPanel({
   )
 
   const choiceRequest = useMemo(() => choiceRequestFromResult(result), [result])
+  const clarificationRequest = useMemo(() => clarificationRequestFromResult(result), [result])
+
+  useEffect(() => {
+    setClarificationAnswers({})
+  }, [clarificationRequest?.runId])
 
   useEffect(() => {
     const nextChats = loadChats(projectChatKey)
@@ -161,7 +180,13 @@ export function AIAssistantPanel({
       ),
     )
     setPrompt('')
-    onSubmit(promptForWorkflow(chat.messages, cleanPrompt))
+    onSubmit(
+      promptForWorkflow(chat.messages, cleanPrompt),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    )
   }
 
   /**
@@ -192,7 +217,58 @@ export function AIAssistantPanel({
           : item,
       ),
     )
-    onSubmit(promptForChoiceWorkflow(result, chat.messages, cleanOption))
+    onSubmit(
+      promptForChoiceWorkflow(result, chat.messages, cleanOption),
+    )
+  }
+
+  /**
+   * Store one clarification answer draft.
+   * @param questionId Stable backend clarification question id.
+   * @param answer Draft answer text.
+   */
+  function handleClarificationAnswerChange(questionId: string, answer: string) {
+    setClarificationAnswers((current) => ({ ...current, [questionId]: answer }))
+  }
+
+  /**
+   * Submit all collected clarification answers in one backend request.
+   */
+  function handleSubmitClarificationAnswers() {
+    if (!clarificationRequest || loading) return
+    const answers = answersForQuestions(clarificationRequest.questions, clarificationAnswers)
+    if (!answers) return
+    const summary = clarificationAnswerSummary(clarificationRequest.questions, answers)
+    const chat = activeChat ?? createChat()
+    if (!activeChat) {
+      setChats((current) => [chat, ...current])
+      setActiveChatId(chat.id)
+    }
+    setChats((current) =>
+      current.map((item) =>
+        item.id === chat.id
+          ? {
+              ...item,
+              messages: [
+                ...item.messages,
+                { id: `user_answers_${Date.now()}`, role: 'user', text: summary },
+              ],
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    )
+    onSubmit(
+      clarificationRequest.userPrompt,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        runId: clarificationRequest.runId,
+        answers,
+      },
+    )
   }
 
   return (
@@ -243,7 +319,15 @@ export function AIAssistantPanel({
             {activeChat.messages.map((message) => (
               <ChatBubble key={message.id} message={message} />
             ))}
-            {choiceRequest ? (
+            {clarificationRequest ? (
+              <ClarificationForm
+                request={clarificationRequest}
+                answers={clarificationAnswers}
+                disabled={loading}
+                onAnswerChange={handleClarificationAnswerChange}
+                onSubmit={handleSubmitClarificationAnswers}
+              />
+            ) : choiceRequest ? (
               <AssistantChoiceField
                 choiceRequest={choiceRequest}
                 disabled={loading}
@@ -277,6 +361,7 @@ export function AIAssistantPanel({
             onChange={(event) => setPrompt(event.target.value)}
             rows={2}
             placeholder="Build, test, or iterate..."
+            disabled={!!clarificationRequest}
             className="min-h-[44px] flex-1 resize-none bg-transparent px-1 py-1 text-sm font-semibold outline-none"
             style={{ color: 'var(--text-primary)' }}
             onKeyDown={(event) => {
@@ -289,7 +374,7 @@ export function AIAssistantPanel({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={loading || prompt.trim().length === 0}
+            disabled={loading || !!clarificationRequest || prompt.trim().length === 0}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: 'var(--accent)' }}
             title={`Send to ${ASSISTANT_NAME}`}
@@ -324,6 +409,117 @@ function ChatBubble({ message }: { message: BenchMessage }) {
         {isUser ? 'You' : ASSISTANT_NAME}
       </div>
       <div className="whitespace-pre-wrap">{message.text}</div>
+    </div>
+  )
+}
+
+/**
+ * Render all backend clarification questions and submit them together.
+ * @param props Clarification request, draft answers, and callbacks.
+ */
+function ClarificationForm({
+  request,
+  answers,
+  disabled,
+  onAnswerChange,
+  onSubmit,
+}: {
+  request: ClarificationFormRequest
+  answers: Record<string, string>
+  disabled: boolean
+  onAnswerChange: (questionId: string, answer: string) => void
+  onSubmit: () => void
+}) {
+  const completeAnswers = answersForQuestions(request.questions, answers)
+  return (
+    <div
+      className="mr-7 space-y-3 rounded-xl p-3"
+      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+    >
+      <div className="text-xs font-extrabold" style={{ color: 'var(--text-muted)' }}>
+        Answer these before I continue
+      </div>
+      {request.questions.map((question) => (
+        <ClarificationQuestionField
+          key={question.id}
+          question={question}
+          value={answers[question.id] ?? ''}
+          disabled={disabled}
+          onChange={(answer) => onAnswerChange(question.id, answer)}
+        />
+      ))}
+      <button
+        type="button"
+        disabled={disabled || !completeAnswers}
+        onClick={onSubmit}
+        className="flex h-10 w-full items-center justify-center rounded-lg text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-45"
+        style={{ background: 'var(--accent)' }}
+      >
+        {disabled ? 'Sending...' : 'Continue'}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Render one clarification question as choices or a text input.
+ * @param props Clarification question, value, disabled state, and change callback.
+ */
+function ClarificationQuestionField({
+  question,
+  value,
+  disabled,
+  onChange,
+}: {
+  question: ClarifyingQuestion
+  value: string
+  disabled: boolean
+  onChange: (answer: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div>
+        <div className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
+          {question.question}
+        </div>
+        {question.reason ? (
+          <div className="mt-1 text-xs font-semibold leading-4" style={{ color: 'var(--text-muted)' }}>
+            {question.reason}
+          </div>
+        ) : null}
+      </div>
+      {question.options?.length ? (
+        <div className="grid gap-2">
+          {question.options.map((option) => {
+            const selected = value.trim() === option
+            return (
+              <button
+                key={`${question.id}_${option}`}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange(option)}
+                className="flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  background: selected ? 'rgba(214,51,108,0.1)' : 'transparent',
+                  border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                  color: selected ? 'var(--accent)' : 'var(--text-primary)',
+                }}
+              >
+                <span>{option}</span>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <input
+          type="text"
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-10 w-full rounded-lg bg-transparent px-3 text-sm font-semibold outline-none disabled:opacity-50"
+          style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+        />
+      )}
     </div>
   )
 }
@@ -588,18 +784,35 @@ function renderClarificationFeedback(result: AgentRunResult): string {
     return 'I need one more detail before I can continue.'
   }
 
-  const question = result.state.clarification.questions[0]
-  if (!question) {
+  const questions = result.state.clarification.questions
+  if (questions.length === 0) {
     return 'I need one more detail before I can continue.'
   }
 
   return [
-    'I need one detail before I change the bench.',
-    '',
-    question.question,
-    '',
-    question.options?.length ? 'Choose an option below and I’ll continue from this chat.' : null,
-  ].filter((line): line is string => line !== null).join('\n')
+    questions.length === 1
+      ? 'I need one detail before I continue.'
+      : `I need ${questions.length} details before I continue.`,
+  ].join('\n')
+}
+
+/**
+ * Build the multi-question clarification request from the latest result.
+ * @param result Latest agent result.
+ */
+function clarificationRequestFromResult(result: AgentRunResult | null): ClarificationFormRequest | null {
+  if (
+    result?.status !== 'needs_clarification' ||
+    result.state.clarification.status !== 'needs_clarification' ||
+    result.state.clarification.questions.length === 0
+  ) {
+    return null
+  }
+  return {
+    runId: result.state.runId,
+    userPrompt: result.state.userPrompt,
+    questions: result.state.clarification.questions,
+  }
 }
 
 /**
@@ -608,19 +821,6 @@ function renderClarificationFeedback(result: AgentRunResult): string {
  */
 function choiceRequestFromResult(result: AgentRunResult | null): AssistantChoiceRequest | null {
   if (!result) return null
-
-  if (
-    result.status === 'needs_clarification' &&
-    result.state.clarification.status === 'needs_clarification'
-  ) {
-    const question = result.state.clarification.questions[0]
-    if (!question?.options?.length) return null
-    return {
-      id: question.id,
-      label: question.question,
-      options: question.options,
-    }
-  }
 
   if (!isScriptedStarterResult(result)) return null
 
@@ -676,8 +876,7 @@ function renderProjectOverview(project: BerryProject): string {
   const board = getBoardProfile(project.board)
   const parts = project.components
     .map((component) => {
-      const definition = getComponentDefinition(component.type)
-      return `- ${component.id}: ${definition.name}`
+      return `- ${component.id}: ${componentDisplayName(component.type)}`
     })
     .join('\n')
 
@@ -752,7 +951,7 @@ function renderNet(project: BerryProject, net: Net): string {
   const terminals = net.terminals.map((terminal) => {
     if (terminal.component && terminal.terminal) {
       const component = project.components.find((candidate) => candidate.id === terminal.component)
-      const name = component ? getComponentDefinition(component.type).name : terminal.component
+      const name = component ? componentDisplayName(component.type) : terminal.component
       return `${name} ${terminal.component}.${terminal.terminal}`
     }
     if (terminal.breadboard && terminal.site) {
@@ -763,6 +962,14 @@ function renderNet(project: BerryProject, net: Net): string {
 
   if (terminals.length < 2) return ''
   return `${terminalLabelFromNetId(net.id)}: ${terminals.join(' -> ')}.`
+}
+
+/**
+ * Return a component catalog name, falling back when project data references an unknown type.
+ * @param type Component catalog id from the project graph.
+ */
+function componentDisplayName(type: BerryProject['components'][number]['type']): string {
+  return getComponentDefinition(type)?.name ?? type
 }
 
 /**
@@ -867,6 +1074,36 @@ function promptForWorkflow(messages: BenchMessage[], cleanPrompt: string): strin
     '',
     `Clarification answer: ${cleanPrompt}`,
   ].join('\n')
+}
+
+/**
+ * Return trimmed answers only when every clarification question has a value.
+ * @param questions Clarification questions that require answers.
+ * @param drafts Draft answers keyed by question id.
+ */
+function answersForQuestions(
+  questions: ClarifyingQuestion[],
+  drafts: Record<string, string>,
+): Record<string, string> | null {
+  const entries = questions.map((question) => [question.id, drafts[question.id]?.trim() ?? ''] as const)
+  if (entries.some(([, answer]) => answer.length === 0)) {
+    return null
+  }
+  return Object.fromEntries(entries)
+}
+
+/**
+ * Render the user's collected clarification answers as one chat message.
+ * @param questions Clarification questions that were answered.
+ * @param answers Submitted answer map.
+ */
+function clarificationAnswerSummary(
+  questions: ClarifyingQuestion[],
+  answers: Record<string, string>,
+): string {
+  return questions
+    .map((question) => `${question.question}\n${answers[question.id] ?? ''}`)
+    .join('\n\n')
 }
 
 /**

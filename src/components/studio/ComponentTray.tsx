@@ -3,24 +3,33 @@
 import { useState } from 'react'
 import { Search } from 'lucide-react'
 import { listCatalogGrouped } from '@/lib/project/catalog-groups'
+import { getWireTemplate, isWireTemplate } from '@/lib/project/catalog'
 import { hasWokwiVisual } from '@/lib/studio/wokwi-map'
-import type { ComponentTypeId } from '@/lib/project/types'
+import type { ComponentTypeId, WireTypeId } from '@/lib/project/types'
 import { FallbackPartArt } from './FallbackPartArt'
+import { JumperWireArt, wirePreviewColor } from './JumperWireArt'
 import { WokwiPart } from './WokwiPart'
 
 /**
  * Grouped visual component palette — click a part to place it, or a wire to pick jumper style.
  * @param onAddPart Callback when a placeable part is chosen.
+ * @param onWireTypeChange Callback when a jumper wire template is chosen.
  * @param activeWireType Currently selected wire template, if any.
  */
 export function ComponentTray({
   onAddPart,
+  onWireTypeChange,
   activeWireType,
 }: {
   onAddPart: (type: ComponentTypeId) => void
-  activeWireType: ComponentTypeId | null
+  onWireTypeChange: (type: WireTypeId) => void
+  activeWireType: WireTypeId | null
 }) {
-  const sections = listCatalogGrouped().filter((section) => section.group !== 'wires')
+  const grouped = listCatalogGrouped()
+  const wireParts = grouped
+    .find((section) => section.group === 'wires')
+    ?.parts.filter((part) => isWireTemplate(part.id)) ?? []
+  const sections = grouped.filter((section) => section.group !== 'wires')
   const totalParts = sections.reduce((n, s) => n + s.parts.length, 0)
   const [query, setQuery] = useState('')
 
@@ -67,6 +76,32 @@ export function ComponentTray({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2.5">
+        {wireParts.length > 0 && (
+          <div className="mb-4">
+            <p
+              className="mb-2 px-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              Wire type
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {wireParts.map((part) => (
+                <PartCard
+                  key={part.id}
+                  type={part.id}
+                  name={part.name}
+                  isWire
+                  isActiveWire={activeWireType === part.id}
+                  onDragStart={(event) => {
+                    event.preventDefault()
+                  }}
+                  onClick={() => onWireTypeChange(part.id as WireTypeId)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {filtered.map((section) => (
           <div key={section.group} className="mb-4">
             <p
@@ -120,6 +155,7 @@ function PartCard({
   onClick: () => void
 }) {
   const hasWokwi = hasWokwiVisual(type)
+  const wireTemplate = isWire ? getWireTemplate(type) : null
 
   return (
     <button
@@ -140,7 +176,14 @@ function PartCard({
         className="flex h-[72px] w-full items-center justify-center overflow-hidden rounded-lg"
         style={{ background: 'linear-gradient(180deg, #faf9f7 0%, #f0ede8 100%)' }}
       >
-        {hasWokwi ? (
+        {wireTemplate ? (
+          <JumperWireArt
+            connectors={wireTemplate.connectors}
+            color={wirePreviewColor(wireTemplate.defaultColor)}
+            width={88}
+            height={48}
+          />
+        ) : hasWokwi ? (
           <WokwiPart type={type} width={88} height={64} fit />
         ) : (
           <FallbackPartArt type={type} size={72} />

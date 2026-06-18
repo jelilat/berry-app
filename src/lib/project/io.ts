@@ -5,7 +5,7 @@ import {
   validateInstancePlacement,
 } from "./breadboard-nets";
 import { wireConnectorsFitEndpoints } from "./connection-gender";
-import { getComponentDefinition } from "./catalog";
+import { getComponentDefinition, getWireTemplate, isWireTemplate } from "./catalog";
 import type { WireEndpointRef } from "./mutations";
 import { getBoardProfile } from "./boards";
 import {
@@ -18,7 +18,9 @@ import {
   type NetTerminal,
   type Vec3,
   type Wire,
+  type WireConnectors,
   type WireEndpoint,
+  type WireTypeId,
 } from "./types";
 
 /** Thrown when project JSON is invalid or fails graph validation. */
@@ -90,6 +92,15 @@ function parseComponent(value: unknown, index: number): ComponentInstance {
   let parsedPlacement: ComponentInstance["placement"];
   if (placement !== undefined && placement !== null) {
     parsedPlacement = parseBreadboardPlacement(placement, `${path}.placement`);
+  }
+
+  if (type === "breadboard-full" && parsedPlacement) {
+    if (Object.keys(parsedPlacement.sites).length > 0) {
+      throw new ProjectParseError(
+        `${path}.placement is only valid for parts placed on a breadboard`,
+      );
+    }
+    parsedPlacement = undefined;
   }
 
   return {
@@ -171,7 +182,7 @@ function parseWire(value: unknown, index: number): Wire {
   const path = `wires[${index}]`;
   if (!isRecord(value))
     throw new ProjectParseError(`${path} must be an object`);
-  const { id, net, color, connectors, from, to, points } = value;
+  const { id, type, net, color, connectors, from, to, points } = value;
   if (typeof id !== "string" || !id)
     throw new ProjectParseError(`${path}.id is required`);
   if (typeof net !== "string" || !net)
@@ -180,11 +191,28 @@ function parseWire(value: unknown, index: number): Wire {
     throw new ProjectParseError(`${path}.points must have at least 2 points`);
   }
 
+  const parsedType = parseWireType(type, `${path}.type`);
+  const parsedConnectors = parseWireConnectors(connectors, `${path}.connectors`);
+  const templateConnectors = parsedType
+    ? getWireTemplate(parsedType).connectors
+    : undefined;
+
+  if (
+    parsedType &&
+    parsedConnectors &&
+    !wireConnectorsMatchTemplate(parsedConnectors, templateConnectors!)
+  ) {
+    throw new ProjectParseError(
+      `${path}.connectors must match ${parsedType}`,
+    );
+  }
+
   return {
     id,
+    type: parsedType,
     net,
     color: typeof color === "string" ? color : undefined,
-    connectors: parseWireConnectors(connectors, `${path}.connectors`),
+    connectors: parsedConnectors ?? templateConnectors,
     from: parseWireEndpoint(from, `${path}.from`),
     to: parseWireEndpoint(to, `${path}.to`),
     points: points.map((p, pi) => parseVec3(p, `${path}.points[${pi}]`)),
@@ -236,6 +264,23 @@ function parseWireEndpoint(
 }
 
 /**
+ * Parse an optional wire template id from project JSON.
+ * @param value Raw `wires[].type` value.
+ * @param path JSON path for errors.
+ */
+function parseWireType(value: unknown, path: string): WireTypeId | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (
+    value !== "jumper-mm" &&
+    value !== "jumper-mf" &&
+    value !== "jumper-ff"
+  ) {
+    throw new ProjectParseError(`${path} must be a jumper wire type`);
+  }
+  return value;
+}
+
+/**
  * Parse optional jumper connector metadata on a wire.
  * @param value Raw connectors object.
  * @param path JSON path for errors.
@@ -255,6 +300,21 @@ function parseWireConnectors(
     throw new ProjectParseError(`${path}.end must be "male" or "female"`);
   }
   return { start, end };
+}
+
+/**
+ * Whether stored oriented connectors still represent a selected jumper template.
+ * @param connectors Stored connector orientation.
+ * @param template Connector pair from the catalog template.
+ */
+function wireConnectorsMatchTemplate(
+  connectors: WireConnectors,
+  template: WireConnectors,
+): boolean {
+  return (
+    (connectors.start === template.start && connectors.end === template.end) ||
+    (connectors.start === template.end && connectors.end === template.start)
+  );
 }
 
 /**
@@ -434,6 +494,16 @@ export function validateProjectGraph(project: BerryProject): void {
       throw new ProjectParseError(
         `Wire ${wire.id} references unknown net ${wire.net}`,
       );
+    }
+    if (wire.type && !isWireTemplate(wire.type)) {
+      throw new ProjectParseError(`Wire ${wire.id} has unknown jumper type ${wire.type}`);
+    }
+    if (
+      wire.type &&
+      wire.connectors &&
+      !wireConnectorsMatchTemplate(wire.connectors, getWireTemplate(wire.type).connectors)
+    ) {
+      throw new ProjectParseError(`Wire ${wire.id} connectors do not match ${wire.type}`);
     }
     if (wire.connectors && wire.from && wire.to) {
       const fromRef = wireEndpointToRef(wire.from);

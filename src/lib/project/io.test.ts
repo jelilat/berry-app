@@ -57,6 +57,69 @@ describe('parseBerryProject', () => {
     expect(project.components).toHaveLength(2)
   })
 
+  it('ignores empty placement on a breadboard from agent output', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'arduino-uno',
+      metadata: { name: 'agent output' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0, y: 0, z: 0 } },
+          placement: { sites: {} },
+        },
+        {
+          id: 'hc_sr04_1',
+          type: 'hc-sr04',
+          parent: 'breadboard_1',
+          transform: { position: { x: 0.12, y: 0.05, z: 0 } },
+          placement: {
+            sites: {
+              VCC: { kind: 'hole', block: 'top', row: 'a', column: 10 },
+              TRIG: { kind: 'hole', block: 'top', row: 'a', column: 11 },
+              ECHO: { kind: 'hole', block: 'top', row: 'a', column: 12 },
+              GND: { kind: 'hole', block: 'top', row: 'a', column: 13 },
+            },
+          },
+        },
+      ],
+      nets: [],
+      wires: [],
+    })
+
+    expect(project.components[0].placement).toBeUndefined()
+    expect(project.components[1].parent).toBe('breadboard_1')
+  })
+
+  it('rejects non-empty placement on a breadboard', () => {
+    expect(() =>
+      parseBerryProject({
+        version: 1,
+        board: 'arduino-uno',
+        metadata: { name: 'bad breadboard placement' },
+        components: [
+          {
+            id: 'breadboard_1',
+            type: 'breadboard-full',
+            transform: { position: { x: 0, y: 0, z: 0 } },
+            placement: {
+              sites: {
+                VCC: { kind: 'hole', block: 'top', row: 'a', column: 10 },
+              },
+            },
+          },
+        ],
+        nets: [],
+        wires: [],
+      }),
+    ).toThrow(
+      new ProjectParseError(
+        'components[0].placement is only valid for parts placed on a breadboard',
+      ),
+    )
+  })
+
   it('loads examples/esp32-led-blink.project.json from disk', () => {
     const fixturePath = path.join(
       process.cwd(),
@@ -69,6 +132,8 @@ describe('parseBerryProject', () => {
     expect(project.components).toHaveLength(4)
     expect(project.nets).toHaveLength(3)
     expect(project.wires).toHaveLength(3)
+    expect(project.wires[0].type).toBe('jumper-mm')
+    expect(project.wires[0].connectors).toEqual({ start: 'male', end: 'male' })
   })
 
   it.each([
@@ -306,6 +371,37 @@ describe('ProjectParseError', () => {
         wires: [{ id: 'short', net: 'net_1', points: [{ x: 0, y: 0, z: 0 }] }],
       }),
     ).toThrow(new ProjectParseError('wires[0].points must have at least 2 points'))
+  })
+
+  it('rejects unknown wire type', () => {
+    const base = minimalProject()
+    expect(() =>
+      parseBerryProject({
+        ...base,
+        wires: [
+          {
+            ...base.wires[0],
+            type: 'dupont-magic',
+          },
+        ],
+      }),
+    ).toThrow(new ProjectParseError('wires[0].type must be a jumper wire type'))
+  })
+
+  it('rejects connectors that do not match the wire type', () => {
+    const base = minimalProject()
+    expect(() =>
+      parseBerryProject({
+        ...base,
+        wires: [
+          {
+            ...base.wires[0],
+            type: 'jumper-mm',
+            connectors: { start: 'female', end: 'female' },
+          },
+        ],
+      }),
+    ).toThrow(new ProjectParseError('wires[0].connectors must match jumper-mm'))
   })
 })
 

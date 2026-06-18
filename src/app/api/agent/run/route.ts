@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { runAgentWorkflow } from '@/lib/agent/workflow'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import type { AgentRunInput } from '@/lib/agent/types'
 import type { BerryModelProvider } from '@/lib/ai/model-registry'
 import { resolveUserReasoning, USER_MODEL_OPTIONS } from '@/lib/studio/user-models'
-import { AI_COMING_SOON_MESSAGE, isLedBlinkPrompt } from '@/lib/studio/ai-availability'
 
 export const runtime = 'edge'
+
+const DEFAULT_AGENT_API_ORIGIN = 'http://localhost:8080'
 
 /**
  * Type guard: value is a non-null, non-array object.
@@ -17,25 +17,49 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Resolve a request model to an allowed OpenAI model id.
+ * Resolve the hosted agent API origin from environment.
+ */
+function agentApiOrigin(): string {
+  return (
+    process.env.BERRY_BUILD_API_URL?.trim() ||
+    process.env.BERRY_AGENT_API_URL?.trim() ||
+    DEFAULT_AGENT_API_ORIGIN
+  ).replace(/\/+$/, '')
+}
+
+/**
+ * Build headers for hosted agent API JSON requests.
+ */
+function agentApiHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  const token = process.env.BERRY_BUILD_API_TOKEN?.trim()
+  if (token) {
+    headers.authorization = `Bearer ${token}`
+  }
+  return headers
+}
+
+/**
+ * Resolve a request model to an allowed frontend model id.
+ * @param provider Raw provider string from the request.
  * @param model Raw model string from the request.
  */
 function parseRequestedModel(
   provider: unknown,
   model: unknown,
-): { provider: BerryModelProvider; model: string } | undefined {
-  if (typeof model !== 'string') return undefined
+): { provider: BerryModelProvider; model: string } {
   const option = USER_MODEL_OPTIONS.find(
     (candidate) =>
       candidate.model === model &&
       (typeof provider !== 'string' || candidate.provider === provider),
   )
-  return option ? { provider: option.provider, model: option.model } : undefined
+  return option ?? USER_MODEL_OPTIONS[0]!
 }
 
 /**
- * Parse the agent run request body.
+ * Parse the agent run request body for the hosted backend.
  * @param body Parsed JSON request body.
+ * @throws Error when the request body is malformed.
  */
 function parseAgentRunInput(body: unknown): AgentRunInput {
   if (!isRecord(body)) {
@@ -47,22 +71,16 @@ function parseAgentRunInput(body: unknown): AgentRunInput {
     throw new Error('Missing prompt')
   }
 
-  const mode = body.mode
+  const requestedModel = parseRequestedModel(body.provider, body.model)
   const input: AgentRunInput = {
     prompt: prompt.trim(),
-    mode:
-      mode === 'real' || mode === 'deterministic' || mode === 'auto'
-        ? mode
-        : 'auto',
+    provider: requestedModel.provider,
+    model: requestedModel.model,
+    reasoningEffort: resolveUserReasoning(
+      typeof body.reasoningEffort === 'string' ? body.reasoningEffort : undefined,
+    ).id,
   }
-  const model = parseRequestedModel(body.provider, body.model)
-  if (model) {
-    input.provider = model.provider
-    input.model = model.model
-  }
-  if (typeof body.reasoningEffort === 'string') {
-    input.reasoningEffort = resolveUserReasoning(body.reasoningEffort).id
-  }
+
   if ('project' in body && body.project !== undefined) {
     input.project = parseBerryProject(body.project)
   }
@@ -75,7 +93,17 @@ function parseAgentRunInput(body: unknown): AgentRunInput {
 }
 
 /**
- * POST /api/agent/run — run the Phase 6 AI workflow foundation.
+ * Return a JSON response while preserving the hosted API status code.
+ * @param response Hosted API fetch response.
+ */
+async function proxyJsonResponse(response: Response): Promise<NextResponse> {
+  const json = await response.json().catch(() => ({ error: 'Agent API returned invalid JSON' }))
+  return NextResponse.json(json, { status: response.status })
+}
+
+/**
+ * POST /api/agent/run - create an asynchronous hosted Berry agent run.
+ * @param request Incoming Next.js request.
  */
 export async function POST(request: Request) {
   let body: unknown
@@ -85,22 +113,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
+  let input: AgentRunInput
   try {
-    const input = parseAgentRunInput(body)
-    if (!isLedBlinkPrompt(input.prompt)) {
-      return NextResponse.json(
-        { error: AI_COMING_SOON_MESSAGE, status: 'coming_soon' },
-        { status: 501 },
-      )
-    }
-    const result = await runAgentWorkflow(input)
-    const status = result.status === 'failed' ? 500 : 200
-    return NextResponse.json(result, { status })
+    input = parseAgentRunInput(body)
   } catch (error) {
     if (error instanceof ProjectParseError) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
-    const message = error instanceof Error ? error.message : 'Agent run failed'
+    const message = error instanceof Error ? error.message : 'Invalid agent request'
     return NextResponse.json({ error: message }, { status: 400 })
+  }
+
+  try {
+    const response = await fetch(`${agentApiOrigin()}/v1/agent/runs`, {
+      method: 'POST',
+      headers: agentApiHeaders(),
+      body: JSON.stringify(input),
+    })
+    return proxyJsonResponse(response)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Agent API request failed'
+    return NextResponse.json({ error: message }, { status: 502 })
   }
 }

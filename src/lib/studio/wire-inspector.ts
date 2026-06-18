@@ -8,7 +8,7 @@ import {
   resolveWireTerminalRefs,
   type WireEndpointRef,
 } from '@/lib/project/mutations'
-import type { BerryProject, NetTerminal, WireConnectorGender } from '@/lib/project/types'
+import type { BerryProject, NetTerminal, WireConnectorGender, WireTypeId } from '@/lib/project/types'
 import { wireStrokeHex } from './wire-colors'
 
 /** Display row for one wire endpoint or net member. */
@@ -23,6 +23,7 @@ export interface WireEndpointDisplay {
 /** Inspector view model for a selected jumper wire. */
 export interface WireInspectorModel {
   wireId: string
+  type: WireTypeId | null
   netId: string
   color: string
   colorHex: string
@@ -52,6 +53,7 @@ export function buildWireInspectorModel(
 
   return {
     wireId: wire.id,
+    type: wire.type ?? null,
     netId: wire.net,
     color,
     colorHex: wireStrokeHex(color),

@@ -143,6 +143,7 @@
   "wires": [
     {
       "id": "wire_gnd",
+      "type": "jumper-mm",
       "net": "net_gnd",
       "color": "black",
       "points": [
@@ -153,6 +154,7 @@
     },
     {
       "id": "wire_signal",
+      "type": "jumper-mm",
       "net": "net_gpio_led",
       "color": "yellow",
       "points": [
@@ -163,6 +165,7 @@
     },
     {
       "id": "wire_led",
+      "type": "jumper-mm",
       "net": "net_led_anode",
       "color": "red",
       "points": [

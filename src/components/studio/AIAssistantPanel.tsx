@@ -1036,13 +1036,6 @@ function choiceRequestFromResult(result: AgentRunResult | null): AssistantChoice
  * @param result Agent workflow result.
  */
 function renderRunSummary(result: AgentRunResult): string {
-  if (result.status === 'completed' && !result.state.buildResult) {
-    return 'I mapped the requested circuit into an agent plan and checked the bench graph.'
-  }
-
-  if (result.status === 'completed') {
-    return 'I set up the bench project, generated firmware, ran validation, built the artifact, and simulated the supported circuit.'
-  }
 
   if (result.status === 'needs_clarification' && result.state.clarification.status === 'needs_clarification') {
     const questions = result.state.clarification.questions

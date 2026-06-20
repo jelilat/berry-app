@@ -72,8 +72,8 @@ import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
 
-const AGENT_POLL_INTERVAL_MS = 1200
-const AGENT_MAX_POLL_ATTEMPTS = 75
+const AGENT_POLL_INTERVAL_MS = 5000
+const AGENT_MAX_POLL_ATTEMPTS = 100
 
 /**
  * Wait for a fixed number of milliseconds.

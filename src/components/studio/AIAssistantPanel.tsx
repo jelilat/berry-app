@@ -12,33 +12,38 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   AgentAnswerSubmission,
   AgentBackendRunRecord,
   AgentRunResult,
   ClarifyingQuestion,
 } from '@/lib/agent/types'
+import { hasSupabaseBrowserConfig, isAuthEnabled } from '@/lib/auth/config'
+import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
+import {
+  loadCloudProjectChats,
+  upsertCloudProjectChats,
+  type CloudBenchChat,
+  type CloudBenchMessage,
+} from '@/lib/projects/cloud-chats'
 import { getBoardProfile } from '@/lib/project/boards'
 import { getComponentDefinition } from '@/lib/project/catalog'
 import type { BerryProject, Net } from '@/lib/project/types'
 import { validate } from '@/lib/validation'
 
 const CHAT_STORAGE_PREFIX = 'berry.studio.bench.chats.v2'
+const CHAT_SYNC_DEBOUNCE_MS = 600
 const ASSISTANT_NAME = 'Pip'
 
-interface BenchMessage {
-  id: string
-  role: 'user' | 'assistant'
-  text: string
-}
+type BenchMessage = CloudBenchMessage
+type BenchChat = CloudBenchChat
 
-interface BenchChat {
-  id: string
-  title: string
-  messages: BenchMessage[]
-  updatedAt: string
-}
+type MarkdownBlock =
+  | { kind: 'heading'; level: 2 | 3; text: string }
+  | { kind: 'paragraph'; text: string }
+  | { kind: 'list'; items: string[] }
+  | { kind: 'code'; text: string }
 
 interface AssistantChoiceRequest {
   id: string
@@ -99,6 +104,7 @@ export function AIAssistantPanel({
   const [chats, setChats] = useState<BenchChat[]>(() => loadChats(projectChatKey))
   const [activeChatId, setActiveChatId] = useState(() => chats[0]?.id ?? createChat().id)
   const skipNextSaveRef = useRef(false)
+  const cloudSaveTimerRef = useRef<number | null>(null)
 
   const activeChat = useMemo(
     () => chats.find((chat) => chat.id === activeChatId) ?? chats[0],
@@ -125,6 +131,35 @@ export function AIAssistantPanel({
     skipNextSaveRef.current = true
     setChats(nextChats)
     setActiveChatId(nextChats[0]?.id ?? createChat().id)
+    let cancelled = false
+
+    /**
+     * Load the signed-in user's cloud chat history for this project namespace.
+     */
+    async function hydrateCloudChats() {
+      if (!canSyncCloudChats()) return
+      try {
+        const supabase = createSupabaseBrowserClient()
+        const { data } = await supabase.auth.getUser()
+        if (!data.user || cancelled) return
+        const cloudChats = await loadCloudProjectChats(supabase, projectChatKey)
+        if (cancelled) return
+        if (cloudChats.length > 0) {
+          skipNextSaveRef.current = true
+          setChats(cloudChats)
+          setActiveChatId(cloudChats[0]?.id ?? createChat().id)
+          return
+        }
+        await upsertCloudProjectChats(supabase, projectChatKey, nextChats)
+      } catch {
+        // Local chat persistence remains the fallback when cloud sync is unavailable.
+      }
+    }
+
+    void hydrateCloudChats()
+    return () => {
+      cancelled = true
+    }
   }, [projectChatKey])
 
   useEffect(() => {
@@ -133,13 +168,28 @@ export function AIAssistantPanel({
       return
     }
     saveChats(projectChatKey, chats)
+    if (cloudSaveTimerRef.current) {
+      window.clearTimeout(cloudSaveTimerRef.current)
+    }
+    cloudSaveTimerRef.current = window.setTimeout(() => {
+      void saveChatsToCloud(projectChatKey, chats)
+    }, CHAT_SYNC_DEBOUNCE_MS)
+    return () => {
+      if (cloudSaveTimerRef.current) {
+        window.clearTimeout(cloudSaveTimerRef.current)
+      }
+    }
   }, [chats, projectChatKey])
 
   useEffect(() => {
     const text = submittedPrompt?.text.trim()
     if (!text || !submittedPrompt) return
     const chat = createChatFromPrompt(text, submittedPrompt.id)
-    setChats((current) => [chat, ...current.filter((item) => item.id !== chat.id)])
+    setChats((current) =>
+      current.some((item) => item.id === chat.id)
+        ? current
+        : [chat, ...current],
+    )
     setActiveChatId(chat.id)
   }, [submittedPrompt])
 
@@ -450,7 +500,54 @@ function ChatBubble({ message }: { message: BenchMessage }) {
         {isUser ? <MessageSquare size={13} /> : <Bot size={13} />}
         {isUser ? 'You' : ASSISTANT_NAME}
       </div>
-      <div className="whitespace-pre-wrap">{message.text}</div>
+      <MarkdownContent text={message.text} />
+    </div>
+  )
+}
+
+/**
+ * Render chat markdown without injecting raw HTML.
+ * @param props Markdown source text.
+ */
+function MarkdownContent({ text }: { text: string }) {
+  const blocks = useMemo(() => parseMarkdownBlocks(text), [text])
+  return (
+    <div className="space-y-2">
+      {blocks.map((block, index) => {
+        if (block.kind === 'heading') {
+          const Heading = block.level === 2 ? 'h2' : 'h3'
+          return (
+            <Heading key={`${block.kind}_${index}`} className="text-sm font-extrabold">
+              {renderInlineMarkdown(block.text)}
+            </Heading>
+          )
+        }
+        if (block.kind === 'list') {
+          return (
+            <ul key={`${block.kind}_${index}`} className="list-disc space-y-1 pl-5">
+              {block.items.map((item, itemIndex) => (
+                <li key={`${block.kind}_${index}_${itemIndex}`}>{renderInlineMarkdown(item)}</li>
+              ))}
+            </ul>
+          )
+        }
+        if (block.kind === 'code') {
+          return (
+            <pre
+              key={`${block.kind}_${index}`}
+              className="overflow-x-auto rounded-lg p-3 text-xs font-semibold"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+            >
+              <code>{block.text}</code>
+            </pre>
+          )
+        }
+        return (
+          <p key={`${block.kind}_${index}`} className="whitespace-pre-wrap">
+            {renderInlineMarkdown(block.text)}
+          </p>
+        )
+      })}
     </div>
   )
 }
@@ -729,10 +826,15 @@ function WorkflowLogHeader({ done }: { done: boolean }) {
 function WorkflowStepRow({ step }: { step: WorkflowLogStep }) {
   const isComplete = step.status === 'complete'
   const isFailed = step.status === 'failed'
+  const isActive = step.status === 'active'
   return (
     <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(0,0,0,0.035)', color: 'var(--text-secondary)' }}>
       {isComplete ? (
         <Check size={13} style={{ color: 'var(--leaf)' }} />
+      ) : isActive ? (
+        <span className="berry-workflow-active-icon" aria-hidden="true">
+          <Clock3 size={13} />
+        </span>
       ) : (
         <Clock3 size={13} style={{ color: isFailed ? 'var(--accent)' : 'var(--text-muted)' }} />
       )}
@@ -1037,6 +1139,14 @@ function choiceRequestFromResult(result: AgentRunResult | null): AssistantChoice
  */
 function renderRunSummary(result: AgentRunResult): string {
 
+  if (result.status === 'completed' && !result.state.buildResult) {
+    return 'I mapped the requested circuit into an agent plan and checked the bench graph.'
+  }
+
+  if (result.status === 'completed') {
+    return 'I set up the bench project, generated firmware, ran validation, built the artifact, and simulated the supported circuit.'
+  }
+
   if (result.status === 'needs_clarification' && result.state.clarification.status === 'needs_clarification') {
     const questions = result.state.clarification.questions
       .map((question) => `- ${question.question}`)
@@ -1322,6 +1432,189 @@ function promptForChoice(
   }
 
   return promptForWorkflow(messages, cleanPrompt)
+}
+
+/**
+ * Whether the current browser session can sync chats to Supabase.
+ */
+function canSyncCloudChats(): boolean {
+  return isAuthEnabled() && hasSupabaseBrowserConfig()
+}
+
+/**
+ * Persist chat sessions to Supabase for the signed-in user.
+ * @param projectChatKey Stable project chat namespace.
+ * @param chats Chat sessions to save.
+ */
+async function saveChatsToCloud(projectChatKey: string, chats: BenchChat[]): Promise<void> {
+  if (!canSyncCloudChats()) return
+  try {
+    const supabase = createSupabaseBrowserClient()
+    const { data } = await supabase.auth.getUser()
+    if (!data.user) return
+    await upsertCloudProjectChats(supabase, projectChatKey, chats)
+  } catch {
+    // Local chat persistence remains the fallback when cloud sync is unavailable.
+  }
+}
+
+/**
+ * Parse markdown into display blocks for chat rendering.
+ * @param text Markdown source.
+ */
+function parseMarkdownBlocks(text: string): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = []
+  const lines = text.replace(/\r\n/g, '\n').split('\n')
+  let paragraph: string[] = []
+  let listItems: string[] = []
+  let codeLines: string[] | null = null
+
+  /**
+   * Flush the active paragraph into the block list.
+   */
+  function flushParagraph() {
+    if (paragraph.length === 0) return
+    blocks.push({ kind: 'paragraph', text: paragraph.join('\n').trim() })
+    paragraph = []
+  }
+
+  /**
+   * Flush the active list into the block list.
+   */
+  function flushList() {
+    if (listItems.length === 0) return
+    blocks.push({ kind: 'list', items: listItems })
+    listItems = []
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (codeLines) {
+      if (trimmed.startsWith('```')) {
+        blocks.push({ kind: 'code', text: codeLines.join('\n') })
+        codeLines = null
+      } else {
+        codeLines.push(line)
+      }
+      continue
+    }
+
+    if (trimmed.startsWith('```')) {
+      flushParagraph()
+      flushList()
+      codeLines = []
+      continue
+    }
+
+    if (!trimmed) {
+      flushParagraph()
+      flushList()
+      continue
+    }
+
+    const headingMatch = /^(#{2,3})\s+(.+)$/.exec(trimmed)
+    if (headingMatch) {
+      flushParagraph()
+      flushList()
+      blocks.push({
+        kind: 'heading',
+        level: headingMatch[1]!.length === 2 ? 2 : 3,
+        text: headingMatch[2]!,
+      })
+      continue
+    }
+
+    const listMatch = /^[-*]\s+(.+)$/.exec(trimmed)
+    if (listMatch) {
+      flushParagraph()
+      listItems.push(listMatch[1]!)
+      continue
+    }
+
+    flushList()
+    paragraph.push(line)
+  }
+
+  flushParagraph()
+  flushList()
+  if (codeLines) {
+    blocks.push({ kind: 'code', text: codeLines.join('\n') })
+  }
+  return blocks.length > 0 ? blocks : [{ kind: 'paragraph', text }]
+}
+
+/**
+ * Render inline markdown spans for a single text fragment.
+ * @param text Inline markdown source.
+ */
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g
+  let cursor = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > cursor) {
+      nodes.push(text.slice(cursor, match.index))
+    }
+    nodes.push(renderInlineToken(match[0], nodes.length))
+    cursor = match.index + match[0].length
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor))
+  }
+  return nodes
+}
+
+/**
+ * Render one inline markdown token.
+ * @param token Matched token source.
+ * @param key Stable token index.
+ */
+function renderInlineToken(token: string, key: number): ReactNode {
+  if (token.startsWith('`') && token.endsWith('`')) {
+    return (
+      <code key={key} className="rounded px-1 py-0.5 text-xs" style={{ background: 'var(--bg-surface)' }}>
+        {token.slice(1, -1)}
+      </code>
+    )
+  }
+  if (token.startsWith('**') && token.endsWith('**')) {
+    return <strong key={key}>{token.slice(2, -2)}</strong>
+  }
+  if (token.startsWith('*') && token.endsWith('*')) {
+    return <em key={key}>{token.slice(1, -1)}</em>
+  }
+  const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token)
+  if (linkMatch) {
+    const href = safeMarkdownHref(linkMatch[2]!)
+    if (!href) return linkMatch[1]
+    return (
+      <a
+        key={key}
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="font-extrabold underline"
+        style={{ color: 'var(--accent)' }}
+      >
+        {linkMatch[1]}
+      </a>
+    )
+  }
+  return token
+}
+
+/**
+ * Return a safe link href for chat markdown.
+ * @param href Raw markdown href.
+ */
+function safeMarkdownHref(href: string): string | null {
+  const cleanHref = href.trim()
+  if (/^(https?:|mailto:)/i.test(cleanHref)) return cleanHref
+  if (cleanHref.startsWith('/')) return cleanHref
+  return null
 }
 
 /**

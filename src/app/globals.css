@@ -143,6 +143,22 @@ body {
   }
 }
 
+@keyframes workflow-icon-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes workflow-icon-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(214, 51, 108, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(214, 51, 108, 0);
+  }
+}
+
 .brand-build-badge {
   animation: build-glow 2.4s ease-in-out infinite;
 }
@@ -175,11 +191,41 @@ body {
   pointer-events: none;
 }
 
+.berry-workflow-active-icon {
+  position: relative;
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--accent);
+  animation: workflow-icon-pulse 1.4s ease-in-out infinite;
+}
+
+.berry-workflow-active-icon::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  border: 1.5px solid rgba(214, 51, 108, 0.2);
+  border-top-color: var(--accent);
+  animation: workflow-icon-orbit 0.9s linear infinite;
+}
+
+.berry-workflow-active-icon svg {
+  position: relative;
+  z-index: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brand-build-badge,
   .brand-build-icon,
   .brand-build-block,
-  .brand-build-scan {
+  .brand-build-scan,
+  .berry-workflow-active-icon,
+  .berry-workflow-active-icon::before {
     animation: none !important;
   }
 }

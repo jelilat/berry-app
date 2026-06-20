@@ -1,6 +1,6 @@
 'use client'
 
-import { createElement, useEffect, useRef, useState, type ReactElement } from 'react'
+import { createElement, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import '@wokwi/elements'
 import type { ComponentTypeId } from '@/lib/project/types'
 import {
@@ -12,6 +12,36 @@ import { wokwiElementNativeSize } from '@/lib/studio/wokwi-element-size'
 import { pinLayoutInContainer } from '@/lib/studio/wokwi-pin-position'
 
 let wokwiLoaded = false
+type PinLayout = Record<string, { x: number; y: number }>
+
+/**
+ * Check whether two native element sizes are equal.
+ * @param a Existing native size.
+ * @param b Next native size.
+ */
+function sameNativeSize(
+  a: { width: number; height: number } | null,
+  b: { width: number; height: number },
+): boolean {
+  return Boolean(a && a.width === b.width && a.height === b.height)
+}
+
+/**
+ * Check whether two measured pin layouts are equal.
+ * @param a Existing measured layout.
+ * @param b Next measured layout.
+ */
+function samePinLayout(a: PinLayout | null, b: PinLayout): boolean {
+  if (!a) return false
+  const aKeys = Object.keys(a)
+  const bKeys = Object.keys(b)
+  if (aKeys.length !== bKeys.length) return false
+  return bKeys.every((key) => {
+    const left = a[key]
+    const right = b[key]
+    return Boolean(left && left.x === right.x && left.y === right.y)
+  })
+}
 
 /**
  * Register Wokwi custom elements once in the browser.
@@ -38,8 +68,9 @@ export interface WokwiPartProps {
  * Calls onPinLayout when pin positions are available from pinInfo.
  */
 export function WokwiPart({ type, width, height, className, fit = true, onPinLayout }: WokwiPartProps) {
-  const visual = getWokwiVisual(type)
+  const visual = useMemo(() => getWokwiVisual(type), [type])
   const hostRef = useRef<HTMLDivElement>(null)
+  const lastPinLayoutRef = useRef<PinLayout | null>(null)
   const [ready, setReady] = useState(false)
   const [nativeSize, setNativeSize] = useState<{ width: number; height: number } | null>(null)
 
@@ -73,10 +104,13 @@ export function WokwiPart({ type, width, height, className, fit = true, onPinLay
       const apply = () => {
         if (cancelled) return
         const native = wokwiElementNativeSize(el, visual.nativeWidth, visual.nativeHeight)
-        setNativeSize(native)
+        setNativeSize((prev) => (sameNativeSize(prev, native) ? prev : native))
         const raw = pinLayoutFromWokwiElement(el, visual, terminalIds)
         const layout = pinLayoutInContainer(raw, width, height, native.width, native.height)
-        if (Object.keys(layout).length > 0) onPinLayout(layout, visual)
+        if (Object.keys(layout).length > 0 && !samePinLayout(lastPinLayoutRef.current, layout)) {
+          lastPinLayoutRef.current = layout
+          onPinLayout(layout, visual)
+        }
       }
 
       apply()

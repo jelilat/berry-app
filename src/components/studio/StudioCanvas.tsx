@@ -89,6 +89,27 @@ const nodeTypes = { [COMPONENT_NODE_TYPE]: ComponentNode }
 const WIRE_DRAG_THRESHOLD_PX = 6
 
 /**
+ * Compare breadboard hover markers so drag preview state can reuse equal arrays.
+ * @param a Existing hover markers.
+ * @param b Next hover markers.
+ */
+function sameBreadboardHoverMarkers(
+  a: BreadboardHoleHoverMarker[],
+  b: BreadboardHoleHoverMarker[],
+): boolean {
+  if (a.length !== b.length) return false
+  return b.every((marker, index) => {
+    const prev = a[index]
+    return (
+      prev.id === marker.id &&
+      prev.x === marker.x &&
+      prev.y === marker.y &&
+      prev.invalid === marker.invalid
+    )
+  })
+}
+
+/**
  * React Flow bench canvas synced to {@link BerryProject}.
  */
 export function StudioCanvas({
@@ -939,16 +960,17 @@ function StudioCanvasInner({
       )
       const hoverSites =
         sites.length > 0 ? sites : [[preview.terminalId, preview.hole] as const]
-      setBreadboardHoverMarkers(
-        hoverSites.map(([terminalId, site]) => {
-          const bench = holeBenchPosition(preview.breadboard, site)
-          return {
-            id: `${instanceId}:${terminalId}:breadboard-hover`,
-            x: bench.x,
-            y: bench.y,
-            invalid,
-          }
-        }),
+      const nextMarkers = hoverSites.map(([terminalId, site]) => {
+        const bench = holeBenchPosition(preview.breadboard, site)
+        return {
+          id: `${instanceId}:${terminalId}:breadboard-hover`,
+          x: bench.x,
+          y: bench.y,
+          invalid,
+        }
+      })
+      setBreadboardHoverMarkers((prev) =>
+        sameBreadboardHoverMarkers(prev, nextMarkers) ? prev : nextMarkers,
       )
     },
     [],

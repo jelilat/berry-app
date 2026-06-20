@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { ComponentNodeData } from '@/lib/studio/flow-map'
 import type { ComponentTypeId } from '@/lib/project/types'
@@ -16,6 +16,24 @@ const PIN_HIT_DEFAULT = 24
 const PIN_HIT_BOARD = 14
 
 type PinVisualState = 'idle' | 'hover' | 'source' | 'target' | 'connected' | 'error'
+type PinLayout = Record<string, { x: number; y: number }>
+
+/**
+ * Check whether two pin layouts contain the same coordinates.
+ * @param a First terminal layout.
+ * @param b Second terminal layout.
+ */
+function samePinLayout(a: PinLayout | null, b: PinLayout): boolean {
+  if (!a) return false
+  const aKeys = Object.keys(a)
+  const bKeys = Object.keys(b)
+  if (aKeys.length !== bKeys.length) return false
+  return bKeys.every((key) => {
+    const left = a[key]
+    const right = b[key]
+    return left && left.x === right.x && left.y === right.y
+  })
+}
 
 /**
  * Resolve the compact pin color state.
@@ -74,13 +92,17 @@ function ComponentNodeComponent({ data, selected }: NodeProps) {
   const [wokwiPinLayout, setWokwiPinLayout] = useState<Record<string, { x: number; y: number }> | null>(
     null,
   )
+  const wokwiPinLayoutRef = useRef<PinLayout | null>(null)
   const [hoveredPin, setHoveredPin] = useState<string | null>(null)
 
   const handlePinLayout = useCallback(
     (layout: Record<string, { x: number; y: number }>) => {
       if (placementDriven || lockRuntimePinLayout) return
       if (Object.keys(layout).length === 0) return
-      setWokwiPinLayout((prev) => ({ ...terminalLayout, ...prev, ...layout }))
+      const next = { ...terminalLayout, ...wokwiPinLayoutRef.current, ...layout }
+      if (samePinLayout(wokwiPinLayoutRef.current, next)) return
+      wokwiPinLayoutRef.current = next
+      setWokwiPinLayout(next)
       onVisualPinLayout?.(d.instanceId, layout)
     },
     [d.instanceId, lockRuntimePinLayout, onVisualPinLayout, placementDriven, terminalLayout],

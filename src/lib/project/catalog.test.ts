@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getComponentDefinition, isWireTemplate, listCatalog } from "./catalog";
+import type { ComponentTypeId } from "./types";
 
 describe("component catalog", () => {
-  it("listCatalog returns 15 parts", () => {
-    expect(listCatalog()).toHaveLength(15);
+  it("listCatalog returns 16 parts", () => {
+    expect(listCatalog()).toHaveLength(16);
   });
 
   it("getComponentDefinition returns ESP32 with full DevKit header", () => {
@@ -24,5 +25,15 @@ describe("component catalog", () => {
       start: "male",
       end: "male",
     });
+  });
+
+  it("returns a placeholder definition for unsupported hosted components", () => {
+    const unsupportedType = "hc-sr501" as ComponentTypeId;
+    const def = getComponentDefinition(unsupportedType);
+
+    expect(def.name).toBe("hc-sr501 (unsupported)");
+    expect(def.group).toBe("unsupported");
+    expect(def.terminals).toEqual([]);
+    expect(isWireTemplate(unsupportedType)).toBe(false);
   });
 });

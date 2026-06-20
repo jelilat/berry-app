@@ -1,11 +1,20 @@
 import type { ComponentTypeId, TerminalDefinition } from "./types";
-import { buildComponentSceneSizeTable } from "@/lib/studio/scene-size";
+import { buildComponentSceneSizeTable, catalogSceneSize } from "@/lib/studio/scene-size";
 
 /** Scene-space width/height per component type (for terminal and wire layout). */
 export const COMPONENT_SCENE_SIZE: Record<
   ComponentTypeId,
   { w: number; h: number }
 > = buildComponentSceneSizeTable();
+
+/**
+ * Resolve a component footprint, including placeholders for unsupported parts
+ * received from hosted agent projects.
+ * @param type Component type id.
+ */
+function componentBaseSceneSize(type: ComponentTypeId): { w: number; h: number } {
+  return COMPONENT_SCENE_SIZE[type] ?? catalogSceneSize(type);
+}
 
 /**
  * Normalize rotation to 0–359 degrees on the z axis.
@@ -24,7 +33,7 @@ export function componentSceneDimensions(
   type: ComponentTypeId,
   rotationZ = 0,
 ): { w: number; h: number } {
-  const base = COMPONENT_SCENE_SIZE[type];
+  const base = componentBaseSceneSize(type);
   const r = normalizeRotationZ(rotationZ);
   if (r === 90 || r === 270) return { w: base.h, h: base.w };
   return { w: base.w, h: base.h };
@@ -152,7 +161,7 @@ export function terminalScenePositionFromRel(
   rel: { x: number; y: number },
   rotationZ = 0,
 ): { x: number; y: number } {
-  const base = COMPONENT_SCENE_SIZE[type];
+  const base = componentBaseSceneSize(type);
   const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ);
   const lx = rel.x * base.w;
   const ly = rel.y * base.h;
@@ -189,7 +198,7 @@ export function terminalRelativeFromScenePoint(
   sceneX: number,
   sceneY: number,
 ): { x: number; y: number } | null {
-  const base = COMPONENT_SCENE_SIZE[type];
+  const base = componentBaseSceneSize(type);
   const { w: boxW, h: boxH } = componentSceneDimensions(type, rotationZ);
   const offX = (boxW - base.w) / 2;
   const offY = (boxH - base.h) / 2;

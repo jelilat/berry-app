@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server'
+import {
+  hostedAgentProjectErrorMessage,
+  normalizeHostedAgentRunJson,
+} from '@/lib/agent/proxy-response'
 
 export const runtime = 'edge'
 
@@ -45,7 +49,18 @@ function parseRunId(runId: string | undefined): string {
  */
 async function proxyJsonResponse(response: Response): Promise<NextResponse> {
   const json = await response.json().catch(() => ({ error: 'Agent API returned invalid JSON' }))
-  return NextResponse.json(json, { status: response.status })
+  if (!response.ok) {
+    return NextResponse.json(json, { status: response.status })
+  }
+  try {
+    return NextResponse.json(normalizeHostedAgentRunJson(json), { status: response.status })
+  } catch (error) {
+    const message = hostedAgentProjectErrorMessage(error)
+    if (message) {
+      return NextResponse.json({ error: message }, { status: 502 })
+    }
+    throw error
+  }
 }
 
 /**

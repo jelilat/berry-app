@@ -59,6 +59,6 @@ export function componentBasePixelSize(
   type: ComponentTypeId,
   scale: number,
 ): { width: number; height: number } {
-  const size = COMPONENT_SCENE_SIZE[type]
+  const size = COMPONENT_SCENE_SIZE[type] ?? componentSceneDimensions(type)
   return { width: size.w * scale, height: size.h * scale }
 }

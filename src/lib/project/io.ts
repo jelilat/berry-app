@@ -94,6 +94,10 @@ function parseComponent(value: unknown, index: number): ComponentInstance {
     parsedPlacement = parseBreadboardPlacement(placement, `${path}.placement`);
   }
 
+  if (parsedPlacement && Object.keys(parsedPlacement.sites).length === 0) {
+    parsedPlacement = undefined;
+  }
+
   if (type === "breadboard-full" && parsedPlacement) {
     if (Object.keys(parsedPlacement.sites).length > 0) {
       throw new ProjectParseError(

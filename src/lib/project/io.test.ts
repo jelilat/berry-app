@@ -92,6 +92,46 @@ describe('parseBerryProject', () => {
     expect(project.components[1].parent).toBe('breadboard_1')
   })
 
+  it('keeps unsupported hosted components as display-only placeholders', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'unsupported component' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0, y: 0, z: 0 } },
+          placement: { sites: {} },
+        },
+        {
+          id: 'esp32_1',
+          type: 'esp32-devkit-v1',
+          transform: { position: { x: 0.1, y: 0, z: 0 } },
+          placement: { sites: {} },
+        },
+        {
+          id: 'pir_1',
+          type: 'hc-sr501',
+          parent: 'breadboard_1',
+          transform: { position: { x: 0.2, y: 0, z: 0 } },
+          placement: { sites: {} },
+        },
+      ],
+      nets: [],
+      wires: [],
+    })
+
+    expect(project.components.map((component) => component.id)).toEqual([
+      'breadboard_1',
+      'esp32_1',
+      'pir_1',
+    ])
+    expect(project.components[1].placement).toBeUndefined()
+    expect(project.components[2].type).toBe('hc-sr501')
+    expect(project.components[2].placement).toBeUndefined()
+  })
+
   it('rejects non-empty placement on a breadboard', () => {
     expect(() =>
       parseBerryProject({

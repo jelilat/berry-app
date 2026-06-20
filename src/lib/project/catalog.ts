@@ -194,11 +194,25 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
 }
 
 /**
+ * Create a placeholder definition for a component type Berry can display but
+ * does not yet know how to wire.
+ * @param type Unknown component type id from a hosted/backend project.
+ */
+function unsupportedComponentDefinition(type: ComponentTypeId): ComponentDefinition {
+  return {
+    id: type,
+    name: `${type} (unsupported)`,
+    group: 'unsupported',
+    terminals: [],
+  }
+}
+
+/**
  * Look up the catalog definition for a component type (pins, kinds, metadata).
  * @param type Catalog id (e.g. `esp32-devkit-v1`).
  */
 export function getComponentDefinition(type: ComponentTypeId): ComponentDefinition {
-  return componentCatalog[type]
+  return componentCatalog[type] ?? unsupportedComponentDefinition(type)
 }
 
 /**
@@ -214,7 +228,7 @@ export function listCatalog(): ComponentDefinition[] {
  * @param type Catalog component id.
  */
 export function isWireTemplate(type: ComponentTypeId): boolean {
-  return componentCatalog[type].wireTemplate !== undefined
+  return componentCatalog[type]?.wireTemplate !== undefined
 }
 
 /**
@@ -223,7 +237,7 @@ export function isWireTemplate(type: ComponentTypeId): boolean {
  * @throws When the type is not a wire template.
  */
 export function getWireTemplate(type: ComponentTypeId): WireTemplateDefinition {
-  const template = componentCatalog[type].wireTemplate
+  const template = componentCatalog[type]?.wireTemplate
   if (!template) {
     throw new Error(`${type} is not a wire template`)
   }

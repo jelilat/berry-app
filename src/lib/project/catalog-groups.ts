@@ -23,6 +23,7 @@ export const COMPONENT_GROUP_LABELS: Record<ComponentGroup, string> = {
   inputs: 'Input',
   actuators: 'Actuators',
   passives: 'Passives',
+  unsupported: 'Unsupported',
 }
 
 /**

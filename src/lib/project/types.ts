@@ -90,6 +90,7 @@ export type ComponentGroup =
   | 'sensors'
   | 'actuators'
   | 'passives'
+  | 'unsupported'
 
 /** Jumper end connector style (breadboard pin vs socket). */
 export type WireConnectorGender = 'male' | 'female'

@@ -157,6 +157,26 @@ function withUpdatedMetadata(project: BerryProject): BerryProject {
 }
 
 /**
+ * Rename a project while preserving all graph contents.
+ * @param project Current project.
+ * @param name User-entered project name.
+ */
+export function renameProject(project: BerryProject, name: string): BerryProject {
+  const trimmedName = name.trim() || "Untitled project";
+  if (trimmedName === project.metadata.name) return project;
+
+  const next: BerryProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      name: trimmedName,
+    },
+  };
+  validateProjectGraph(next);
+  return withUpdatedMetadata(next);
+}
+
+/**
  * Add a component instance from the catalog.
  * @param project Current project.
  * @param type Catalog component type id.

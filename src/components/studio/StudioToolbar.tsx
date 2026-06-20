@@ -1,9 +1,12 @@
 'use client'
 
+import { useEffect, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent } from 'react'
 import {
+  Check,
   Cpu,
   FolderOpen,
   Hammer,
+  Pencil,
   Play,
   Rocket,
   Save,
@@ -11,6 +14,7 @@ import {
   Trash2,
   Undo2,
   Redo2,
+  X,
 } from 'lucide-react'
 import { ViewModeToggle, type StudioViewMode } from './ViewModeToggle'
 import type { ValidationResult } from '@/lib/validation'
@@ -24,6 +28,7 @@ export function StudioToolbar({
   onViewModeChange,
   onNew,
   onLoadExample,
+  onRename,
   onSave,
   onUndo,
   onRedo,
@@ -45,6 +50,7 @@ export function StudioToolbar({
   onViewModeChange: (mode: StudioViewMode) => void
   onNew: () => void
   onLoadExample: () => void
+  onRename: (name: string) => void
   onSave: () => void
   onUndo: () => void
   onRedo: () => void
@@ -72,9 +78,7 @@ export function StudioToolbar({
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <h1 className="truncate text-sm font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-          {projectName}
-        </h1>
+        <ProjectTitleEditor projectName={projectName} onRename={onRename} />
         <button
           type="button"
           onClick={onValidationClick}
@@ -108,6 +112,118 @@ export function StudioToolbar({
       <IconButton label="Deploy coming soon" icon={Rocket} onClick={onDeploy} disabled={hasValidationErrors} />
       <IconButton label="Simulation engine" icon={Cpu} onClick={() => {}} disabled />
     </header>
+  )
+}
+
+/**
+ * Inline editor for the current Studio project title.
+ * @param props Current project name and rename callback.
+ */
+function ProjectTitleEditor({
+  projectName,
+  onRename,
+}: {
+  projectName: string
+  onRename: (name: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draftName, setDraftName] = useState(projectName)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!editing) {
+      setDraftName(projectName)
+    }
+  }, [editing, projectName])
+
+  useEffect(() => {
+    if (!editing) return
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [editing])
+
+  /**
+   * Enter title editing mode with the latest project name.
+   */
+  function startEditing() {
+    setDraftName(projectName)
+    setEditing(true)
+  }
+
+  /**
+   * Save a title edit and leave editing mode.
+   */
+  function commitRename() {
+    onRename(draftName)
+    setEditing(false)
+  }
+
+  /**
+   * Discard a title edit and leave editing mode.
+   */
+  function cancelRename() {
+    setDraftName(projectName)
+    setEditing(false)
+  }
+
+  /**
+   * Submit the title edit form.
+   * @param event Form submit event.
+   */
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    commitRename()
+  }
+
+  /**
+   * Handle title input keyboard shortcuts.
+   * @param event Input keyboard event.
+   */
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    cancelRename()
+  }
+
+  /**
+   * Save the draft when focus leaves the title editor.
+   * @param event Input blur event.
+   */
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    if (event.currentTarget.form?.contains(event.relatedTarget as Node | null)) return
+    commitRename()
+  }
+
+  if (editing) {
+    return (
+      <form className="flex min-w-0 max-w-[360px] flex-1 items-center gap-1" onSubmit={handleSubmit}>
+        <input
+          ref={inputRef}
+          value={draftName}
+          onChange={(event) => setDraftName(event.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
+          aria-label="Project name"
+          className="h-9 min-w-0 flex-1 rounded-lg border px-3 text-sm font-extrabold outline-none"
+          style={{
+            background: 'var(--bg-surface)',
+            borderColor: 'var(--berry)',
+            color: 'var(--text-primary)',
+          }}
+        />
+        <IconButton label="Save project name" icon={Check} onClick={commitRename} />
+        <IconButton label="Cancel rename" icon={X} onClick={cancelRename} />
+      </form>
+    )
+  }
+
+  return (
+    <div className="group flex min-w-0 max-w-[360px] flex-1 items-center gap-1">
+      <h1 className="truncate text-sm font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+        {projectName}
+      </h1>
+      <IconButton label="Rename project" icon={Pencil} onClick={startEditing} />
+    </div>
   )
 }
 

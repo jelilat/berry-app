@@ -127,6 +127,16 @@ export interface AgentRunResult {
   error?: string
 }
 
+/** One model or workflow usage event emitted by the hosted agent API. */
+export interface AgentUsageEvent {
+  action: string
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  provider?: string
+  model?: string
+}
+
 /** Public run record returned by the hosted Berry agent API. */
 export interface AgentBackendRunRecord {
   runId: string
@@ -141,7 +151,7 @@ export interface AgentBackendRunRecord {
   answers?: Record<string, string>
   result?: AgentRunResult
   error?: string
-  usageEvents?: unknown[]
+  usageEvents?: AgentUsageEvent[]
   createdAt?: string
   updatedAt?: string
 }

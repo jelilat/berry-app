@@ -4,14 +4,19 @@ import {
   buildFirmwareWorktree,
   formatFirmwareFileSize,
   isEditableFirmwareWorktreePath,
+  isPreviewFirmwareWorktreePath,
+  PROJECT_JSON_PATH,
+  resolveFirmwareWorktreeFileContent,
   type FirmwareWorktreeNode,
 } from './worktree'
+import { createEmptyProject } from '@/lib/project/mutations'
 
 describe('buildFirmwareWorktree', () => {
   it('includes editable source and generated platformio.ini', () => {
     const tree = buildFirmwareWorktree('esp32-devkit-v1', null, 'ESP32 blink')
 
     expect(tree.label).toBe('ESP32 blink')
+    expect(tree.nodes.some((node) => node.path === PROJECT_JSON_PATH)).toBe(true)
     expect(tree.nodes.some((node) => node.path === 'platformio.ini')).toBe(true)
     expect(
       tree.nodes
@@ -42,6 +47,22 @@ describe('buildFirmwareWorktree', () => {
   })
 })
 
+describe('resolveFirmwareWorktreeFileContent', () => {
+  it('renders the current project as project.json', () => {
+    const project = createEmptyProject()
+    const content = resolveFirmwareWorktreeFileContent(
+      PROJECT_JSON_PATH,
+      project,
+      project.board,
+      'void setup() {}',
+      null,
+    )
+
+    expect(content).toContain('"version"')
+    expect(content).toContain('"components"')
+  })
+})
+
 describe('formatFirmwareFileSize', () => {
   it('formats kilobytes for firmware binaries', () => {
     expect(formatFirmwareFileSize(240_208)).toBe('235 KB')
@@ -51,7 +72,12 @@ describe('formatFirmwareFileSize', () => {
 describe('isEditableFirmwareWorktreePath', () => {
   it('allows editing only src/main.cpp', () => {
     expect(isEditableFirmwareWorktreePath(DEFAULT_FIRMWARE_PATH)).toBe(true)
+    expect(isEditableFirmwareWorktreePath(PROJECT_JSON_PATH)).toBe(false)
     expect(isEditableFirmwareWorktreePath('platformio.ini')).toBe(false)
+  })
+
+  it('treats project.json as a generated preview', () => {
+    expect(isPreviewFirmwareWorktreePath(PROJECT_JSON_PATH)).toBe(true)
   })
 })
 

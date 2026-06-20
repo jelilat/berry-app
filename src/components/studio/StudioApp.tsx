@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadBerryProjectFromJson } from '@/lib/project/io'
+import { loadBerryProjectFromJson, serializeBerryProject } from '@/lib/project/io'
 import {
   addComponent,
   connectTerminals,
   createEmptyProject,
   moveComponent,
+  renameProject,
   removeComponent,
   removeWire,
   resetWireRoute,
@@ -105,9 +106,13 @@ function isTerminalAgentRun(record: AgentBackendRunRecord): boolean {
 /**
  * Poll the local proxy until a hosted agent run reaches a terminal status.
  * @param runId Hosted backend run id.
+ * @param onRecord Optional callback for every successful poll response.
  * @throws Error when polling fails or times out.
  */
-async function pollAgentRun(runId: string): Promise<AgentBackendRunRecord> {
+async function pollAgentRun(
+  runId: string,
+  onRecord?: (record: AgentBackendRunRecord) => void,
+): Promise<AgentBackendRunRecord> {
   for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS; attempt += 1) {
     if (attempt > 0) {
       await sleep(AGENT_POLL_INTERVAL_MS)
@@ -119,6 +124,7 @@ async function pollAgentRun(runId: string): Promise<AgentBackendRunRecord> {
       throw new Error(error.error ?? 'Agent status request failed')
     }
     const record = json as AgentBackendRunRecord
+    onRecord?.(record)
     if (isTerminalAgentRun(record)) {
       return record
     }
@@ -263,6 +269,8 @@ export function StudioApp() {
   const [agentLoading, setAgentLoading] = useState(false)
   const [agentWaitingForAnswers, setAgentWaitingForAnswers] = useState(false)
   const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
+  const [agentRunRecord, setAgentRunRecord] = useState<AgentBackendRunRecord | null>(null)
+  const [agentClarificationSubmitted, setAgentClarificationSubmitted] = useState(false)
   const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPrompt | null>(null)
   const [validationFlyoutOpen, setValidationFlyoutOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
@@ -271,6 +279,7 @@ export function StudioApp() {
   )
   const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
   const skipNextPipelineResetRef = useRef(false)
+  const visualizedAgentProjectRef = useRef<string | null>(null)
   const cloudAutosaveTimerRef = useRef<number | null>(null)
   const handleAgentRunRef = useRef<
     (
@@ -307,6 +316,7 @@ export function StudioApp() {
   const selectedFirmwareContent =
     resolveFirmwareWorktreeFileContent(
       selectedFirmwarePath,
+      project,
       project.board,
       firmwareSource,
       buildResult,
@@ -453,6 +463,30 @@ export function StudioApp() {
     }
   }, [buildLoading, firmwareSource, project, validationHasErrors])
 
+  /**
+   * Show the agent-designed project graph as soon as it is available.
+   * @param result Latest agent workflow result or partial run snapshot.
+   * @param notice Optional status notice after visualizing the graph.
+   */
+  const visualizeAgentProject = useCallback((result: AgentRunResult, notice?: string) => {
+    if (!result.state.circuitIntent && result.status !== 'completed') return
+    const nextProject = replaceProject(
+      preserveProjectIdentity(project, result.state.project),
+    )
+    const signature = `${result.state.runId}:${serializeBerryProject(nextProject, false)}`
+    if (visualizedAgentProjectRef.current === signature) return
+
+    visualizedAgentProjectRef.current = signature
+    skipNextPipelineResetRef.current = true
+    resetProject(nextProject)
+    setSelectedNodeId(null)
+    setSelectedWireId(null)
+    setViewMode('2d')
+    if (notice) {
+      setPipelineNotice(notice)
+    }
+  }, [project, resetProject])
+
   const handleAgentRun = useCallback(async (
     prompt: string,
     mode: 'auto' | 'deterministic' | 'real' = 'auto',
@@ -466,6 +500,11 @@ export function StudioApp() {
     setAgentLoading(true)
     setAgentWaitingForAnswers(false)
     setAgentResult(null)
+    setAgentClarificationSubmitted(!!answerSubmission)
+    visualizedAgentProjectRef.current = null
+    if (!answerSubmission) {
+      setAgentRunRecord(null)
+    }
     setErrorMessage(null)
     try {
       const response = answerSubmission
@@ -487,7 +526,12 @@ export function StudioApp() {
       }
 
       const accepted = json as AgentBackendRunAccepted
-      const record = await pollAgentRun(accepted.runId)
+      const record = await pollAgentRun(accepted.runId, (nextRecord) => {
+        setAgentRunRecord(nextRecord)
+        if (nextRecord.result) {
+          visualizeAgentProject(nextRecord.result, 'Circuit ready on the bench')
+        }
+      })
       const result = resultFromRunRecord(record)
       if (!result) {
         setErrorMessage(record.error ?? 'Agent run finished without a workflow result')
@@ -497,12 +541,7 @@ export function StudioApp() {
       setAgentResult(result)
       setAgentWaitingForAnswers(result.status === 'needs_clarification')
       if (result.status === 'completed') {
-        skipNextPipelineResetRef.current = true
-        const completedProject = replaceProject(
-          preserveProjectIdentity(project, result.state.project),
-        )
-        resetProject(completedProject)
-        setProjectChatKey(createProjectChatKey(completedProject))
+        visualizeAgentProject(result)
         const source = result.state.firmwareFiles[DEFAULT_FIRMWARE_PATH]
         if (source) {
           setFirmwareSource(source)
@@ -520,9 +559,10 @@ export function StudioApp() {
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Agent request failed')
     } finally {
+      setAgentClarificationSubmitted(false)
       setAgentLoading(false)
     }
-  }, [agentLoading, agentWaitingForAnswers, project, resetProject])
+  }, [agentLoading, agentWaitingForAnswers, project, visualizeAgentProject])
 
   handleAgentRunRef.current = handleAgentRun
 
@@ -661,6 +701,17 @@ export function StudioApp() {
 
     void saveCloudNow()
   }, [cloudProjectId, firmwareSource, project])
+
+  const handleRenameProject = useCallback((name: string) => {
+    try {
+      const next = renameProject(project, name)
+      if (next === project) return
+      setProject(next)
+      setErrorMessage(null)
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : 'Could not rename project')
+    }
+  }, [project, setProject])
 
   const handleResetFirmwareSource = useCallback(() => {
     setFirmwareSource(createDefaultFirmwareSource(project.board))
@@ -879,6 +930,7 @@ export function StudioApp() {
           onViewModeChange={setViewMode}
           onNew={handleNew}
           onLoadExample={handleLoadExample}
+          onRename={handleRenameProject}
           onSave={handleSave}
           onUndo={undo}
           onRedo={redo}
@@ -1053,6 +1105,8 @@ export function StudioApp() {
             projectChatKey={projectChatKey}
             submittedPrompt={submittedPrompt}
             result={agentResult}
+            backendRunRecord={agentRunRecord}
+            clarificationSubmitted={agentClarificationSubmitted}
             onSubmit={handleAgentRun}
           />
         </div>

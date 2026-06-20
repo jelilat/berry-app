@@ -38,7 +38,7 @@ export function FirmwareEditorPanel({
 
   return (
     <section
-      className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-2xl"
+      className="berry-firmware-editor flex h-full min-h-0 flex-col overflow-hidden rounded-2xl"
       style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
       aria-label="Firmware code editor"
     >
@@ -89,10 +89,11 @@ export function FirmwareEditorPanel({
         <CodeMirror
           value={source}
           height="100%"
-          minHeight="520px"
+          className="h-full overflow-hidden"
           extensions={[cpp()]}
           theme={oneDark}
           editable={!readOnly}
+          style={{ height: '100%' }}
           basicSetup={{
             autocompletion: !readOnly,
             bracketMatching: true,
@@ -105,6 +106,16 @@ export function FirmwareEditorPanel({
           onChange={readOnly ? undefined : onChange}
         />
       </div>
+
+      <style jsx global>{`
+        .berry-firmware-editor .cm-editor {
+          height: 100%;
+        }
+
+        .berry-firmware-editor .cm-scroller {
+          overflow: auto;
+        }
+      `}</style>
     </section>
   )
 }

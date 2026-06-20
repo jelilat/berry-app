@@ -1,8 +1,24 @@
 'use client'
 
-import { Bot, Check, Clock3, MessageSquare, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
+import {
+  Bot,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  MessageSquare,
+  Plus,
+  Send,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AgentAnswerSubmission, AgentRunResult, ClarifyingQuestion } from '@/lib/agent/types'
+import type {
+  AgentAnswerSubmission,
+  AgentBackendRunRecord,
+  AgentRunResult,
+  ClarifyingQuestion,
+} from '@/lib/agent/types'
 import { getBoardProfile } from '@/lib/project/boards'
 import { getComponentDefinition } from '@/lib/project/catalog'
 import type { BerryProject, Net } from '@/lib/project/types'
@@ -36,6 +52,14 @@ interface ClarificationFormRequest {
   questions: ClarifyingQuestion[]
 }
 
+type WorkflowStepStatus = 'active' | 'complete' | 'failed'
+
+interface WorkflowLogStep {
+  id: string
+  label: string
+  status: WorkflowStepStatus
+}
+
 /** Prompt forwarded from home into the bench chat (already running or about to). */
 export interface SubmittedPrompt {
   id: string
@@ -51,12 +75,16 @@ export function AIAssistantPanel({
   projectChatKey,
   submittedPrompt = null,
   result,
+  backendRunRecord = null,
+  clarificationSubmitted = false,
   onSubmit,
 }: {
   loading: boolean
   projectChatKey: string
   submittedPrompt?: SubmittedPrompt | null
   result: AgentRunResult | null
+  backendRunRecord?: AgentBackendRunRecord | null
+  clarificationSubmitted?: boolean
   onSubmit: (
     prompt: string,
     mode?: 'auto' | 'deterministic' | 'real',
@@ -79,6 +107,14 @@ export function AIAssistantPanel({
 
   const choiceRequest = useMemo(() => choiceRequestFromResult(result), [result])
   const clarificationRequest = useMemo(() => clarificationRequestFromResult(result), [result])
+  const workflowLog = useMemo(
+    () => workflowLogFromBackendRun(backendRunRecord, {
+      loading,
+      clarificationSubmitted,
+      result,
+    }),
+    [backendRunRecord, clarificationSubmitted, loading, result],
+  )
 
   useEffect(() => {
     setClarificationAnswers({})
@@ -110,6 +146,7 @@ export function AIAssistantPanel({
   useEffect(() => {
     if (!result || !activeChatId) return
     const message = summarizeAgentResult(result)
+    if (!message.trim()) return
     setChats((current) =>
       current.map((chat) =>
         chat.id === activeChatId
@@ -218,7 +255,7 @@ export function AIAssistantPanel({
       ),
     )
     onSubmit(
-      promptForChoiceWorkflow(result, chat.messages, cleanOption),
+      promptForChoice(result, chat.messages, cleanOption),
     )
   }
 
@@ -238,7 +275,11 @@ export function AIAssistantPanel({
     if (!clarificationRequest || loading) return
     const answers = answersForQuestions(clarificationRequest.questions, clarificationAnswers)
     if (!answers) return
-    const summary = clarificationAnswerSummary(clarificationRequest.questions, answers)
+    const transcriptMessages = clarificationTranscriptMessages(
+      clarificationRequest.runId,
+      clarificationRequest.questions,
+      answers,
+    )
     const chat = activeChat ?? createChat()
     if (!activeChat) {
       setChats((current) => [chat, ...current])
@@ -251,7 +292,7 @@ export function AIAssistantPanel({
               ...item,
               messages: [
                 ...item.messages,
-                { id: `user_answers_${Date.now()}`, role: 'user', text: summary },
+                ...transcriptMessages,
               ],
               updatedAt: new Date().toISOString(),
             }
@@ -344,14 +385,15 @@ export function AIAssistantPanel({
           </div>
         )}
 
-        {result?.state.timeline.length ? (
+        {workflowLog.length ? (
           <div className="mt-4 space-y-2">
-            <RunLogHeader done={result.status === 'completed'} count={result.state.timeline.length} />
-            {result.state.timeline.map((event) => (
-              <ThoughtRow key={event.id} text={`${event.title}${event.detail ? ` — ${event.detail}` : ''}`} />
+            {/* <WorkflowLogHeader done={result?.status === 'completed'} /> */}
+            {workflowLog.map((step) => (
+              <WorkflowStepRow key={step.id} step={step} />
             ))}
           </div>
         ) : null}
+
       </div>
 
       <div className="shrink-0 border-t p-3" style={{ borderColor: 'var(--border)' }}>
@@ -430,24 +472,115 @@ function ClarificationForm({
   onAnswerChange: (questionId: string, answer: string) => void
   onSubmit: () => void
 }) {
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(0)
   const completeAnswers = answersForQuestions(request.questions, answers)
+  const questionCount = request.questions.length
+
+  useEffect(() => {
+    setActiveQuestionIndex(0)
+  }, [request.runId])
+
+  /**
+   * Move the carousel to the previous available question.
+   */
+  function handlePreviousQuestion() {
+    setActiveQuestionIndex((current) => Math.max(0, current - 1))
+  }
+
+  /**
+   * Move the carousel to the next available question.
+   */
+  function handleNextQuestion() {
+    setActiveQuestionIndex((current) => Math.min(questionCount - 1, current + 1))
+  }
+
+  /**
+   * Store an answer and advance option-based questions to the next slide.
+   * @param question Clarification question being answered.
+   * @param questionIndex Index of the question in the carousel.
+   * @param answer Selected or typed answer.
+   */
+  function handleAnswerChange(question: ClarifyingQuestion, questionIndex: number, answer: string) {
+    onAnswerChange(question.id, answer)
+    if (question.options?.length && questionIndex < questionCount - 1) {
+      setActiveQuestionIndex(questionIndex + 1)
+    }
+  }
+
   return (
     <div
       className="mr-7 space-y-3 rounded-xl p-3"
       style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
     >
-      <div className="text-xs font-extrabold" style={{ color: 'var(--text-muted)' }}>
-        Answer these before I continue
+      <div className="flex items-center gap-2 text-xs font-extrabold" style={{ color: 'var(--text-muted)' }}>
+        <span>Question {activeQuestionIndex + 1} of {questionCount}</span>
+        {questionCount > 1 ? (
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              disabled={disabled || activeQuestionIndex === 0}
+              onClick={handlePreviousQuestion}
+              className="flex h-7 w-7 items-center justify-center rounded-lg disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+              title="Previous question"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              type="button"
+              disabled={disabled || activeQuestionIndex === questionCount - 1}
+              onClick={handleNextQuestion}
+              className="flex h-7 w-7 items-center justify-center rounded-lg disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+              title="Next question"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        ) : null}
       </div>
-      {request.questions.map((question) => (
-        <ClarificationQuestionField
-          key={question.id}
-          question={question}
-          value={answers[question.id] ?? ''}
-          disabled={disabled}
-          onChange={(answer) => onAnswerChange(question.id, answer)}
-        />
-      ))}
+      <div className="overflow-hidden">
+        <div
+          className="flex transition-transform duration-300 ease-out"
+          style={{ transform: `translateX(-${activeQuestionIndex * 100}%)` }}
+        >
+          {request.questions.map((question, index) => (
+            <div key={question.id} className="w-full shrink-0">
+              <ClarificationQuestionField
+                question={question}
+                value={answers[question.id] ?? ''}
+                disabled={disabled}
+                onChange={(answer) => handleAnswerChange(question, index, answer)}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      {questionCount > 1 ? (
+        <div className="flex justify-center gap-1.5">
+          {request.questions.map((question, index) => {
+            const isActive = index === activeQuestionIndex
+            const isAnswered = (answers[question.id]?.trim() ?? '').length > 0
+            return (
+              <button
+                key={`${question.id}_dot`}
+                type="button"
+                disabled={disabled}
+                onClick={() => setActiveQuestionIndex(index)}
+                className="h-2.5 w-2.5 rounded-full disabled:cursor-not-allowed"
+                style={{
+                  background: isActive
+                    ? 'var(--accent)'
+                    : isAnswered
+                      ? 'var(--leaf)'
+                      : 'var(--border)',
+                }}
+                aria-label={`Show question ${index + 1}`}
+              />
+            )
+          })}
+        </div>
+      ) : null}
       <button
         type="button"
         disabled={disabled || !completeAnswers}
@@ -577,19 +710,96 @@ function ThoughtRow({ text }: { text: string }) {
 }
 
 /**
- * Render latest build log status.
- * @param props Completion and timeline count.
+ * Render the coarse backend workflow header.
+ * @param props Whether the hosted run has completed.
  */
-function RunLogHeader({ done, count }: { done: boolean; count: number }) {
+function WorkflowLogHeader({ done }: { done: boolean }) {
   return (
     <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold" style={{ background: 'rgba(0,0,0,0.045)', color: 'var(--text-secondary)' }}>
       <Check size={14} style={{ color: done ? 'var(--leaf)' : 'var(--text-muted)' }} />
-      <span>Build log</span>
-      <span className="ml-auto tabular-nums" style={{ color: 'var(--text-muted)' }}>
-        {done ? count : 0}/{count} done
-      </span>
+      <span>Workflow</span>
     </div>
   )
+}
+
+/**
+ * Render one backend workflow progress row.
+ * @param props Workflow step to display.
+ */
+function WorkflowStepRow({ step }: { step: WorkflowLogStep }) {
+  const isComplete = step.status === 'complete'
+  const isFailed = step.status === 'failed'
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(0,0,0,0.035)', color: 'var(--text-secondary)' }}>
+      {isComplete ? (
+        <Check size={13} style={{ color: 'var(--leaf)' }} />
+      ) : (
+        <Clock3 size={13} style={{ color: isFailed ? 'var(--accent)' : 'var(--text-muted)' }} />
+      )}
+      <span className="min-w-0 truncate">{step.label}</span>
+    </div>
+  )
+}
+
+/**
+ * True when a hosted usage event action has been reported.
+ * @param record Latest backend run record.
+ * @param action Usage event action name.
+ */
+function hasUsageAction(record: AgentBackendRunRecord | null, action: string): boolean {
+  return record?.usageEvents?.some((event) => event.action === action) ?? false
+}
+
+/**
+ * Derive the visible backend workflow from usage events.
+ * @param record Latest backend run record.
+ * @param context Current UI state for in-flight runs.
+ */
+function workflowLogFromBackendRun(
+  record: AgentBackendRunRecord | null,
+  context: {
+    loading: boolean
+    clarificationSubmitted: boolean
+    result: AgentRunResult | null
+  },
+): WorkflowLogStep[] {
+  if (!context.loading && !record && !context.result) return []
+
+  const hasClarifier = hasUsageAction(record, 'agent.clarifier')
+  const hasPlanner = hasUsageAction(record, 'agent.planner')
+  const hasCircuitDesigner = hasUsageAction(record, 'agent.circuit_designer')
+  const runFailed = record?.status === 'failed' || context.result?.status === 'failed'
+  const reachedPlanning = hasClarifier || context.clarificationSubmitted
+
+  let activeIndex = 0
+  if (hasCircuitDesigner) {
+    activeIndex = 3
+  } else if (hasPlanner) {
+    activeIndex = 2
+  } else if (reachedPlanning) {
+    activeIndex = 1
+  }
+
+  const labels = [
+    'Processing your request',
+    'Preparing a plan',
+    'Designing the circuit',
+    'Generating firmware',
+  ]
+  const visibleLabels = labels.slice(0, activeIndex + 1)
+  return visibleLabels.map((label, index) => {
+    const status =
+      index < activeIndex || context.result?.status === 'completed'
+        ? 'complete'
+        : runFailed
+          ? 'failed'
+          : 'active'
+    return {
+      id: `workflow_${index}`,
+      label,
+      status,
+    }
+  })
 }
 
 /**
@@ -606,7 +816,7 @@ function summarizeAgentResult(result: AgentRunResult): string {
  */
 function renderAiResponseTemplate(result: AgentRunResult): string {
   if (result.status === 'needs_clarification' && result.state.clarification.status === 'needs_clarification') {
-    return renderClarificationFeedback(result)
+    return ''
   }
 
   if (isScriptedStarterResult(result)) {
@@ -773,27 +983,6 @@ function starterFirmwareNotes(project: BerryProject): string[] {
     ]
   }
   return ['Generate firmware from the project graph pin map.']
-}
-
-/**
- * Render a short follow-up prompt when the agent needs user input.
- * @param result Agent workflow result containing clarification questions.
- */
-function renderClarificationFeedback(result: AgentRunResult): string {
-  if (result.state.clarification.status !== 'needs_clarification') {
-    return 'I need one more detail before I can continue.'
-  }
-
-  const questions = result.state.clarification.questions
-  if (questions.length === 0) {
-    return 'I need one more detail before I can continue.'
-  }
-
-  return [
-    questions.length === 1
-      ? 'I need one detail before I continue.'
-      : `I need ${questions.length} details before I continue.`,
-  ].join('\n')
 }
 
 /**
@@ -1093,17 +1282,31 @@ function answersForQuestions(
 }
 
 /**
- * Render the user's collected clarification answers as one chat message.
+ * Build interleaved assistant and user messages for submitted clarifications.
+ * @param runId Agent run id that requested clarification.
  * @param questions Clarification questions that were answered.
  * @param answers Submitted answer map.
  */
-function clarificationAnswerSummary(
+function clarificationTranscriptMessages(
+  runId: string,
   questions: ClarifyingQuestion[],
   answers: Record<string, string>,
-): string {
-  return questions
-    .map((question) => `${question.question}\n${answers[question.id] ?? ''}`)
-    .join('\n\n')
+): BenchMessage[] {
+  return questions.flatMap((question, index) => {
+    const answer = answers[question.id] ?? ''
+    return [
+      {
+        id: `assistant_clarification_${runId}_${question.id}_${index}`,
+        role: 'assistant' as const,
+        text: question.question,
+      },
+      {
+        id: `user_clarification_${runId}_${question.id}_${index}`,
+        role: 'user' as const,
+        text: answer,
+      },
+    ]
+  })
 }
 
 /**
@@ -1112,7 +1315,7 @@ function clarificationAnswerSummary(
  * @param messages Existing chat messages before the selected choice.
  * @param cleanPrompt Selected option text.
  */
-function promptForChoiceWorkflow(
+function promptForChoice(
   result: AgentRunResult | null,
   messages: BenchMessage[],
   cleanPrompt: string,

@@ -11,6 +11,7 @@ import {
   removeWire,
   createStarterProject,
   moveComponent,
+  renameProject,
   removeComponent,
   rerouteWiresForComponent,
   rotateComponent,
@@ -104,6 +105,21 @@ describe("createStarterProject", () => {
       { componentId: "esp32_1", terminalId: "IO12" },
     );
     expect(p.wires).toHaveLength(1);
+  });
+});
+
+describe("renameProject", () => {
+  it("updates metadata name without changing the graph", () => {
+    const p = createEmptyProject();
+    const next = renameProject(p, "  Blink bench  ");
+    expect(next.metadata.name).toBe("Blink bench");
+    expect(next.metadata.updatedAt).toBeTruthy();
+    expect(next.components).toBe(p.components);
+  });
+
+  it("uses the untitled fallback for blank names", () => {
+    const p = renameProject(createEmptyProject(), "   ");
+    expect(p.metadata.name).toBe("Untitled project");
   });
 });
 

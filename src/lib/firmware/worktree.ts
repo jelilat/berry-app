@@ -1,7 +1,11 @@
 import type { BuildResult } from '@/lib/build/types'
 import { resolvePlatformioIni } from '@/lib/build/platformio-ini'
-import type { BoardId } from '@/lib/project/types'
+import { serializeBerryProject } from '@/lib/project/io'
+import type { BerryProject, BoardId } from '@/lib/project/types'
 import { DEFAULT_FIRMWARE_PATH } from './source'
+
+/** Read-only worktree path for the current Berry project graph. */
+export const PROJECT_JSON_PATH = 'project.json'
 
 /** Worktree entry kind for the firmware file tree. */
 export type FirmwareWorktreeNodeKind = 'folder' | 'file'
@@ -122,6 +126,14 @@ export function buildFirmwareWorktree(
     label: projectName?.trim() || 'firmware',
     nodes: [
       {
+        id: PROJECT_JSON_PATH,
+        name: PROJECT_JSON_PATH,
+        path: PROJECT_JSON_PATH,
+        kind: 'file',
+        status: 'generated',
+        badge: 'Graph',
+      },
+      {
         id: 'platformio.ini',
         name: 'platformio.ini',
         path: 'platformio.ini',
@@ -158,16 +170,19 @@ export function buildFirmwareWorktree(
 /**
  * Resolve display content for a selected worktree file path.
  * @param path Worktree file path.
+ * @param project Current Berry project graph.
  * @param board Active board for generated ini content.
  * @param mainCpp Current editable firmware source.
  * @param buildResult Latest build result for artifact metadata.
  */
 export function resolveFirmwareWorktreeFileContent(
   path: string,
+  project: BerryProject,
   board: BoardId,
   mainCpp: string,
   buildResult?: BuildResult | null,
 ): string | null {
+  if (path === PROJECT_JSON_PATH) return serializeBerryProject(project)
   if (path === DEFAULT_FIRMWARE_PATH) return mainCpp
   if (path === 'platformio.ini') return resolvePlatformioIni(board)
 
@@ -214,5 +229,5 @@ export function isEditableFirmwareWorktreePath(path: string): boolean {
  * @param path Worktree file path.
  */
 export function isPreviewFirmwareWorktreePath(path: string): boolean {
-  return path === 'platformio.ini' || path.includes('.pio/build/')
+  return path === PROJECT_JSON_PATH || path === 'platformio.ini' || path.includes('.pio/build/')
 }

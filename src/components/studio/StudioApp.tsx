@@ -451,8 +451,11 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           }
           const loadedProject = loadBerryProjectFromJson(entry.projectJson)
           resetProject(loadedProject)
-          setProjectChatKey(entry.id)
-          setFirmwareSource(createDefaultFirmwareSource(loadedProject.board))
+          setProjectChatKey(createProjectChatKey(loadedProject))
+          setFirmwareSource(
+            entry.firmwareFiles?.[DEFAULT_FIRMWARE_PATH] ??
+              createDefaultFirmwareSource(loadedProject.board),
+          )
           setCloudProjectId(entry.id)
           setStatus('ready')
           setCloudAutosaveReady(true)
@@ -715,7 +718,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         const supabase = createSupabaseBrowserClient()
         const { data } = await supabase.auth.getUser()
         if (!data.user) return
-        const entry = await upsertCloudUserProject(supabase, project, cloudProjectId)
+        const entry = await upsertCloudUserProject(
+          supabase,
+          project,
+          { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+          cloudProjectId,
+        )
         if (entry.id !== cloudProjectId) {
           setCloudProjectId(entry.id)
           if (!projectId) {
@@ -736,7 +744,16 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         window.clearTimeout(cloudAutosaveTimerRef.current)
       }
     }
-  }, [cloudAutosaveReady, cloudProjectId, project, projectId, router, signedIn, status])
+  }, [
+    cloudAutosaveReady,
+    cloudProjectId,
+    firmwareSource,
+    project,
+    projectId,
+    router,
+    signedIn,
+    status,
+  ])
 
   useEffect(() => {
     if (signedIn || status !== 'ready') return
@@ -802,7 +819,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         const supabase = createSupabaseBrowserClient()
         const { data } = await supabase.auth.getUser()
         if (!data.user) return
-        const entry = await upsertCloudUserProject(supabase, project, cloudProjectId)
+        const entry = await upsertCloudUserProject(
+          supabase,
+          project,
+          { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+          cloudProjectId,
+        )
         setCloudProjectId(entry.id)
         if (!projectId) {
           router.replace(`/bench/${entry.id}`)
@@ -1230,6 +1252,9 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           <AIAssistantPanel
             loading={agentLoading}
             projectChatKey={projectChatKey}
+            legacyProjectChatKey={
+              cloudProjectId && cloudProjectId !== projectChatKey ? cloudProjectId : null
+            }
             submittedPrompt={submittedPrompt}
             result={agentResult}
             backendRunRecord={agentRunRecord}

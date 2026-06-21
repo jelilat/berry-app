@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { FirmwareSourceFiles } from '@/lib/build/types'
 import { serializeBerryProject } from '@/lib/project/io'
 import type { BerryProject } from '@/lib/project/types'
 import type { UserProjectEntry } from './user-projects'
@@ -12,6 +13,7 @@ interface CloudProjectRow {
   board: BerryProject['board']
   updated_at: string
   project_json: unknown
+  firmware_files?: unknown
 }
 
 /**
@@ -31,6 +33,23 @@ function projectTitle(project: BerryProject): string {
 }
 
 /**
+ * Parse stored firmware files from Supabase JSON.
+ * @param value Unknown JSON value from the `firmware_files` column.
+ */
+function parseFirmwareFiles(value: unknown): Partial<FirmwareSourceFiles> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined
+  }
+  const files = Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[0] === 'string' && typeof entry[1] === 'string',
+    ),
+  )
+  return Object.keys(files).length > 0 ? files : undefined
+}
+
+/**
  * Convert a Supabase row into the sidebar's existing project entry shape.
  * @param row Row returned from the `projects` table.
  */
@@ -44,6 +63,7 @@ function cloudRowToProjectEntry(row: CloudProjectRow): UserProjectEntry {
       typeof row.project_json === 'string'
         ? row.project_json
         : JSON.stringify(row.project_json),
+    firmwareFiles: parseFirmwareFiles(row.firmware_files),
   }
 }
 
@@ -56,7 +76,7 @@ export async function loadCloudUserProjects(
 ): Promise<UserProjectEntry[]> {
   const { data, error } = await supabase
     .from('projects')
-    .select('id,name,board,updated_at,project_json')
+    .select('id,name,board,updated_at,project_json,firmware_files')
     .order('updated_at', { ascending: false })
 
   if (error) throw error
@@ -74,7 +94,7 @@ export async function loadCloudUserProject(
 ): Promise<UserProjectEntry | null> {
   const { data, error } = await supabase
     .from('projects')
-    .select('id,name,board,updated_at,project_json')
+    .select('id,name,board,updated_at,project_json,firmware_files')
     .eq('id', projectId)
     .maybeSingle()
 
@@ -86,11 +106,13 @@ export async function loadCloudUserProject(
  * Insert or update one project for the currently signed-in Supabase user.
  * @param supabase Browser Supabase client with an active user session.
  * @param project Current Berry project graph.
+ * @param firmwareFiles Firmware source files keyed by project-relative path.
  * @param projectId Existing cloud row id, when this bench was opened from cloud.
  */
 export async function upsertCloudUserProject(
   supabase: SupabaseClient,
   project: BerryProject,
+  firmwareFiles?: Partial<FirmwareSourceFiles>,
   projectId?: string | null,
 ): Promise<UserProjectEntry> {
   const now = new Date().toISOString()
@@ -99,6 +121,7 @@ export async function upsertCloudUserProject(
     name: projectTitle(project),
     board: project.board,
     project_json: projectJson,
+    firmware_files: firmwareFiles ?? {},
     updated_at: now,
   }
 
@@ -107,7 +130,7 @@ export async function upsertCloudUserProject(
       .from('projects')
       .update(payload)
       .eq('id', projectId)
-      .select('id,name,board,updated_at,project_json')
+      .select('id,name,board,updated_at,project_json,firmware_files')
       .maybeSingle()
 
     if (error) throw error
@@ -117,7 +140,7 @@ export async function upsertCloudUserProject(
   const { data, error } = await supabase
     .from('projects')
     .insert(payload)
-    .select('id,name,board,updated_at,project_json')
+    .select('id,name,board,updated_at,project_json,firmware_files')
     .single()
 
   if (error) throw error

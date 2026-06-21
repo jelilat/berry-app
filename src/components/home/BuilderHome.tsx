@@ -32,7 +32,11 @@ import {
   stashPendingAgentRun,
 } from '@/lib/studio/session-bootstrap'
 import { saveFirmwareSourceToStorage, saveProjectToStorage } from '@/lib/studio/storage'
-import { createDefaultFirmwareSource } from '@/lib/firmware/source'
+import {
+  createDefaultFirmwareSource,
+  createEsp32BlinkFirmwareSource,
+  DEFAULT_FIRMWARE_PATH,
+} from '@/lib/firmware/source'
 import { BUILDER_TEMPLATES } from '@/lib/studio/templates'
 import {
   loadSelectedModelId,
@@ -195,9 +199,17 @@ export function BuilderHome() {
           saveForUser: false,
           saveToLocalStorage: !(session && cloudSyncEnabled),
         })
+        const firmwareSource =
+          templateId === 'blink-led'
+            ? createEsp32BlinkFirmwareSource()
+            : createDefaultFirmwareSource(project.board)
         if (session && cloudSyncEnabled) {
           const supabase = createSupabaseBrowserClient()
-          const entry = await upsertCloudUserProject(supabase, project)
+          const entry = await upsertCloudUserProject(
+            supabase,
+            project,
+            { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+          )
           await refreshProjects(true)
           router.push(`/bench/${entry.id}`)
         } else {
@@ -235,7 +247,11 @@ export function BuilderHome() {
       setErrorMessage(null)
       try {
         const supabase = createSupabaseBrowserClient()
-        const entry = await upsertCloudUserProject(supabase, starter)
+        const entry = await upsertCloudUserProject(
+          supabase,
+          starter,
+          { [DEFAULT_FIRMWARE_PATH]: createDefaultFirmwareSource(starter.board) },
+        )
         await refreshProjects(true)
         router.push(`/bench/${entry.id}`)
       } catch (error) {

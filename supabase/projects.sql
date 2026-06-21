@@ -8,6 +8,9 @@ create table if not exists public.projects (
   updated_at timestamptz not null default now()
 );
 
+alter table public.projects
+  add column if not exists firmware_files jsonb not null default '{}'::jsonb;
+
 alter table public.projects enable row level security;
 
 create policy "Users can read their own projects"

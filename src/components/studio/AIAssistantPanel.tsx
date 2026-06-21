@@ -78,6 +78,7 @@ export interface SubmittedPrompt {
 export function AIAssistantPanel({
   loading,
   projectChatKey,
+  legacyProjectChatKey = null,
   submittedPrompt = null,
   result,
   backendRunRecord = null,
@@ -86,6 +87,7 @@ export function AIAssistantPanel({
 }: {
   loading: boolean
   projectChatKey: string
+  legacyProjectChatKey?: string | null
   submittedPrompt?: SubmittedPrompt | null
   result: AgentRunResult | null
   backendRunRecord?: AgentBackendRunRecord | null
@@ -101,7 +103,9 @@ export function AIAssistantPanel({
 }) {
   const [prompt, setPrompt] = useState('')
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({})
-  const [chats, setChats] = useState<BenchChat[]>(() => loadChats(projectChatKey))
+  const [chats, setChats] = useState<BenchChat[]>(() =>
+    loadChats(projectChatKey, legacyProjectChatKey),
+  )
   const [activeChatId, setActiveChatId] = useState(() => chats[0]?.id ?? createChat().id)
   const skipNextSaveRef = useRef(false)
   const cloudSaveTimerRef = useRef<number | null>(null)
@@ -127,7 +131,7 @@ export function AIAssistantPanel({
   }, [clarificationRequest?.runId])
 
   useEffect(() => {
-    const nextChats = loadChats(projectChatKey)
+    const nextChats = loadChats(projectChatKey, legacyProjectChatKey)
     skipNextSaveRef.current = true
     setChats(nextChats)
     setActiveChatId(nextChats[0]?.id ?? createChat().id)
@@ -150,6 +154,17 @@ export function AIAssistantPanel({
           setActiveChatId(cloudChats[0]?.id ?? createChat().id)
           return
         }
+        if (legacyProjectChatKey && legacyProjectChatKey !== projectChatKey) {
+          const legacyCloudChats = await loadCloudProjectChats(supabase, legacyProjectChatKey)
+          if (cancelled) return
+          if (legacyCloudChats.length > 0) {
+            skipNextSaveRef.current = true
+            setChats(legacyCloudChats)
+            setActiveChatId(legacyCloudChats[0]?.id ?? createChat().id)
+            await upsertCloudProjectChats(supabase, projectChatKey, legacyCloudChats)
+            return
+          }
+        }
         await upsertCloudProjectChats(supabase, projectChatKey, nextChats)
       } catch {
         // Local chat persistence remains the fallback when cloud sync is unavailable.
@@ -160,7 +175,7 @@ export function AIAssistantPanel({
     return () => {
       cancelled = true
     }
-  }, [projectChatKey])
+  }, [legacyProjectChatKey, projectChatKey])
 
   useEffect(() => {
     if (skipNextSaveRef.current) {
@@ -1618,22 +1633,47 @@ function safeMarkdownHref(href: string): string | null {
 }
 
 /**
- * Load local chat sessions.
+ * Load locally stored chat sessions, returning null when no saved entry exists.
+ * @param projectChatKey Stable project identity string.
  */
-function loadChats(projectChatKey: string): BenchChat[] {
-  if (typeof window === 'undefined') return [createChat()]
+function loadStoredChats(projectChatKey: string): BenchChat[] | null {
+  if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(chatStorageKey(projectChatKey))
-    if (!raw) return [createChat()]
+    if (!raw) return null
     const parsed = JSON.parse(raw) as BenchChat[]
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [createChat()]
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null
   } catch {
-    return [createChat()]
+    return null
   }
 }
 
 /**
+ * Load local chat sessions, using a legacy key as a migration fallback.
+ * @param projectChatKey Stable project identity string.
+ * @param legacyProjectChatKey Previous project identity string, when one exists.
+ */
+function loadChats(
+  projectChatKey: string,
+  legacyProjectChatKey?: string | null,
+): BenchChat[] {
+  const primaryChats = loadStoredChats(projectChatKey)
+  if (primaryChats) return primaryChats
+
+  if (legacyProjectChatKey && legacyProjectChatKey !== projectChatKey) {
+    const legacyChats = loadStoredChats(legacyProjectChatKey)
+    if (legacyChats) {
+      saveChats(projectChatKey, legacyChats)
+      return legacyChats
+    }
+  }
+
+  return [createChat()]
+}
+
+/**
  * Persist local chat sessions.
+ * @param projectChatKey Stable project identity string.
  * @param chats Chat sessions.
  */
 function saveChats(projectChatKey: string, chats: BenchChat[]): void {

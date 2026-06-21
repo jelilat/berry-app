@@ -1,5 +1,6 @@
 import { serializeBerryProject } from '@/lib/project/io'
 import type { BerryProject } from '@/lib/project/types'
+import type { FirmwareSourceFiles } from '@/lib/build/types'
 
 /** localStorage key for saved user projects. */
 export const USER_PROJECTS_STORAGE_KEY = 'berry-user-projects'
@@ -11,6 +12,7 @@ export interface UserProjectEntry {
   board: BerryProject['board']
   updatedAt: string
   projectJson: string
+  firmwareFiles?: Partial<FirmwareSourceFiles>
 }
 
 /**

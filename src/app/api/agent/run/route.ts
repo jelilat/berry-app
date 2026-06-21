@@ -3,6 +3,7 @@ import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import type { AgentRunInput } from '@/lib/agent/types'
 import type { BerryModelProvider } from '@/lib/ai/model-registry'
 import { resolveUserReasoning, USER_MODEL_OPTIONS } from '@/lib/studio/user-models'
+import { agentUsageLimitResponse, checkAgentUsageLimit } from '@/lib/agent/usage'
 
 export const runtime = 'edge'
 
@@ -122,6 +123,16 @@ export async function POST(request: Request) {
     }
     const message = error instanceof Error ? error.message : 'Invalid agent request'
     return NextResponse.json({ error: message }, { status: 400 })
+  }
+
+  try {
+    const usageLimit = await checkAgentUsageLimit(request)
+    if (!usageLimit.allowed) {
+      return agentUsageLimitResponse(usageLimit)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not check Pip usage.'
+    return NextResponse.json({ error: message }, { status: message.includes('Sign in') ? 401 : 502 })
   }
 
   try {

@@ -3,6 +3,12 @@ import {
   hostedAgentProjectErrorMessage,
   normalizeHostedAgentRunJson,
 } from '@/lib/agent/proxy-response'
+import type { AgentBackendRunRecord } from '@/lib/agent/types'
+import {
+  agentUsageLimitResponse,
+  checkAgentUsageLimit,
+  recordAgentUsageFromRun,
+} from '@/lib/agent/usage'
 
 export const runtime = 'edge'
 
@@ -73,19 +79,22 @@ function parseAnswersBody(body: unknown): { answers: Record<string, string> } {
  * Return a JSON response while preserving the hosted API status code.
  * @param response Hosted API fetch response.
  */
-async function proxyJsonResponse(response: Response): Promise<NextResponse> {
+async function proxyJsonResponse(request: Request, response: Response): Promise<NextResponse> {
   const json = await response.json().catch(() => ({ error: 'Agent API returned invalid JSON' }))
   if (!response.ok) {
     return NextResponse.json(json, { status: response.status })
   }
   try {
-    return NextResponse.json(normalizeHostedAgentRunJson(json), { status: response.status })
+    const normalized = normalizeHostedAgentRunJson(json) as AgentBackendRunRecord
+    await recordAgentUsageFromRun(request, normalized)
+    return NextResponse.json(normalized, { status: response.status })
   } catch (error) {
     const message = hostedAgentProjectErrorMessage(error)
     if (message) {
       return NextResponse.json({ error: message }, { status: 502 })
     }
-    throw error
+    const fallbackMessage = error instanceof Error ? error.message : 'Could not save Pip usage.'
+    return NextResponse.json({ error: fallbackMessage }, { status: 502 })
   }
 }
 
@@ -122,12 +131,22 @@ export async function POST(
   }
 
   try {
+    const usageLimit = await checkAgentUsageLimit(request)
+    if (!usageLimit.allowed) {
+      return agentUsageLimitResponse(usageLimit)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not check Pip usage.'
+    return NextResponse.json({ error: message }, { status: message.includes('Sign in') ? 401 : 502 })
+  }
+
+  try {
     const response = await fetch(`${agentApiOrigin()}/v1/agent/runs/${encodeURIComponent(runId)}/answers`, {
       method: 'POST',
       headers: agentApiHeaders(),
       body: JSON.stringify(payload),
     })
-    return proxyJsonResponse(response)
+    return proxyJsonResponse(request, response)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Agent API request failed'
     return NextResponse.json({ error: message }, { status: 502 })

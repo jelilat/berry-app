@@ -3,6 +3,8 @@ import {
   hostedAgentProjectErrorMessage,
   normalizeHostedAgentRunJson,
 } from '@/lib/agent/proxy-response'
+import type { AgentBackendRunRecord } from '@/lib/agent/types'
+import { recordAgentUsageFromRun } from '@/lib/agent/usage'
 
 export const runtime = 'edge'
 
@@ -47,19 +49,22 @@ function parseRunId(runId: string | undefined): string {
  * Return a JSON response while preserving the hosted API status code.
  * @param response Hosted API fetch response.
  */
-async function proxyJsonResponse(response: Response): Promise<NextResponse> {
+async function proxyJsonResponse(request: Request, response: Response): Promise<NextResponse> {
   const json = await response.json().catch(() => ({ error: 'Agent API returned invalid JSON' }))
   if (!response.ok) {
     return NextResponse.json(json, { status: response.status })
   }
   try {
-    return NextResponse.json(normalizeHostedAgentRunJson(json), { status: response.status })
+    const normalized = normalizeHostedAgentRunJson(json) as AgentBackendRunRecord
+    await recordAgentUsageFromRun(request, normalized)
+    return NextResponse.json(normalized, { status: response.status })
   } catch (error) {
     const message = hostedAgentProjectErrorMessage(error)
     if (message) {
       return NextResponse.json({ error: message }, { status: 502 })
     }
-    throw error
+    const fallbackMessage = error instanceof Error ? error.message : 'Could not save Pip usage.'
+    return NextResponse.json({ error: fallbackMessage }, { status: 502 })
   }
 }
 
@@ -69,7 +74,7 @@ async function proxyJsonResponse(response: Response): Promise<NextResponse> {
  * @param context Dynamic route context.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: { runId?: string } },
 ) {
   let runId: string
@@ -85,7 +90,7 @@ export async function GET(
       method: 'GET',
       headers: agentApiHeaders(),
     })
-    return proxyJsonResponse(response)
+    return proxyJsonResponse(request, response)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Agent API request failed'
     return NextResponse.json({ error: message }, { status: 502 })

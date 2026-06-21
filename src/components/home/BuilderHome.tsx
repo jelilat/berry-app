@@ -23,7 +23,6 @@ import {
   clearActiveCloudProjectId,
   deleteCloudUserProject,
   loadCloudUserProjects,
-  saveActiveCloudProjectId,
   upsertCloudUserProject,
 } from '@/lib/projects/cloud-projects'
 import { createEmptyProject } from '@/lib/project/mutations'
@@ -192,17 +191,20 @@ export function BuilderHome() {
       setBootstrapping(true)
       setErrorMessage(null)
       try {
-        const project = await bootstrapBuilderTemplate(templateId, { saveForUser: false })
+        const project = await bootstrapBuilderTemplate(templateId, {
+          saveForUser: false,
+          saveToLocalStorage: !(session && cloudSyncEnabled),
+        })
         if (session && cloudSyncEnabled) {
           const supabase = createSupabaseBrowserClient()
           const entry = await upsertCloudUserProject(supabase, project)
-          saveActiveCloudProjectId(entry.id)
           await refreshProjects(true)
+          router.push(`/bench/${entry.id}`)
         } else {
           upsertUserProject(project)
           clearActiveCloudProjectId()
+          router.push('/bench')
         }
-        router.push('/bench')
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to open template')
       } finally {
@@ -227,8 +229,6 @@ export function BuilderHome() {
     const starter = createEmptyProject()
     starter.metadata.name = cleanPrompt.slice(0, 64)
     starter.metadata.description = cleanPrompt
-    saveProjectToStorage(starter)
-    saveFirmwareSourceToStorage(createDefaultFirmwareSource(starter.board))
     stashPendingAgentRun(cleanPrompt, selectedModel, selectedReasoning.id)
     if (session && cloudSyncEnabled) {
       setBootstrapping(true)
@@ -236,17 +236,18 @@ export function BuilderHome() {
       try {
         const supabase = createSupabaseBrowserClient()
         const entry = await upsertCloudUserProject(supabase, starter)
-        saveActiveCloudProjectId(entry.id)
         await refreshProjects(true)
+        router.push(`/bench/${entry.id}`)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to save cloud project')
         setBootstrapping(false)
         return
       }
       setBootstrapping(false)
-      router.push('/bench')
       return
     }
+    saveProjectToStorage(starter)
+    saveFirmwareSourceToStorage(createDefaultFirmwareSource(starter.board))
     upsertUserProject(starter)
     clearActiveCloudProjectId()
     router.push('/bench')
@@ -270,13 +271,13 @@ export function BuilderHome() {
     (projectId: string) => {
       const project = projects.find((entry) => entry.id === projectId)
       if (!project) return
-      bootstrapSavedProject(project.projectJson)
       if (session && cloudSyncEnabled) {
-        saveActiveCloudProjectId(project.id)
+        router.push(`/bench/${project.id}`)
       } else {
+        bootstrapSavedProject(project.projectJson)
         clearActiveCloudProjectId()
+        router.push('/bench')
       }
-      router.push('/bench')
     },
     [cloudSyncEnabled, projects, router, session],
   )

@@ -109,11 +109,11 @@ function withProjectMetadata(
 /**
  * Load a builder template into browser storage and optionally save it for a signed-in user.
  * @param templateId Template id from a reference chip.
- * @param options Whether to persist the project in the user library.
+ * @param options Whether to persist the project in the user library or local browser storage.
  */
 export async function bootstrapBuilderTemplate(
   templateId: string,
-  options?: { saveForUser?: boolean },
+  options?: { saveForUser?: boolean; saveToLocalStorage?: boolean },
 ): Promise<BerryProject> {
   const template = getBuilderTemplate(templateId)
   if (!template) {
@@ -131,12 +131,14 @@ export async function bootstrapBuilderTemplate(
     project = withProjectMetadata(createStarterProject(), template.projectName, template.prompt)
   }
 
-  saveProjectToStorage(project)
-  if (template.id === 'blink-led') {
-    saveFirmwareSourceToStorage(createEsp32BlinkFirmwareSource())
-  } else {
-    clearFirmwareSourceStorage()
-    saveFirmwareSourceToStorage(createDefaultFirmwareSource(project.board))
+  if (options?.saveToLocalStorage ?? true) {
+    saveProjectToStorage(project)
+    if (template.id === 'blink-led') {
+      saveFirmwareSourceToStorage(createEsp32BlinkFirmwareSource())
+    } else {
+      clearFirmwareSourceStorage()
+      saveFirmwareSourceToStorage(createDefaultFirmwareSource(project.board))
+    }
   }
 
   if (options?.saveForUser) {

@@ -15,23 +15,6 @@ interface CloudProjectRow {
 }
 
 /**
- * Load the active Supabase project id for the current browser bench.
- */
-export function loadActiveCloudProjectId(): string | null {
-  if (typeof window === 'undefined') return null
-  return window.localStorage.getItem(ACTIVE_CLOUD_PROJECT_ID_KEY)
-}
-
-/**
- * Persist the active Supabase project id for the current browser bench.
- * @param projectId Supabase project row id.
- */
-export function saveActiveCloudProjectId(projectId: string): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(ACTIVE_CLOUD_PROJECT_ID_KEY, projectId)
-}
-
-/**
  * Clear the active Supabase project id when opening a guest/local-only bench.
  */
 export function clearActiveCloudProjectId(): void {
@@ -78,6 +61,25 @@ export async function loadCloudUserProjects(
 
   if (error) throw error
   return ((data ?? []) as CloudProjectRow[]).map(cloudRowToProjectEntry)
+}
+
+/**
+ * Load one cloud project for the currently signed-in Supabase user.
+ * @param supabase Browser Supabase client with an active user session.
+ * @param projectId Supabase project row id from the route.
+ */
+export async function loadCloudUserProject(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<UserProjectEntry | null> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id,name,board,updated_at,project_json')
+    .eq('id', projectId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ? cloudRowToProjectEntry(data as CloudProjectRow) : null
 }
 
 /**
@@ -133,7 +135,4 @@ export async function deleteCloudUserProject(
 ): Promise<void> {
   const { error } = await supabase.from('projects').delete().eq('id', projectId)
   if (error) throw error
-  if (loadActiveCloudProjectId() === projectId) {
-    clearActiveCloudProjectId()
-  }
 }

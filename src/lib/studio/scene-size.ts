@@ -94,6 +94,7 @@ export function buildComponentSceneSizeTable(): Record<
     'resistor-2k': catalogSceneSize('resistor-2k'),
     'push-button': catalogSceneSize('push-button'),
     'hc-sr04': catalogSceneSize('hc-sr04'),
+    'pir-motion-sensor-hc-sr501': catalogSceneSize('pir-motion-sensor-hc-sr501'),
     'bme280': catalogSceneSize('bme280'),
     'servo-sg90': catalogSceneSize('servo-sg90'),
     'lcd-1602-i2c': catalogSceneSize('lcd-1602-i2c'),

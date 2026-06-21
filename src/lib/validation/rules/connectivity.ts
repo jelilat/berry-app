@@ -21,6 +21,7 @@ const INPUT_LIKE_KINDS: TerminalKind[] = [
 const SENSOR_POWER_TYPES: ComponentTypeId[] = [
   'bme280',
   'hc-sr04',
+  'pir-motion-sensor-hc-sr501',
   'servo-sg90',
   'lcd-1602-i2c',
   'max7219-led-matrix',
@@ -109,11 +110,17 @@ function supportsRole(terminal: ResolvedTerminal, role: 'i2c_sda' | 'i2c_scl'): 
 }
 
 /**
- * Whether a terminal kind is an active drive source that should not be shorted to another output.
- * @param kind Catalog terminal kind.
+ * Whether a terminal is an active drive source that should not be shorted to another output.
+ * @param terminal Resolved terminal metadata.
  */
-function isActiveOutput(kind: TerminalKind | null): boolean {
-  return kind !== null && ACTIVE_OUTPUT_KINDS.includes(kind)
+function isActiveOutput(terminal: ResolvedTerminal): boolean {
+  if (terminal.kind === 'gpio') {
+    return (
+      terminal.componentType === 'esp32-devkit-v1' ||
+      terminal.componentType === 'arduino-uno'
+    )
+  }
+  return terminal.kind !== null && ACTIVE_OUTPUT_KINDS.includes(terminal.kind)
 }
 
 /**
@@ -213,7 +220,7 @@ function findTerminalGroup(
  * @param group Connected terminal group.
  */
 function checkPinKindCompatibility(group: ResolvedTerminal[]): ValidationResult[] {
-  const outputs = group.filter((terminal) => isActiveOutput(terminal.kind))
+  const outputs = group.filter((terminal) => isActiveOutput(terminal))
   if (outputs.length <= 1) return []
 
   const gpioOutputs = outputs.filter((terminal) => terminal.kind === 'gpio')

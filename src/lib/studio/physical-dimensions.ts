@@ -23,6 +23,7 @@ export const PHYSICAL_DIMENSIONS_MM: Partial<
   "resistor-2k": { width: 6, height: 2, depth: 2 },
   "push-button": { width: 12, height: 12, depth: 8 },
   "hc-sr04": { width: 45, height: 20, depth: 15 },
+  "pir-motion-sensor-hc-sr501": { width: 32, height: 24, depth: 18 },
   bme280: { width: 20, height: 20, depth: 3 },
   "servo-sg90": { width: 23, height: 12, depth: 27 },
   "lcd-1602-i2c": { width: 80, height: 36, depth: 12 },

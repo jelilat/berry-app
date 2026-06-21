@@ -162,6 +162,54 @@ describe('projectToFlowNodes', () => {
     expect(esp.data.placementDriven).toBe(false)
     expect(esp.data.lockRuntimePinLayout).toBe(true)
   })
+
+  it('infers display terminals for unsupported imported components', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'unsupported handles' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0.1, y: 0.1, z: 0 } },
+        },
+        {
+          id: 'module_1',
+          type: 'unknown-motion-module',
+          parent: 'breadboard_1',
+          transform: { position: { x: 0.12, y: 0.12, z: 0 } },
+          placement: {
+            sites: {
+              VCC: { kind: 'hole', block: 'top', row: 'a', column: 5 },
+              OUT: { kind: 'hole', block: 'top', row: 'a', column: 6 },
+              GND: { kind: 'hole', block: 'top', row: 'a', column: 7 },
+            },
+          },
+        },
+      ],
+      nets: [
+        {
+          id: 'net_1',
+          terminals: [
+            { component: 'module_1', terminal: 'OUT' },
+            { breadboard: 'breadboard_1', site: { kind: 'hole', block: 'top', row: 'b', column: 6 } },
+          ],
+        },
+      ],
+      wires: [],
+    })
+
+    const module = projectToFlowNodes(project, null).find((node) => node.id === 'module_1')!
+
+    expect(module.data.terminals.map((terminal) => terminal.id)).toEqual([
+      'VCC',
+      'OUT',
+      'GND',
+    ])
+    expect(module.data.terminalLayout.OUT).toBeDefined()
+    expect(module.data.connectedTerminalIds).toContain('OUT')
+  })
 })
 
 describe('projectToFlowEdges', () => {

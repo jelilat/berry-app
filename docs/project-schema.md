@@ -153,7 +153,7 @@ Each part has a **`group`** for the Studio tray (not the same as `project.board`
 | `breadboards` | Full breadboard |
 | `wires` | Jumper M–M, M–F, F–F (Connect tool templates) |
 | `microcontrollers` | ESP32 DevKit, Arduino UNO |
-| `sensors` | HC-SR04, BME280 |
+| `sensors` | HC-SR04, HC-SR501 PIR, BME280 |
 | `displays` | LCD 1602 I2C |
 | `inputs` | Push button |
 | `actuators` | SG90 servo |

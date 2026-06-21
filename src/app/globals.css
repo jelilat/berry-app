@@ -219,13 +219,44 @@ body {
   z-index: 1;
 }
 
+.berry-bench-loading-icon {
+  position: relative;
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(214, 51, 108, 0.08);
+  animation: workflow-icon-pulse 1.4s ease-in-out infinite;
+}
+
+.berry-bench-loading-icon::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  border: 2px solid rgba(214, 51, 108, 0.18);
+  border-top-color: var(--accent);
+  animation: workflow-icon-orbit 0.9s linear infinite;
+}
+
+.berry-bench-loading-icon svg {
+  position: relative;
+  z-index: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brand-build-badge,
   .brand-build-icon,
   .brand-build-block,
   .brand-build-scan,
   .berry-workflow-active-icon,
-  .berry-workflow-active-icon::before {
+  .berry-workflow-active-icon::before,
+  .berry-bench-loading-icon,
+  .berry-bench-loading-icon::before {
     animation: none !important;
   }
 }

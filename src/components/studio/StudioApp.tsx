@@ -1,5 +1,6 @@
 'use client'
 
+import { Clock3 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadBerryProjectFromJson, serializeBerryProject } from '@/lib/project/io'
 import {
@@ -31,8 +32,10 @@ import type {
   AgentAnswerSubmission,
   AgentBackendRunAccepted,
   AgentBackendRunRecord,
+  AgentRunState,
   AgentRunResult,
 } from '@/lib/agent/types'
+import { isTerminalAgentRun, type AgentRunPollingOptions } from '@/lib/agent/polling'
 import {
   isEditableFirmwareWorktreePath,
   isPreviewFirmwareWorktreePath,
@@ -71,6 +74,7 @@ import type { StudioViewMode } from './ViewModeToggle'
 import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
+type EmptyBenchState = 'idle' | 'preparing' | 'needs_input'
 
 const AGENT_POLL_INTERVAL_MS = 5000
 const AGENT_MAX_POLL_ATTEMPTS = 100
@@ -92,26 +96,26 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
 }
 
 /**
- * True when a backend run status no longer needs polling.
- * @param record Hosted agent run record.
+ * True while the AI bench flow still owns the empty canvas state.
+ * @param record Latest hosted agent run record.
  */
-function isTerminalAgentRun(record: AgentBackendRunRecord): boolean {
-  return (
-    record.status === 'needs_clarification' ||
-    record.status === 'completed' ||
-    record.status === 'failed'
-  )
+function isActiveAgentLoopRecord(record: AgentBackendRunRecord | null): boolean {
+  return record?.status === 'queued' ||
+    record?.status === 'running' ||
+    record?.status === 'needs_clarification'
 }
 
 /**
  * Poll the local proxy until a hosted agent run reaches a terminal status.
  * @param runId Hosted backend run id.
  * @param onRecord Optional callback for every successful poll response.
+ * @param options Polling behavior for clarification pauses.
  * @throws Error when polling fails or times out.
  */
 async function pollAgentRun(
   runId: string,
   onRecord?: (record: AgentBackendRunRecord) => void,
+  options?: AgentRunPollingOptions,
 ): Promise<AgentBackendRunRecord> {
   for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS; attempt += 1) {
     if (attempt > 0) {
@@ -125,7 +129,7 @@ async function pollAgentRun(
     }
     const record = json as AgentBackendRunRecord
     onRecord?.(record)
-    if (isTerminalAgentRun(record)) {
+    if (isTerminalAgentRun(record, options)) {
       return record
     }
   }
@@ -158,6 +162,32 @@ function resultFromRunRecord(record: AgentBackendRunRecord): AgentRunResult | nu
         validationResults: [],
         timeline: [],
       },
+    }
+  }
+  return null
+}
+
+/**
+ * Extract a visualizable workflow snapshot from a hosted run record.
+ * @param record Hosted agent run record that may include a partial state snapshot.
+ */
+function visualizableResultFromRunRecord(record: AgentBackendRunRecord): AgentRunResult | null {
+  const terminalResult = resultFromRunRecord(record)
+  if (terminalResult) return terminalResult
+
+  const snapshot = record as AgentBackendRunRecord & {
+    state?: AgentRunState
+    partialResult?: AgentRunResult
+  }
+  if (snapshot.partialResult?.state?.project) {
+    return snapshot.partialResult
+  }
+  if (snapshot.state?.project) {
+    return {
+      ok: false,
+      status: record.status === 'failed' ? 'failed' : 'needs_clarification',
+      state: snapshot.state,
+      error: record.error,
     }
   }
   return null
@@ -526,12 +556,19 @@ export function StudioApp() {
       }
 
       const accepted = json as AgentBackendRunAccepted
-      const record = await pollAgentRun(accepted.runId, (nextRecord) => {
-        setAgentRunRecord(nextRecord)
-        if (nextRecord.result) {
-          visualizeAgentProject(nextRecord.result, 'Circuit ready on the bench')
-        }
-      })
+      const record = await pollAgentRun(
+        accepted.runId,
+        (nextRecord) => {
+          setAgentRunRecord(nextRecord)
+          const visualizableResult = visualizableResultFromRunRecord(nextRecord)
+          if (visualizableResult) {
+            visualizeAgentProject(visualizableResult, 'Circuit ready on the bench')
+          }
+        },
+        {
+          pauseOnClarification: !answerSubmission,
+        },
+      )
       const result = resultFromRunRecord(record)
       if (!result) {
         setErrorMessage(record.error ?? 'Agent run finished without a workflow result')
@@ -916,6 +953,12 @@ export function StudioApp() {
   }, [selectedNodeId, selectedWireId, handleRotateSelected, handleDeleteSelected])
 
   const isEmpty = project.components.length === 0
+  const emptyBenchState: EmptyBenchState =
+    isEmpty && (agentWaitingForAnswers || agentRunRecord?.status === 'needs_clarification')
+      ? 'needs_input'
+      : isEmpty && (agentLoading || isActiveAgentLoopRecord(agentRunRecord))
+        ? 'preparing'
+        : 'idle'
 
   if (status === 'loading') {
     return <StudioShell message="Loading your bench…" />
@@ -1021,7 +1064,11 @@ export function StudioApp() {
                 />
                 <div className="relative min-h-0 flex-1 overflow-hidden">
                   {isEmpty ? (
-                    <EmptyBench onNew={handleNew} onLoadExample={handleLoadExample} />
+                    <EmptyBench
+                      state={emptyBenchState}
+                      onNew={handleNew}
+                      onLoadExample={handleLoadExample}
+                    />
                   ) : (
                     <>
                       {viewMode === '2d' ? (
@@ -1145,6 +1192,10 @@ export function StudioApp() {
   )
 }
 
+/**
+ * Render a full-screen Studio loading or error shell.
+ * @param props Message to show in the shell.
+ */
 function StudioShell({ message }: { message: string }) {
   return (
     <div
@@ -1156,13 +1207,44 @@ function StudioShell({ message }: { message: string }) {
   )
 }
 
+/**
+ * Render the empty bench or AI preparation state.
+ * @param props Empty bench actions and optional preparation state.
+ */
 function EmptyBench({
+  state = 'idle',
   onNew,
   onLoadExample,
 }: {
+  state?: EmptyBenchState
   onNew: () => void
   onLoadExample: () => void
 }) {
+  if (state !== 'idle') {
+    const title = state === 'needs_input' ? 'Waiting on your answer...' : 'Preparing your bench...'
+    const description =
+      state === 'needs_input'
+        ? 'Berry has a question before it places the circuit on the bench.'
+        : 'Berry is placing the first parts as soon as the circuit JSON is ready.'
+
+    return (
+      <div
+        className="flex h-full min-h-[480px] flex-col items-center justify-center gap-3 rounded-2xl p-8 text-center"
+        style={{ background: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)' }}
+        role="status"
+        aria-live="polite"
+      >
+        <span className="berry-bench-loading-icon" aria-hidden="true">
+          <Clock3 size={22} />
+        </span>
+        <p className="text-lg font-extrabold tracking-tight">{title}</p>
+        <p className="max-w-sm text-sm" style={{ color: 'var(--text-secondary)' }}>
+          {description}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div
       className="flex h-full min-h-[480px] flex-col items-center justify-center gap-4 rounded-2xl p-8 text-center"

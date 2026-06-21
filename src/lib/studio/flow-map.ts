@@ -6,6 +6,7 @@ import type {
   BerryProject,
   ComponentInstance,
   ComponentTypeId,
+  TerminalDefinition,
   Wire,
   WireEndpoint,
 } from "@/lib/project/types";
@@ -23,6 +24,7 @@ import {
 import { componentNodeZIndex } from "./node-z-index";
 import { connectedTerminalKeys, terminalKey } from "./connect-pins";
 import { holeScenePosition } from "./breadboard-layout";
+import { terminalRelativePositions } from "@/lib/project/terminal-layout";
 
 /** Node geometry and terminal layout derived from manually edited breadboard sites. */
 interface PlacementDrivenNodeGeometry {
@@ -32,6 +34,47 @@ interface PlacementDrivenNodeGeometry {
   baseWidth: number;
   baseHeight: number;
   terminalLayout: Record<string, { x: number; y: number }>;
+}
+
+/**
+ * Terminal definitions to use for rendering a component node.
+ * Known catalog parts stay catalog-strict; unsupported imported parts infer
+ * display-only terminals from placement, nets, and wire endpoint metadata.
+ * @param project Berry project graph.
+ * @param instance Component instance to inspect.
+ * @param catalogTerminals Terminals from the component catalog.
+ */
+function displayTerminalsForInstance(
+  project: BerryProject,
+  instance: ComponentInstance,
+  catalogTerminals: TerminalDefinition[],
+): TerminalDefinition[] {
+  if (catalogTerminals.length > 0) return catalogTerminals;
+
+  const ids = new Set<string>();
+  for (const terminalId of Object.keys(instance.placement?.sites ?? {})) {
+    ids.add(terminalId);
+  }
+  for (const net of project.nets) {
+    for (const terminal of net.terminals) {
+      if (terminal.component === instance.id && terminal.terminal) {
+        ids.add(terminal.terminal);
+      }
+    }
+  }
+  for (const wire of project.wires) {
+    for (const endpoint of [wire.from, wire.to]) {
+      if (endpoint?.component === instance.id && endpoint.terminal) {
+        ids.add(endpoint.terminal);
+      }
+    }
+  }
+
+  return [...ids].map((id) => ({
+    id,
+    label: id,
+    kind: "passive",
+  }));
 }
 
 /**
@@ -72,25 +115,27 @@ function usesPlacementDrivenVisualGeometry(instance: ComponentInstance): boolean
 function fixedBoxPlacementTerminalLayout(
   project: BerryProject,
   instance: ComponentInstance,
+  terminals: TerminalDefinition[],
   scale: number,
   baseWidth: number,
   baseHeight: number,
 ): Record<string, { x: number; y: number }> | null {
-  if (!instance.type.startsWith("led-") || !instance.parent || !instance.placement) {
+  const usePlacementLayout =
+    instance.type.startsWith("led-") || getComponentDefinition(instance.type).terminals.length === 0;
+  if (!usePlacementLayout || !instance.parent || !instance.placement) {
     return null;
   }
 
   const breadboard = project.components.find((c) => c.id === instance.parent);
   if (!breadboard || breadboard.type !== "breadboard-full") return null;
 
-  const def = getComponentDefinition(instance.type);
   const centerX = instance.transform.position.x * scale;
   const centerY = instance.transform.position.y * scale;
   const leftPx = centerX - baseWidth / 2;
   const topPx = centerY - baseHeight / 2;
   const layout: Record<string, { x: number; y: number }> = {};
 
-  for (const terminal of def.terminals) {
+  for (const terminal of terminals) {
     const site = instance.placement?.sites[terminal.id];
     if (!site) continue;
     const bench = siteScenePosition(breadboard, site);
@@ -112,6 +157,7 @@ function fixedBoxPlacementTerminalLayout(
 function placementDrivenNodeGeometry(
   project: BerryProject,
   instance: ComponentInstance,
+  terminals: TerminalDefinition[],
   scale: number,
 ): PlacementDrivenNodeGeometry | null {
   if (!usesPlacementDrivenVisualGeometry(instance) || !instance.parent || !instance.placement) {
@@ -121,8 +167,7 @@ function placementDrivenNodeGeometry(
   const breadboard = project.components.find((c) => c.id === instance.parent);
   if (!breadboard || breadboard.type !== "breadboard-full") return null;
 
-  const def = getComponentDefinition(instance.type);
-  const placed = def.terminals.flatMap((terminal) => {
+  const placed = terminals.flatMap((terminal) => {
     const site = instance.placement?.sites[terminal.id];
     return site ? [{ terminalId: terminal.id, position: siteScenePosition(breadboard, site) }] : [];
   });
@@ -226,7 +271,8 @@ export function projectToFlowNodes(
 
   return sorted.map((instance) => {
     const def = getComponentDefinition(instance.type);
-    const placementGeometry = placementDrivenNodeGeometry(project, instance, SCENE_SCALE);
+    const terminals = displayTerminalsForInstance(project, instance, def.terminals);
+    const placementGeometry = placementDrivenNodeGeometry(project, instance, terminals, SCENE_SCALE);
     const pos = placementGeometry?.positionScene ?? xy(instance.transform.position);
     const flowPos = sceneToFlowPosition(pos.x, pos.y, SCENE_SCALE);
     const rotationZ = instance.transform.rotation?.z ?? 0;
@@ -248,11 +294,14 @@ export function projectToFlowNodes(
       fixedBoxPlacementTerminalLayout(
         project,
         instance,
+        terminals,
         SCENE_SCALE,
         defaultBaseSize.width,
         defaultBaseSize.height,
       ) ??
-      catalogTerminalLayout(instance);
+      (def.terminals.length > 0
+        ? catalogTerminalLayout(instance)
+        : terminalRelativePositions(terminals, instance.type));
     const lockRuntimePinLayout = Boolean(instance.parent && instance.placement?.sites);
 
     const terminalValidation = new Map<string, ValidationResult[]>()
@@ -276,13 +325,13 @@ export function projectToFlowNodes(
         instanceId: instance.id,
         typeId: instance.type,
         label: def.name,
-        terminals: def.terminals.map((t) => ({
+        terminals: terminals.map((t) => ({
           id: t.id,
           label: t.label ?? t.id,
           kind: t.kind,
         })),
         terminalLayout: rel,
-        connectedTerminalIds: def.terminals
+        connectedTerminalIds: terminals
           .filter((t) => connected.has(terminalKey(instance.id, t.id)))
           .map((t) => t.id),
         errorTerminalIds,

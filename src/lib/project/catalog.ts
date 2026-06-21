@@ -147,6 +147,16 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
       { id: 'GND', kind: 'ground' },
     ],
   },
+  'pir-motion-sensor-hc-sr501': {
+    id: 'pir-motion-sensor-hc-sr501',
+    name: 'HC-SR501 PIR motion sensor',
+    group: 'sensors',
+    terminals: [
+      { id: 'VCC', kind: 'power_in', voltage: 5 },
+      { id: 'OUT', kind: 'gpio', label: 'OUT', capabilities: ['digital'] },
+      { id: 'GND', kind: 'ground' },
+    ],
+  },
   'bme280': {
     id: 'bme280',
     name: 'BME280',

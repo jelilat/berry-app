@@ -132,6 +132,42 @@ describe('parseBerryProject', () => {
     expect(project.components[2].placement).toBeUndefined()
   })
 
+  it('keeps unsupported component placement terminal names from hosted projects', () => {
+    const project = parseBerryProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'unsupported placed component' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0, y: 0, z: 0 } },
+        },
+        {
+          id: 'module_1',
+          type: 'unknown-motion-module',
+          parent: 'breadboard_1',
+          transform: { position: { x: 0.2, y: 0, z: 0 } },
+          placement: {
+            sites: {
+              VCC: { kind: 'hole', block: 'top', row: 'a', column: 5 },
+              OUT: { kind: 'hole', block: 'top', row: 'a', column: 6 },
+              GND: { kind: 'hole', block: 'top', row: 'a', column: 7 },
+            },
+          },
+        },
+      ],
+      nets: [],
+      wires: [],
+    })
+
+    expect(project.components[1].placement?.sites).toMatchObject({
+      VCC: { column: 5 },
+      OUT: { column: 6 },
+      GND: { column: 7 },
+    })
+  })
+
   it('rejects non-empty placement on a breadboard', () => {
     expect(() =>
       parseBerryProject({

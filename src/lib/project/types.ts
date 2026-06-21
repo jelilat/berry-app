@@ -44,6 +44,7 @@ export type ComponentTypeId =
   | 'resistor-2k'
   | 'push-button'
   | 'hc-sr04'
+  | 'pir-motion-sensor-hc-sr501'
   | 'bme280'
   | 'servo-sg90'
   | 'lcd-1602-i2c'

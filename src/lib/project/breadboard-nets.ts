@@ -364,6 +364,7 @@ export function findHoleOccupancyConflicts(
 export function validateInstancePlacement(instance: ComponentInstance): string[] {
   if (!instance.placement?.sites) return []
   const def = getComponentDefinition(instance.type)
+  if (def.terminals.length === 0) return []
   const valid = new Set(def.terminals.map((t) => t.id))
   const errors: string[] = []
   for (const terminalId of Object.keys(instance.placement.sites)) {

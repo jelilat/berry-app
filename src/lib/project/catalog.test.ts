@@ -3,8 +3,8 @@ import { getComponentDefinition, isWireTemplate, listCatalog } from "./catalog";
 import type { ComponentTypeId } from "./types";
 
 describe("component catalog", () => {
-  it("listCatalog returns 16 parts", () => {
-    expect(listCatalog()).toHaveLength(16);
+  it("listCatalog returns 17 parts", () => {
+    expect(listCatalog()).toHaveLength(17);
   });
 
   it("getComponentDefinition returns ESP32 with full DevKit header", () => {
@@ -25,6 +25,17 @@ describe("component catalog", () => {
       start: "male",
       end: "male",
     });
+  });
+
+  it("defines the HC-SR501 PIR module terminals used by hosted projects", () => {
+    const def = getComponentDefinition("pir-motion-sensor-hc-sr501");
+
+    expect(def.group).toBe("sensors");
+    expect(def.terminals.map((terminal) => terminal.id)).toEqual([
+      "VCC",
+      "OUT",
+      "GND",
+    ]);
   });
 
   it("returns a placeholder definition for unsupported hosted components", () => {

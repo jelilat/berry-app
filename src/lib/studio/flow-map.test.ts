@@ -200,15 +200,15 @@ describe('projectToFlowNodes', () => {
       wires: [],
     })
 
-    const module = projectToFlowNodes(project, null).find((node) => node.id === 'module_1')!
+    const moduleNode = projectToFlowNodes(project, null).find((node) => node.id === 'module_1')!
 
-    expect(module.data.terminals.map((terminal) => terminal.id)).toEqual([
+    expect(moduleNode.data.terminals.map((terminal) => terminal.id)).toEqual([
       'VCC',
       'OUT',
       'GND',
     ])
-    expect(module.data.terminalLayout.OUT).toBeDefined()
-    expect(module.data.connectedTerminalIds).toContain('OUT')
+    expect(moduleNode.data.terminalLayout.OUT).toBeDefined()
+    expect(moduleNode.data.connectedTerminalIds).toContain('OUT')
   })
 })
 

@@ -1,5 +1,7 @@
 import { StudioApp } from '@/components/studio/StudioApp'
 
+export const runtime = 'edge'
+
 export const metadata = {
   title: 'berry. | Bench',
   description: '2D hardware bench: place parts, wire pins, generate firmware, build, and simulate.',

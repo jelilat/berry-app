@@ -38,22 +38,22 @@ export function BuilderSidebar({
 }) {
   return (
     <aside
-      className="flex w-[248px] shrink-0 flex-col border-r px-3 py-4"
+      className="flex w-full shrink-0 flex-col border-b px-3 py-3 md:h-[100dvh] md:w-[248px] md:border-b-0 md:border-r md:py-4"
       style={{
         background: 'var(--bg-overlay)',
         borderColor: 'var(--border)',
       }}
     >
-      <div className="mb-6 flex items-center gap-2 px-2">
-        <Image src={brand.assets.icon} alt="" width={22} height={22} />
-        <span className="text-sm font-extrabold tracking-[-0.04em]">{brand.name}</span>
+      <div className="flex items-center gap-2 px-1 md:mb-6 md:px-2">
+        <Image src={brand.assets.icon} alt="" width={24} height={24} />
+        <span className="text-base font-extrabold tracking-[-0.04em] md:text-sm">{brand.name}</span>
       </div>
 
-      <nav className="space-y-1">
+      <nav className="mt-3 space-y-1 md:mt-0">
         <SidebarButton active icon={Home} label="Home" />
       </nav>
 
-      <div className="mt-8 px-2">
+      <div className="mt-4 min-w-0 px-1 md:mt-8 md:px-2">
         <p
           className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
           style={{ color: 'var(--text-muted)' }}
@@ -78,7 +78,7 @@ export function BuilderSidebar({
               </button>
             </div>
 
-            <div className="space-y-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible md:pb-0">
               {projects.length === 0 ? (
                 <p className="rounded-xl px-3 py-2 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
                   Nothing saved yet — pick a starter bench below or describe a build in the prompt.
@@ -116,7 +116,7 @@ export function BuilderSidebar({
               </button>
             </div>
 
-            <div className="space-y-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible md:pb-0">
               {projects.length === 0 ? (
                 <p className="rounded-xl px-3 py-2 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
                   Projects save in this browser.
@@ -136,7 +136,7 @@ export function BuilderSidebar({
         )}
       </div>
 
-      <div className="mt-auto space-y-2 px-2 pt-6">
+      <div className="mt-3 space-y-2 px-1 md:mt-auto md:px-2 md:pt-6">
         {/* <a
           href="https://berry.studio"
           className="inline-flex items-center gap-2 text-xs font-semibold transition-opacity hover:opacity-80"
@@ -150,7 +150,7 @@ export function BuilderSidebar({
           <button
             type="button"
             onClick={onSignOut}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors hover:bg-black/[0.04]"
+            className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors hover:bg-black/[0.04] md:justify-start"
             style={{ color: 'var(--text-secondary)' }}
           >
             <LogOut size={15} />
@@ -189,7 +189,7 @@ function ProjectRow({
   onDelete: () => void
 }) {
   return (
-    <div className="group flex items-center gap-0.5">
+    <div className="group flex min-w-[176px] items-center gap-0.5 md:min-w-0">
       <button
         type="button"
         onClick={onOpen}

@@ -374,7 +374,7 @@ export function BuilderHome() {
   )
 
   return (
-    <div className="flex min-h-[100dvh]" style={{ background: 'var(--bg-base)' }}>
+    <div className="flex min-h-[100dvh] flex-col md:flex-row" style={{ background: 'var(--bg-base)' }}>
       <BuilderSidebar
         authEnabled={authEnabled}
         session={session}
@@ -386,7 +386,7 @@ export function BuilderHome() {
         onDeleteProject={handleDeleteProject}
       />
 
-      <main className="relative flex min-w-0 flex-1 flex-col items-center justify-center px-6 py-10">
+      <main className="relative flex min-w-0 flex-1 flex-col items-center justify-start overflow-hidden px-4 py-8 sm:px-6 md:justify-center md:py-10">
         <div
           className="pointer-events-none absolute inset-0 opacity-40"
           style={{
@@ -396,12 +396,12 @@ export function BuilderHome() {
         />
 
         <div className="relative w-full max-w-3xl text-center">
-          <div className="mb-8 inline-flex items-center gap-2">
+          <div className="mb-5 inline-flex items-center gap-2 sm:mb-8">
             {/* <Image src={brand.assets.icon} alt="" width={24} height={24} /> */}
-            <span className="text-xl font-extrabold tracking-[-0.05em]">{brand.name}</span>
+            <span className="text-lg font-extrabold tracking-[-0.05em] sm:text-xl">{brand.name}</span>
           </div>
 
-          <h1 className="text-5xl font-extrabold leading-[0.95] tracking-[-0.06em] sm:text-6xl">
+          <h1 className="mx-auto max-w-[11ch] text-4xl font-extrabold leading-[0.98] tracking-[-0.04em] min-[390px]:text-5xl sm:max-w-none sm:text-6xl sm:tracking-[-0.06em]">
             From idea to{' '}
             <span
               style={{
@@ -419,7 +419,7 @@ export function BuilderHome() {
           </p> */}
 
           <div
-            className="relative mt-10 rounded-[28px] p-4 text-left"
+            className="relative mx-auto mt-8 w-full max-w-xl rounded-[24px] p-3 text-left sm:mt-10 sm:rounded-[28px] sm:p-4"
             style={{
               background: 'var(--bg-elevated)',
               border: '1px solid rgba(214,51,108,0.22)',
@@ -435,7 +435,7 @@ export function BuilderHome() {
               onFocus={() => setPromptFocused(true)}
               onBlur={() => setPromptFocused(false)}
               rows={4}
-              className="relative z-[1] w-full resize-none bg-transparent text-lg font-medium leading-7 outline-none"
+              className="relative z-[1] min-h-[112px] w-full resize-none bg-transparent text-base font-medium leading-7 outline-none sm:text-lg"
               style={{ color: 'var(--text-primary)' }}
               aria-label="Describe your hardware project"
               onKeyDown={(event) => {
@@ -446,8 +446,8 @@ export function BuilderHome() {
               }}
             />
 
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <div ref={modelMenuRef} className="relative">
+            <div className="mt-3 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div ref={modelMenuRef} className="relative min-w-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -457,7 +457,7 @@ export function BuilderHome() {
                       return nextOpen
                     })
                   }}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors hover:bg-black/[0.03]"
+                  className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors hover:bg-black/[0.03] sm:w-auto"
                   style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
                   aria-expanded={modelMenuOpen}
                   aria-haspopup="listbox"
@@ -467,11 +467,11 @@ export function BuilderHome() {
                 </button>
 
                 {modelMenuOpen && (
-                  <div className="absolute bottom-full left-0 z-10 mb-2 flex items-end gap-2">
+                  <div className="absolute bottom-full left-0 right-0 z-10 mb-2 flex flex-col items-stretch gap-2 sm:right-auto sm:flex-row sm:items-end">
                     <div
                       role="listbox"
                       aria-label="Model"
-                      className="w-[240px] overflow-hidden rounded-[22px] p-2"
+                      className="w-full overflow-hidden rounded-[22px] p-2 sm:w-[240px]"
                       style={{
                         background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)',
@@ -510,7 +510,7 @@ export function BuilderHome() {
                       <div
                         role="listbox"
                         aria-label="Reasoning"
-                        className="w-[218px] overflow-hidden rounded-[22px] p-2"
+                        className="w-full overflow-hidden rounded-[22px] p-2 sm:w-[218px]"
                         style={{
                           background: 'var(--bg-elevated)',
                           border: '1px solid var(--border)',
@@ -555,7 +555,7 @@ export function BuilderHome() {
                 type="button"
                 onClick={handleSubmitPrompt}
                 disabled={bootstrapping || prompt.trim().length === 0}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-11 w-full items-center justify-center rounded-2xl text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 sm:w-11"
                 style={{
                   background: 'linear-gradient(135deg, #F05F8D 0%, #D6336C 55%, #A61E4D 100%)',
                   boxShadow: '0 12px 28px rgba(214,51,108,0.24)',
@@ -567,8 +567,8 @@ export function BuilderHome() {
             </div>
           </div>
 
-          <div className="mt-10">
-            <div className="flex flex-wrap items-center justify-center gap-2">
+          <div className="mt-8 sm:mt-10">
+            <div className="flex snap-x gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:items-center sm:justify-center sm:overflow-visible sm:pb-0">
               {BUILDER_TEMPLATES.map((template) => {
                 const Icon = template.icon
                 return (
@@ -577,7 +577,7 @@ export function BuilderHome() {
                     type="button"
                     disabled={bootstrapping}
                     onClick={() => handleTemplateSelect(template.id)}
-                    className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-black/[0.03] disabled:opacity-50"
+                    className="inline-flex shrink-0 snap-start items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-black/[0.03] disabled:opacity-50"
                     style={{
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',

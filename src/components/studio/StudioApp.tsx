@@ -1,6 +1,6 @@
 'use client'
 
-import { Clock3 } from 'lucide-react'
+import { ArrowLeft, Clock3, Monitor } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadBerryProjectFromJson, serializeBerryProject } from '@/lib/project/io'
 import {
@@ -965,7 +965,11 @@ export function StudioApp() {
   }
 
   return (
-    <div className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+    <>
+    <div className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden lg:hidden" style={{ background: 'var(--bg-base)' }}>
+      <DesktopStudioPrompt />
+    </div>
+    <div className="relative hidden h-[100dvh] min-h-0 flex-col overflow-hidden lg:flex" style={{ background: 'var(--bg-base)' }}>
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <StudioToolbar
           projectName={projectTitle(project)}
@@ -1189,6 +1193,50 @@ export function StudioApp() {
         )} */}
       </div>
     </div>
+    </>
+  )
+}
+
+/**
+ * Prompt small-screen Studio visitors to continue on a desktop-sized display.
+ */
+function DesktopStudioPrompt() {
+  return (
+    <main className="flex min-h-0 flex-1 items-center justify-center px-5 py-8">
+      <section
+        className="w-full max-w-md rounded-[28px] p-6 text-center"
+        style={{
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        <div
+          className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
+          style={{ background: 'rgba(214,51,108,0.1)', color: 'var(--accent)' }}
+        >
+          <Monitor size={26} />
+        </div>
+        <p className="mt-5 text-xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+          Open Studio on desktop
+        </p>
+        <p className="mx-auto mt-3 max-w-sm text-sm font-semibold leading-6" style={{ color: 'var(--text-secondary)' }}>
+          berry. Studio needs room for the hardware canvas, component tray, code, and AI bench. Move to a desktop-sized screen to keep building.
+        </p>
+        <a
+          href="/"
+          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold"
+          style={{
+            background: 'linear-gradient(135deg, #F05F8D 0%, #D6336C 55%, #A61E4D 100%)',
+            color: '#fff',
+            boxShadow: '0 12px 28px rgba(214,51,108,0.24)',
+          }}
+        >
+          <ArrowLeft size={16} />
+          Back home
+        </a>
+      </section>
+    </main>
   )
 }
 

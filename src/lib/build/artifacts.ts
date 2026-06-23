@@ -21,6 +21,15 @@ function createDownloadUrl(firmwareHash: string): string {
 }
 
 /**
+ * Resolve the best filename for an artifact record.
+ * @param artifact Build artifact metadata from a compiler backend.
+ */
+function resolveArtifactFilename(artifact: BuildArtifact): string {
+  if (artifact.filename) return artifact.filename
+  return artifact.binaryPath.split('/').pop() ?? 'firmware.bin'
+}
+
+/**
  * Persist build artifact metadata and bytes for later simulation gating.
  * @param firmwareHash Stable firmware hash.
  * @param board Target board id.
@@ -52,6 +61,23 @@ export async function persistBuildArtifact(
   }
   artifactCache.set(firmwareHash, artifact)
   return artifact
+}
+
+/**
+ * Remember remote artifact metadata so simulation and downloads can verify the build.
+ * @param artifact Remote build artifact metadata.
+ */
+export function rememberRemoteBuildArtifact(artifact: BuildArtifact): BuildArtifact {
+  const filename = resolveArtifactFilename(artifact)
+  const cached: CachedBuildArtifact = {
+    ...artifact,
+    filename,
+    downloadUrl: createDownloadUrl(artifact.firmwareHash),
+    contentType: artifact.contentType ?? 'application/octet-stream',
+    remoteDownloadUrl: artifact.downloadUrl,
+  }
+  artifactCache.set(artifact.firmwareHash, cached)
+  return cached
 }
 
 /**

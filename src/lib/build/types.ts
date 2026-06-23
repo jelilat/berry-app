@@ -35,12 +35,13 @@ export interface BuildArtifact {
   createdAt: string
 }
 
-/** Cached artifact record with binary bytes available for download. */
+/** Cached artifact record for local or remote artifact download. */
 export interface CachedBuildArtifact extends BuildArtifact {
   filename: string
   downloadUrl: string
   contentType: string
-  binary: Uint8Array
+  binary?: Uint8Array
+  remoteDownloadUrl?: string
 }
 
 /** Result returned by the build API and agent workflow. */

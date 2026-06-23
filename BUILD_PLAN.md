@@ -132,7 +132,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 - [x] Browser firmware editor for `src/main.cpp`
 - [x] Graph → sketch / PlatformIO tree (`generateFirmwareFromProject`, toolbar **Generate**)
 - [x] Pin map from graph to board pins in generated code (`buildProjectPinMap`)
-- [x] Compile pipeline (`BERRY_BUILD_BACKEND`: PlatformIO local, mock, remote stub)
+- [x] Compile pipeline (`BERRY_BUILD_BACKEND`: PlatformIO local, mock, hosted build API)
 - [x] Show compiler errors in build output panel
 - [x] Build artifact: `.bin` / `.hex` + metadata hash + download cache
 - [x] API: `POST /api/build`, `POST /api/codegen`, `GET /api/build/artifact`

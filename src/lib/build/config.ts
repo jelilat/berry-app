@@ -6,7 +6,8 @@ const VALID_BACKENDS: BuildBackend[] = ['local', 'mock', 'remote']
 
 /**
  * Read the configured build backend from `BERRY_BUILD_BACKEND`.
- * Defaults to `mock` on Cloudflare Pages (no PlatformIO) and `local` elsewhere.
+ * Defaults to remote on Cloudflare Pages when `BERRY_BUILD_API_URL` is configured,
+ * mock on Cloudflare Pages without the API, and local elsewhere.
  */
 export function getBuildBackend(): BuildBackend {
   const raw = process.env.BERRY_BUILD_BACKEND?.trim().toLowerCase()
@@ -14,6 +15,9 @@ export function getBuildBackend(): BuildBackend {
     return raw as BuildBackend
   }
   if (process.env.CF_PAGES === '1') {
+    if (process.env.BERRY_BUILD_API_URL?.trim()) {
+      return 'remote'
+    }
     return 'mock'
   }
   return 'local'

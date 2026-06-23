@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { compileFirmwareEdge } from '@/lib/build/compile-edge'
+import { getBuildBackend } from '@/lib/build/config'
 import type { FirmwareSourceFiles } from '@/lib/build/types'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import { hasValidationErrors, validate } from '@/lib/validation'
@@ -36,7 +37,7 @@ function extractFirmwareFiles(body: unknown): FirmwareSourceFiles | null {
 }
 
 /**
- * POST /api/build — validate a project and produce a deterministic mock firmware artifact.
+ * POST /api/build — validate a project and produce a firmware artifact.
  * @param request Incoming JSON request.
  */
 export async function POST(request: Request) {
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          backend: 'mock',
+          backend: getBuildBackend(),
           diagnostics: validationResults
             .filter((result) => result.severity === 'error')
             .map((result) => ({ severity: 'error', message: result.message })),

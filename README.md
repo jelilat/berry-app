@@ -53,6 +53,18 @@ For UI development and tests without a local compiler:
 BERRY_BUILD_BACKEND=mock
 ```
 
+### Production build API
+
+berry. uses the hosted build API when `BERRY_BUILD_API_URL` is set. The app posts the same `BuildInput` JSON to `POST /build`, keeps the API token server-side, and proxies firmware downloads through `/api/build/artifact?hash=...`.
+
+```bash
+# production environment
+BERRY_BUILD_API_URL=https://your-build-api.example.com
+BERRY_BUILD_API_TOKEN=change-me
+```
+
+Set `BERRY_BUILD_BACKEND=remote` explicitly if you want to force the build API outside Cloudflare Pages. Local development defaults to PlatformIO unless `BERRY_BUILD_BACKEND` is set.
+
 ### Build timing
 
 - **First ESP32 build:** often 5–15 minutes while PlatformIO downloads toolchains.

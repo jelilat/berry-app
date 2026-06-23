@@ -33,6 +33,9 @@ import type {
   AgentAnswerSubmission,
   AgentBackendRunAccepted,
   AgentBackendRunRecord,
+  AgentFollowupAccepted,
+  AgentFollowupRecord,
+  AgentProjectIterationContext,
   AgentRunState,
   AgentRunResult,
 } from '@/lib/agent/types'
@@ -60,7 +63,12 @@ import {
   upsertCloudUserProject,
 } from '@/lib/projects/cloud-projects'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
-import { AIAssistantPanel, type SubmittedPrompt } from './AIAssistantPanel'
+import {
+  AIAssistantPanel,
+  type AssistantTurn,
+  type ProjectChatSubmitContext,
+  type SubmittedPrompt,
+} from './AIAssistantPanel'
 import { ComponentTray } from './ComponentTray'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
 import { FirmwareWorktreePanel } from './FirmwareWorktreePanel'
@@ -109,18 +117,20 @@ function isActiveAgentLoopRecord(record: AgentBackendRunRecord | null): boolean 
  * @param runId Hosted backend run id.
  * @param onRecord Optional callback for every successful poll response.
  * @param options Polling behavior for clarification pauses.
+ * @param statusPathPrefix Local API route prefix for status polling.
  * @throws Error when polling fails or times out.
  */
 async function pollAgentRun(
   runId: string,
   onRecord?: (record: AgentBackendRunRecord) => void,
   options?: AgentRunPollingOptions,
+  statusPathPrefix = '/api/agent/run',
 ): Promise<AgentBackendRunRecord> {
   for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS; attempt += 1) {
     if (attempt > 0) {
       await sleep(AGENT_POLL_INTERVAL_MS)
     }
-    const response = await fetch(`/api/agent/run/${encodeURIComponent(runId)}`)
+    const response = await fetch(`${statusPathPrefix}/${encodeURIComponent(runId)}`)
     const json = await parseJsonResponse(response)
     if (!response.ok) {
       const error = json as { error?: string }
@@ -133,6 +143,30 @@ async function pollAgentRun(
     }
   }
   throw new Error('Agent run timed out while waiting for the backend')
+}
+
+/**
+ * Poll a local follow-up proxy until it reaches a terminal status.
+ * @param requestId Hosted backend follow-up request id.
+ * @throws Error when polling fails or times out.
+ */
+async function pollAgentFollowup(requestId: string): Promise<AgentFollowupRecord> {
+  for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await sleep(AGENT_POLL_INTERVAL_MS)
+    }
+    const response = await fetch(`/api/agent/followup/${encodeURIComponent(requestId)}`)
+    const json = await parseJsonResponse(response)
+    if (!response.ok) {
+      const error = json as { error?: string }
+      throw new Error(error.error ?? 'Follow-up status request failed')
+    }
+    const record = json as AgentFollowupRecord
+    if (record.status === 'needs_clarification' || record.status === 'completed' || record.status === 'failed') {
+      return record
+    }
+  }
+  throw new Error('Follow-up request timed out while waiting for the backend')
 }
 
 /**
@@ -193,6 +227,26 @@ function visualizableResultFromRunRecord(record: AgentBackendRunRecord): AgentRu
 }
 
 /**
+ * Render a completed follow-up result into an assistant chat message.
+ * @param record Terminal follow-up record from the backend.
+ */
+function assistantMessageFromFollowup(record: AgentFollowupRecord): string {
+  if (record.status === 'failed') {
+    return record.error ?? 'Pip could not finish that follow-up.'
+  }
+  const result = record.result
+  if (!result) return 'Pip finished, but did not return a follow-up result.'
+  const lines = [result.message ?? 'I need a bit more detail before I can continue.']
+  if ('suggestedChecks' in result && result.suggestedChecks?.length) {
+    lines.push('', 'Suggested checks:', ...result.suggestedChecks.map((check) => `- ${check}`))
+  }
+  if ('notes' in result && result.notes?.length) {
+    lines.push('', 'Notes:', ...result.notes.map((note) => `- ${note}`))
+  }
+  return lines.join('\n')
+}
+
+/**
  * Create the local chat namespace for a loaded bench project.
  * @param project Project currently opened in the bench.
  */
@@ -210,6 +264,31 @@ function createProjectChatKey(project: BerryProject): string {
  */
 function projectTitle(project: BerryProject): string {
   return project.metadata.name.trim() || 'Untitled project'
+}
+
+/**
+ * Build the project-iteration context sent with a project chat request.
+ * @param firmwareSource Current editable firmware source.
+ * @param buildResult Latest build result, when one exists.
+ * @param chatContext Current project chat transcript context.
+ */
+function createProjectIterationContext(
+  project: BerryProject,
+  firmwareSource: string,
+  buildResult: BuildResult | null,
+  simulationResult: SimulationResult | null,
+  agentResult: AgentRunResult | null,
+): AgentProjectIterationContext {
+  const buildErrors = buildResult?.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')
+  return {
+    project,
+    firmwareFiles: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+    buildErrors: buildErrors && buildErrors.length > 0 ? buildErrors : undefined,
+    buildResult: buildResult ?? undefined,
+    simulationResult: simulationResult ?? undefined,
+    wiringGuide: agentResult?.state.wiringGuide,
+    timeline: agentResult?.state.timeline,
+  }
 }
 
 /**
@@ -301,6 +380,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const [agentWaitingForAnswers, setAgentWaitingForAnswers] = useState(false)
   const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
   const [agentRunRecord, setAgentRunRecord] = useState<AgentBackendRunRecord | null>(null)
+  const [assistantTurn, setAssistantTurn] = useState<AssistantTurn | null>(null)
   const [agentClarificationSubmitted, setAgentClarificationSubmitted] = useState(false)
   const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPrompt | null>(null)
   const [validationFlyoutOpen, setValidationFlyoutOpen] = useState(false)
@@ -320,6 +400,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       model?: string,
       reasoningEffort?: string,
       answerSubmission?: AgentAnswerSubmission,
+      chatContext?: ProjectChatSubmitContext,
     ) => Promise<void>
   >(async () => {})
   const initialProjectRef = useRef<BerryProject | null>(null)
@@ -600,19 +681,101 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     model?: string,
     reasoningEffort?: string,
     answerSubmission?: AgentAnswerSubmission,
+    chatContext?: ProjectChatSubmitContext,
   ) => {
     if (agentLoading || prompt.trim().length === 0) return
     if (agentWaitingForAnswers && !answerSubmission) return
     setAgentLoading(true)
     setAgentWaitingForAnswers(false)
     setAgentResult(null)
+    setAssistantTurn(null)
     setAgentClarificationSubmitted(!!answerSubmission)
     visualizedAgentProjectRef.current = null
     if (!answerSubmission) {
       setAgentRunRecord(null)
     }
+    setAssistantTurn(null)
     setErrorMessage(null)
     try {
+      const isProjectChatRequest = !!chatContext
+      const projectContext = isProjectChatRequest
+        ? createProjectIterationContext(project, firmwareSource, buildResult, simulationResult, agentResult)
+        : undefined
+      if (isProjectChatRequest && projectContext) {
+        const followupMessage = answerSubmission
+          ? [
+              prompt,
+              '',
+              'Clarification answers:',
+              ...Object.entries(answerSubmission.answers).map(([key, value]) => `- ${key}: ${value}`),
+            ].join('\n')
+          : prompt
+        const response = await fetch('/api/agent/followup', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            message: followupMessage,
+            mode: 'auto',
+            projectContext,
+            chatHistory: chatContext.chatHistory,
+            provider,
+            model,
+            reasoningEffort,
+          }),
+        })
+        const json = await parseJsonResponse(response)
+        if (!response.ok) {
+          const error = json as { error?: string }
+          setErrorMessage(error.error ?? 'Follow-up request failed')
+          return
+        }
+
+        const accepted = json as AgentFollowupAccepted
+        const record = await pollAgentFollowup(accepted.requestId)
+        if (record.status === 'needs_clarification' && record.result?.kind === 'clarification') {
+          setAgentResult({
+            ok: false,
+            status: 'needs_clarification',
+            state: {
+              runId: record.requestId,
+              userPrompt: prompt,
+              clarification: {
+                status: 'needs_clarification',
+                questions: record.result.questions,
+              },
+              project,
+              firmwareFiles: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+              validationResults: validationResults,
+              timeline: [],
+            },
+          })
+          setAgentWaitingForAnswers(true)
+          return
+        }
+        setAssistantTurn({
+          id: `assistant_followup_${record.requestId}`,
+          text: assistantMessageFromFollowup(record),
+        })
+        if (record.status === 'completed' && record.result?.kind === 'modification') {
+          if (record.result.project) {
+            skipNextPipelineResetRef.current = true
+            resetProject(replaceProject(preserveProjectIdentity(project, record.result.project)))
+            setSelectedNodeId(null)
+            setSelectedWireId(null)
+            setViewMode('2d')
+          }
+          const source = record.result.firmwareFiles?.[DEFAULT_FIRMWARE_PATH]
+          if (source) {
+            setFirmwareSource(source)
+            setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+          }
+          setPipelineNotice('Project chat update applied')
+        }
+        if (record.status === 'failed') {
+          setErrorMessage(record.error ?? 'Follow-up failed')
+        }
+        return
+      }
       const response = answerSubmission
         ? await fetch(`/api/agent/run/${encodeURIComponent(answerSubmission.runId)}/answers`, {
             method: 'POST',
@@ -622,7 +785,15 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         : await fetch('/api/agent/run', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ prompt, project, mode, provider, model, reasoningEffort }),
+            body: JSON.stringify({
+              prompt,
+              project,
+              projectContext,
+              mode,
+              provider,
+              model,
+              reasoningEffort,
+            }),
           })
       const json = await parseJsonResponse(response)
       if (!response.ok) {
@@ -675,7 +846,18 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setAgentClarificationSubmitted(false)
       setAgentLoading(false)
     }
-  }, [agentLoading, agentWaitingForAnswers, project, visualizeAgentProject])
+  }, [
+    agentLoading,
+    agentResult,
+    agentWaitingForAnswers,
+    buildResult,
+    firmwareSource,
+    project,
+    resetProject,
+    simulationResult,
+    validationResults,
+    visualizeAgentProject,
+  ])
 
   handleAgentRunRef.current = handleAgentRun
 
@@ -775,6 +957,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     setSelectedWireId(null)
     setAgentWaitingForAnswers(false)
     setAgentResult(null)
+    setAssistantTurn(null)
     setErrorMessage(null)
     setViewMode('2d')
   }, [projectId, resetProject, router, signedIn])
@@ -795,6 +978,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setFirmwareSource(createEsp32BlinkFirmwareSource())
       setAgentWaitingForAnswers(false)
       setAgentResult(null)
+      setAssistantTurn(null)
       setViewMode('2d')
       setStatus('ready')
     } catch (e) {
@@ -1258,6 +1442,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             submittedPrompt={submittedPrompt}
             result={agentResult}
             backendRunRecord={agentRunRecord}
+            assistantTurn={assistantTurn}
             clarificationSubmitted={agentClarificationSubmitted}
             onSubmit={handleAgentRun}
           />

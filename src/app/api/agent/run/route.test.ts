@@ -21,7 +21,7 @@ describe('POST /api/agent/run', () => {
 
   it('creates a hosted backend agent run', async () => {
     vi.stubEnv('BERRY_BUILD_API_URL', 'http://agent.test')
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
       Response.json(
         {
           runId: 'agent_123',

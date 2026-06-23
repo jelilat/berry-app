@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   AgentAnswerSubmission,
   AgentBackendRunRecord,
+  AgentProjectChatContext,
   AgentRunResult,
   ClarifyingQuestion,
 } from '@/lib/agent/types'
@@ -38,6 +39,13 @@ const ASSISTANT_NAME = 'Pip'
 
 type BenchMessage = CloudBenchMessage
 type BenchChat = CloudBenchChat
+
+export type ProjectChatSubmitContext = AgentProjectChatContext
+
+export interface AssistantTurn {
+  id: string
+  text: string
+}
 
 type MarkdownBlock =
   | { kind: 'heading'; level: 2 | 3; text: string }
@@ -82,6 +90,7 @@ export function AIAssistantPanel({
   submittedPrompt = null,
   result,
   backendRunRecord = null,
+  assistantTurn = null,
   clarificationSubmitted = false,
   onSubmit,
 }: {
@@ -91,6 +100,7 @@ export function AIAssistantPanel({
   submittedPrompt?: SubmittedPrompt | null
   result: AgentRunResult | null
   backendRunRecord?: AgentBackendRunRecord | null
+  assistantTurn?: AssistantTurn | null
   clarificationSubmitted?: boolean
   onSubmit: (
     prompt: string,
@@ -99,6 +109,7 @@ export function AIAssistantPanel({
     model?: string,
     reasoningEffort?: string,
     answerSubmission?: AgentAnswerSubmission,
+    chatContext?: ProjectChatSubmitContext,
   ) => void | Promise<void>
 }) {
   const [prompt, setPrompt] = useState('')
@@ -229,6 +240,25 @@ export function AIAssistantPanel({
     )
   }, [activeChatId, result])
 
+  useEffect(() => {
+    if (!assistantTurn || !assistantTurn.text.trim() || !activeChatId) return
+    setChats((current) =>
+      current.map((chat) =>
+        chat.id === activeChatId
+          ? {
+              ...chat,
+              messages: appendUniqueMessage(chat.messages, {
+                id: assistantTurn.id,
+                role: 'assistant',
+                text: assistantTurn.text,
+              }),
+              updatedAt: new Date().toISOString(),
+            }
+          : chat,
+      ),
+    )
+  }, [activeChatId, assistantTurn])
+
   /**
    * Start a blank chat session.
    */
@@ -262,6 +292,7 @@ export function AIAssistantPanel({
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || loading) return
     const chat = activeChat ?? createChat()
+    const userMessage: BenchMessage = { id: `user_${Date.now()}`, role: 'user', text: cleanPrompt }
     if (!activeChat) {
       setChats((current) => [chat, ...current])
       setActiveChatId(chat.id)
@@ -274,7 +305,7 @@ export function AIAssistantPanel({
               title: item.messages.length === 0 ? titleFromPrompt(cleanPrompt) : item.title,
               messages: [
                 ...item.messages,
-                { id: `user_${Date.now()}`, role: 'user', text: cleanPrompt },
+                userMessage,
               ],
               updatedAt: new Date().toISOString(),
             }
@@ -288,6 +319,11 @@ export function AIAssistantPanel({
       undefined,
       undefined,
       undefined,
+      undefined,
+      {
+        activeChatId: chat.id,
+        chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
+      },
     )
   }
 
@@ -300,6 +336,11 @@ export function AIAssistantPanel({
     const cleanOption = option.trim()
     if (!cleanOption) return
     const chat = activeChat ?? createChat()
+    const userMessage: BenchMessage = {
+      id: `user_choice_${Date.now()}`,
+      role: 'user',
+      text: cleanOption,
+    }
     if (!activeChat) {
       setChats((current) => [chat, ...current])
       setActiveChatId(chat.id)
@@ -312,7 +353,7 @@ export function AIAssistantPanel({
               title: item.messages.length === 0 ? titleFromPrompt(cleanOption) : item.title,
               messages: [
                 ...item.messages,
-                { id: `user_choice_${Date.now()}`, role: 'user', text: cleanOption },
+                userMessage,
               ],
               updatedAt: new Date().toISOString(),
             }
@@ -321,6 +362,15 @@ export function AIAssistantPanel({
     )
     onSubmit(
       promptForChoice(result, chat.messages, cleanOption),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        activeChatId: chat.id,
+        chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
+      },
     )
   }
 
@@ -373,6 +423,10 @@ export function AIAssistantPanel({
       {
         runId: clarificationRequest.runId,
         answers,
+      },
+      {
+        activeChatId: chat.id,
+        chatHistory: projectChatHistoryForSubmit(chats, chat, transcriptMessages),
       },
     )
   }
@@ -1357,6 +1411,23 @@ function titleFromPrompt(prompt: string): string {
 function appendUniqueMessage(messages: BenchMessage[], message: BenchMessage): BenchMessage[] {
   if (messages.some((item) => item.id === message.id)) return messages
   return [...messages, message]
+}
+
+/**
+ * Convert the active bench chat into backend follow-up history.
+ * @param chats Current project chat sessions.
+ * @param activeChat Chat that is receiving the new messages.
+ * @param pendingMessages Messages being submitted before React state updates.
+ */
+function projectChatHistoryForSubmit(
+  chats: BenchChat[],
+  activeChat: BenchChat,
+  pendingMessages: BenchMessage[],
+): AgentProjectChatContext['chatHistory'] {
+  const sourceChat = chats.find((chat) => chat.id === activeChat.id) ?? activeChat
+  return sourceChat.messages
+    .concat(pendingMessages)
+    .map((message) => ({ role: message.role, content: message.text }))
 }
 
 /**

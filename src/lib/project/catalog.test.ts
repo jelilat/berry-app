@@ -3,8 +3,8 @@ import { getComponentDefinition, isWireTemplate, listCatalog } from "./catalog";
 import type { ComponentTypeId } from "./types";
 
 describe("component catalog", () => {
-  it("listCatalog returns 17 parts", () => {
-    expect(listCatalog()).toHaveLength(17);
+  it("listCatalog returns the full Berry parts tray", () => {
+    expect(listCatalog()).toHaveLength(66);
   });
 
   it("getComponentDefinition returns ESP32 with full DevKit header", () => {
@@ -36,6 +36,20 @@ describe("component catalog", () => {
       "OUT",
       "GND",
     ]);
+  });
+
+  it("defines Wokwi keypad and sensor terminals", () => {
+    expect(
+      getComponentDefinition("membrane-keypad-4x4").terminals.map(
+        (terminal) => terminal.id,
+      ),
+    ).toEqual(["R1", "R2", "R3", "R4", "C1", "C2", "C3", "C4"]);
+
+    expect(
+      getComponentDefinition("mq2-gas-sensor").terminals.map(
+        (terminal) => terminal.id,
+      ),
+    ).toEqual(["AO", "DO", "GND", "VCC"]);
   });
 
   it("returns a placeholder definition for unsupported hosted components", () => {

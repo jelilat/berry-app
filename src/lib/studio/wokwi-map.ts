@@ -9,8 +9,45 @@ export type WokwiTag =
   | 'wokwi-resistor'
   | 'wokwi-pushbutton-6mm'
   | 'wokwi-hc-sr04'
+  | 'wokwi-pir-motion-sensor'
+  | 'wokwi-dht22'
+  | 'wokwi-photoresistor-sensor'
+  | 'wokwi-ntc-temperature-sensor'
+  | 'wokwi-gas-sensor'
+  | 'wokwi-small-sound-sensor'
+  | 'wokwi-big-sound-sensor'
+  | 'wokwi-flame-sensor'
+  | 'wokwi-heart-beat-sensor'
+  | 'wokwi-tilt-switch'
+  | 'wokwi-mpu6050'
   | 'wokwi-servo'
   | 'wokwi-lcd1602'
+  | 'wokwi-lcd2004'
+  | 'wokwi-ssd1306'
+  | 'wokwi-ili9341'
+  | 'wokwi-7segment'
+  | 'wokwi-led-bar-graph'
+  | 'wokwi-neopixel'
+  | 'wokwi-neopixel-matrix'
+  | 'wokwi-led-ring'
+  | 'wokwi-rgb-led'
+  | 'wokwi-buzzer'
+  | 'wokwi-membrane-keypad'
+  | 'wokwi-analog-joystick'
+  | 'wokwi-ky-040'
+  | 'wokwi-dip-switch-8'
+  | 'wokwi-slide-switch'
+  | 'wokwi-potentiometer'
+  | 'wokwi-slide-potentiometer'
+  | 'wokwi-ir-receiver'
+  | 'wokwi-ir-remote'
+  | 'wokwi-rotary-dialer'
+  | 'wokwi-stepper-motor'
+  | 'wokwi-ks2e-m-dc5'
+  | 'wokwi-biaxial-stepper'
+  | 'wokwi-microsd-card'
+  | 'wokwi-ds1307'
+  | 'wokwi-hx711'
 
 /** Visual + pin metadata for rendering a catalog part with Wokwi Elements. */
 export interface WokwiPartVisual {
@@ -115,12 +152,104 @@ export function getWokwiVisual(type: ComponentTypeId): WokwiPartVisual | null {
         pinMap: { pin1: '1.l', pin2: '2.l' },
         props: { color: 'green' },
       }
+    case 'pushbutton-6mm':
+      return {
+        tag: 'wokwi-pushbutton-6mm',
+        nativeWidth: 24,
+        nativeHeight: 24,
+        pinMap: { pin1: '1.l', pin2: '2.l', pin3: '1.r', pin4: '2.r' },
+        props: { color: 'green' },
+      }
+    case 'membrane-keypad-4x4':
+      return {
+        tag: 'wokwi-membrane-keypad',
+        nativeWidth: 153,
+        nativeHeight: 348,
+        pinMap: { R1: 'R1', R2: 'R2', R3: 'R3', R4: 'R4', C1: 'C1', C2: 'C2', C3: 'C3', C4: 'C4' },
+      }
     case 'hc-sr04':
       return {
         tag: 'wokwi-hc-sr04',
         nativeWidth: 110,
         nativeHeight: 100,
         pinMap: { VCC: 'VCC', TRIG: 'TRIG', ECHO: 'ECHO', GND: 'GND' },
+      }
+    case 'pir-motion-sensor-hc-sr501':
+      return {
+        tag: 'wokwi-pir-motion-sensor',
+        nativeWidth: 90.7,
+        nativeHeight: 92.4,
+        pinMap: { VCC: 'VCC', OUT: 'OUT', GND: 'GND' },
+      }
+    case 'dht22':
+      return {
+        tag: 'wokwi-dht22',
+        nativeWidth: 15.1,
+        nativeHeight: 30.885,
+        pinMap: { VCC: 'VCC', SDA: 'SDA', NC: 'NC', GND: 'GND' },
+      }
+    case 'photoresistor-sensor':
+      return {
+        tag: 'wokwi-photoresistor-sensor',
+        nativeWidth: 174,
+        nativeHeight: 61.5,
+        pinMap: { VCC: 'VCC', GND: 'GND', DO: 'DO', AO: 'AO' },
+      }
+    case 'ntc-temperature-sensor':
+      return {
+        tag: 'wokwi-ntc-temperature-sensor',
+        nativeWidth: 135.4,
+        nativeHeight: 71.782,
+        pinMap: { GND: 'GND', VCC: 'VCC', OUT: 'OUT' },
+      }
+    case 'mq2-gas-sensor':
+      return {
+        tag: 'wokwi-gas-sensor',
+        nativeWidth: 137,
+        nativeHeight: 59.5,
+        pinMap: { AO: 'AOUT', DO: 'DOUT', GND: 'GND', VCC: 'VCC' },
+      }
+    case 'small-sound-sensor':
+      return {
+        tag: 'wokwi-small-sound-sensor',
+        nativeWidth: 133,
+        nativeHeight: 50.4,
+        pinMap: { AO: 'AOUT', GND: 'GND', VCC: 'VCC', DO: 'DOUT' },
+      }
+    case 'big-sound-sensor':
+      return {
+        tag: 'wokwi-big-sound-sensor',
+        nativeWidth: 140,
+        nativeHeight: 50.4,
+        pinMap: { AO: 'AOUT', GND: 'GND', VCC: 'VCC', DO: 'DOUT' },
+      }
+    case 'flame-sensor':
+      return {
+        tag: 'wokwi-flame-sensor',
+        nativeWidth: 200,
+        nativeHeight: 61.5,
+        pinMap: { VCC: 'VCC', GND: 'GND', DO: 'DOUT', AO: 'AOUT' },
+      }
+    case 'heart-beat-sensor':
+      return {
+        tag: 'wokwi-heart-beat-sensor',
+        nativeWidth: 88.4,
+        nativeHeight: 79.2,
+        pinMap: { GND: 'GND', VCC: 'VCC', OUT: 'OUT' },
+      }
+    case 'tilt-switch':
+      return {
+        tag: 'wokwi-tilt-switch',
+        nativeWidth: 88.4,
+        nativeHeight: 55.6,
+        pinMap: { GND: 'GND', VCC: 'VCC', OUT: 'OUT' },
+      }
+    case 'mpu6050':
+      return {
+        tag: 'wokwi-mpu6050',
+        nativeWidth: 81.6,
+        nativeHeight: 61.2,
+        pinMap: { VCC: 'VCC', GND: 'GND', SCL: 'SCL', SDA: 'SDA', XDA: 'XDA', XCL: 'XCL', AD0: 'AD0', INT: 'INT' },
       }
     case 'servo-sg90':
       return {
@@ -129,6 +258,109 @@ export function getWokwiVisual(type: ComponentTypeId): WokwiPartVisual | null {
         nativeHeight: 100,
         pinMap: { VCC: 'V+', GND: 'GND', SIG: 'PWM' },
       }
+    case 'analog-joystick':
+      return {
+        tag: 'wokwi-analog-joystick',
+        nativeWidth: 27.2,
+        nativeHeight: 31.8,
+        pinMap: { VCC: 'VCC', VERT: 'VERT', HORZ: 'HORZ', SEL: 'SEL', GND: 'GND' },
+      }
+    case 'rotary-encoder-ky-040':
+      return {
+        tag: 'wokwi-ky-040',
+        nativeWidth: 116,
+        nativeHeight: 70.4,
+        pinMap: { CLK: 'CLK', DT: 'DT', SW: 'SW', '+': '+', GND: 'GND' },
+      }
+    case 'dip-switch-8':
+      return {
+        tag: 'wokwi-dip-switch-8',
+        nativeWidth: 74,
+        nativeHeight: 58,
+        pinMap: {
+          '1a': '1a',
+          '2a': '2a',
+          '3a': '3a',
+          '4a': '4a',
+          '5a': '5a',
+          '6a': '6a',
+          '7a': '7a',
+          '8a': '8a',
+          '1b': '1b',
+          '2b': '2b',
+          '3b': '3b',
+          '4b': '4b',
+          '5b': '5b',
+          '6b': '6b',
+          '7b': '7b',
+          '8b': '8b',
+        },
+      }
+    case 'slide-switch':
+      return {
+        tag: 'wokwi-slide-switch',
+        nativeWidth: 8.5,
+        nativeHeight: 9.23,
+        pinMap: { '1': '1', '2': '2', '3': '3' },
+      }
+    case 'potentiometer':
+      return {
+        tag: 'wokwi-potentiometer',
+        nativeWidth: 20,
+        nativeHeight: 20,
+        pinMap: { GND: 'GND', SIG: 'SIG', VCC: 'VCC' },
+      }
+    case 'slide-potentiometer':
+      return {
+        tag: 'wokwi-slide-potentiometer',
+        nativeWidth: 55,
+        nativeHeight: 29,
+        pinMap: { VCC: 'VCC', SIG: 'SIG', GND: 'GND' },
+      }
+    case 'ir-receiver':
+      return {
+        tag: 'wokwi-ir-receiver',
+        nativeWidth: 41.954,
+        nativeHeight: 87.75,
+        pinMap: { GND: 'GND', VCC: 'VCC', DAT: 'DAT' },
+      }
+    case 'ir-remote':
+      return {
+        tag: 'wokwi-ir-remote',
+        nativeWidth: 160,
+        nativeHeight: 360,
+        pinMap: {},
+      }
+    case 'rotary-dialer':
+      return {
+        tag: 'wokwi-rotary-dialer',
+        nativeWidth: 266,
+        nativeHeight: 296,
+        pinMap: { GND: 'GND', DIAL: 'DIAL', PULSE: 'PULSE' },
+      }
+    case 'relay-module':
+      return null
+    case 'ks2e-relay':
+      return {
+        tag: 'wokwi-ks2e-m-dc5',
+        nativeWidth: 75.6,
+        nativeHeight: 37.8,
+        pinMap: { NO2: 'NO2', NC2: 'NC2', P2: 'P2', COIL2: 'COIL2', NO1: 'NO1', NC1: 'NC1', P1: 'P1', COIL1: 'COIL1' },
+      }
+    case 'stepper-motor':
+      return {
+        tag: 'wokwi-stepper-motor',
+        nativeWidth: 166,
+        nativeHeight: 184,
+        pinMap: { 'A-': 'A-', 'A+': 'A+', 'B+': 'B+', 'B-': 'B-' },
+      }
+    case 'biaxial-stepper':
+      return {
+        tag: 'wokwi-biaxial-stepper',
+        nativeWidth: 212,
+        nativeHeight: 255,
+        pinMap: { 'A1-': 'A1-', 'A1+': 'A1+', 'B1+': 'B1+', 'B1-': 'B1-', 'A2-': 'A2-', 'A2+': 'A2+', 'B2+': 'B2+', 'B2-': 'B2-' },
+      }
     case 'lcd-1602-i2c':
       return {
         tag: 'wokwi-lcd1602',
@@ -136,6 +368,124 @@ export function getWokwiVisual(type: ComponentTypeId): WokwiPartVisual | null {
         nativeHeight: 80,
         pinMap: { VCC: 'VCC', GND: 'GND', SDA: 'SDA', SCL: 'SCL' },
         props: { pins: 'i2c', screenOnly: true },
+      }
+    case 'lcd-2004-i2c':
+      return {
+        tag: 'wokwi-lcd2004',
+        nativeWidth: 120,
+        nativeHeight: 80,
+        pinMap: { VCC: 'VCC', GND: 'GND', SDA: 'SDA', SCL: 'SCL' },
+        props: { pins: 'i2c', screenOnly: true },
+      }
+    case 'ssd1306-oled':
+      return {
+        tag: 'wokwi-ssd1306',
+        nativeWidth: 150,
+        nativeHeight: 116,
+        pinMap: { SDA: 'DATA', SCL: 'CLK', VCC: '3V3', GND: 'GND' },
+      }
+    case 'ili9341-tft':
+      return {
+        tag: 'wokwi-ili9341',
+        nativeWidth: 177,
+        nativeHeight: 300,
+        pinMap: { VCC: 'VCC', GND: 'GND', CS: 'CS', RESET: 'RST', 'D/C': 'D/C', SDI: 'MOSI', SCK: 'SCK', LED: 'LED', SDO: 'MISO' },
+      }
+    case 'single-7segment':
+      return {
+        tag: 'wokwi-7segment',
+        nativeWidth: 28,
+        nativeHeight: 38,
+        pinMap: { A: 'A', B: 'B', C: 'C', D: 'D', E: 'E', F: 'F', G: 'G', DP: 'DP', COM: 'COM' },
+      }
+    default:
+      break
+  }
+
+  switch (type) {
+    case 'led-bar-graph':
+      return {
+        tag: 'wokwi-led-bar-graph',
+        nativeWidth: 10.1,
+        nativeHeight: 25.5,
+        pinMap: {
+          A1: 'A1',
+          A2: 'A2',
+          A3: 'A3',
+          A4: 'A4',
+          A5: 'A5',
+          A6: 'A6',
+          A7: 'A7',
+          A8: 'A8',
+          A9: 'A9',
+          A10: 'A10',
+          C1: 'C1',
+          C2: 'C2',
+          C3: 'C3',
+          C4: 'C4',
+          C5: 'C5',
+          C6: 'C6',
+          C7: 'C7',
+          C8: 'C8',
+          C9: 'C9',
+          C10: 'C10',
+        },
+      }
+    case 'neopixel':
+      return {
+        tag: 'wokwi-neopixel',
+        nativeWidth: 5.6631,
+        nativeHeight: 5,
+        pinMap: { VDD: 'VDD', DIN: 'DIN', GND: 'GND', DOUT: 'DOUT' },
+      }
+    case 'neopixel-matrix':
+      return {
+        tag: 'wokwi-neopixel-matrix',
+        nativeWidth: 226,
+        nativeHeight: 226,
+        pinMap: { VCC: 'VCC', DIN: 'DIN', GND: 'GND', DOUT: 'DOUT' },
+      }
+    case 'led-ring':
+      return {
+        tag: 'wokwi-led-ring',
+        nativeWidth: 74,
+        nativeHeight: 83,
+        pinMap: { VCC: 'VCC', DIN: 'DIN', GND: 'GND', DOUT: 'DOUT' },
+      }
+    case 'rgb-led':
+      return {
+        tag: 'wokwi-rgb-led',
+        nativeWidth: 37.3425,
+        nativeHeight: 57.5115,
+        pinMap: { R: 'R', COM: 'COM', G: 'G', B: 'B' },
+      }
+    case 'buzzer':
+      return {
+        tag: 'wokwi-buzzer',
+        nativeWidth: 17,
+        nativeHeight: 20,
+        pinMap: { '1': '1', '2': '2' },
+      }
+    case 'microsd-card':
+      return {
+        tag: 'wokwi-microsd-card',
+        nativeWidth: 21.6,
+        nativeHeight: 20.4,
+        pinMap: { CD: 'CD', DO: 'DO', GND: 'GND', SCK: 'SCK', VCC: 'VCC', DI: 'DI', CS: 'CS' },
+      }
+    case 'ds1307-rtc':
+      return {
+        tag: 'wokwi-ds1307',
+        nativeWidth: 25.8,
+        nativeHeight: 22.212,
+        pinMap: { GND: 'GND', '5V': '5V', SDA: 'SDA', SCL: 'SCL', SQW: 'SQW' },
+      }
+    case 'hx711-load-cell-amp':
+      return {
+        tag: 'wokwi-hx711',
+        nativeWidth: 340,
+        nativeHeight: 200,
+        pinMap: { VCC: 'VCC', GND: 'GND', DT: 'DT', SCK: 'SCK' },
       }
     default:
       return null

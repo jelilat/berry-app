@@ -1,4 +1,5 @@
 import type { ComponentTypeId } from '@/lib/project/types'
+import { listCatalog } from '@/lib/project/catalog'
 import { getPhysicalDimensionsMm } from '@/lib/studio/physical-dimensions'
 import { getWokwiVisual } from '@/lib/studio/wokwi-map'
 
@@ -14,7 +15,15 @@ const INTERACTION_FLOOR_SCENE_SIZE: Partial<Record<ComponentTypeId, { w: number;
   'resistor-1k': { w: 0.08, h: 0.018 },
   'resistor-2k': { w: 0.08, h: 0.018 },
   'push-button': { w: 0.04, h: 0.04 },
+  'pushbutton-6mm': { w: 0.034, h: 0.034 },
+  'slide-switch': { w: 0.034, h: 0.036 },
+  'potentiometer': { w: 0.05, h: 0.05 },
+  'neopixel': { w: 0.026, h: 0.026 },
+  'rgb-led': { w: 0.034, h: 0.04 },
+  'buzzer': { w: 0.04, h: 0.048 },
   'max7219-led-matrix': { w: 0.082, h: 0.082 },
+  'single-7segment': { w: 0.05, h: 0.07 },
+  'led-bar-graph': { w: 0.04, h: 0.07 },
 }
 
 /**
@@ -85,22 +94,13 @@ export function buildComponentSceneSizeTable(): Record<
   { w: number; h: number }
 > {
   return {
-    'breadboard-full': catalogSceneSize('breadboard-full'),
-    'esp32-devkit-v1': catalogSceneSize('esp32-devkit-v1'),
-    'arduino-uno': catalogSceneSize('arduino-uno'),
-    'led-5mm': catalogSceneSize('led-5mm'),
-    'resistor-220': catalogSceneSize('resistor-220'),
-    'resistor-1k': catalogSceneSize('resistor-1k'),
-    'resistor-2k': catalogSceneSize('resistor-2k'),
-    'push-button': catalogSceneSize('push-button'),
-    'hc-sr04': catalogSceneSize('hc-sr04'),
-    'pir-motion-sensor-hc-sr501': catalogSceneSize('pir-motion-sensor-hc-sr501'),
-    'bme280': catalogSceneSize('bme280'),
-    'servo-sg90': catalogSceneSize('servo-sg90'),
-    'lcd-1602-i2c': catalogSceneSize('lcd-1602-i2c'),
-    'max7219-led-matrix': catalogSceneSize('max7219-led-matrix'),
+    ...Object.fromEntries(
+      listCatalog()
+        .filter((part) => !part.wireTemplate)
+        .map((part) => [part.id, catalogSceneSize(part.id)]),
+    ),
     'jumper-mm': { w: 0.01, h: 0.01 },
     'jumper-mf': { w: 0.01, h: 0.01 },
     'jumper-ff': { w: 0.01, h: 0.01 },
-  }
+  } as Record<ComponentTypeId, { w: number; h: number }>
 }

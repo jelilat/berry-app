@@ -14,17 +14,53 @@ const INPUT_LIKE_KINDS: TerminalKind[] = [
   'i2c_sda',
   'i2c_scl',
   'spi_mosi',
+  'spi_miso',
   'spi_sck',
   'spi_cs',
   'uart_rx',
 ]
 const SENSOR_POWER_TYPES: ComponentTypeId[] = [
   'bme280',
+  'dht22',
+  'ds18b20',
+  'photoresistor-sensor',
+  'ntc-temperature-sensor',
+  'mq2-gas-sensor',
+  'small-sound-sensor',
+  'big-sound-sensor',
+  'flame-sensor',
+  'heart-beat-sensor',
+  'tilt-switch',
+  'mpu6050',
   'hc-sr04',
   'pir-motion-sensor-hc-sr501',
   'servo-sg90',
+  'analog-joystick',
+  'rotary-encoder-ky-040',
+  'potentiometer',
+  'slide-potentiometer',
+  'ir-receiver',
+  'relay-module',
+  'a4988-stepper-driver',
   'lcd-1602-i2c',
+  'lcd-2004-i2c',
+  'ssd1306-oled',
+  'grove-oled-sh1107',
+  'ili9341-tft',
+  'nokia-5110',
+  'tm1637-7segment',
   'max7219-led-matrix',
+  'neopixel',
+  'neopixel-matrix',
+  'led-ring',
+  'led-strip',
+  'microsd-card',
+  'ds1307-rtc',
+  'hx711-load-cell-amp',
+  '74hc595-shift-register',
+  '74hc165-shift-register',
+  'nlsf595',
+  'clock-generator',
 ]
 
 /**
@@ -158,6 +194,7 @@ function isSignalTerminal(terminal: ResolvedTerminal): boolean {
     terminal.kind === 'i2c_sda' ||
     terminal.kind === 'i2c_scl' ||
     terminal.kind === 'spi_mosi' ||
+    terminal.kind === 'spi_miso' ||
     terminal.kind === 'spi_sck' ||
     terminal.kind === 'spi_cs' ||
     terminal.kind === 'uart_tx' ||
@@ -211,6 +248,25 @@ function findTerminalGroup(
       (terminal) =>
         terminal.componentId === componentId &&
         terminal.terminalId === terminalId,
+    ),
+  )
+}
+
+/**
+ * Find a connected group for the first terminal on a component with a given kind.
+ * @param groups Connected terminal groups.
+ * @param componentId Component instance id.
+ * @param kind Terminal kind to match.
+ */
+function findComponentKindGroup(
+  groups: ResolvedTerminal[][],
+  componentId: string,
+  kind: TerminalKind,
+): ResolvedTerminal[] | undefined {
+  return groups.find((group) =>
+    group.some(
+      (terminal) =>
+        terminal.componentId === componentId && terminal.kind === kind,
     ),
   )
 }
@@ -328,11 +384,15 @@ function checkUnpoweredComponents(
     )
     if (signalGroups.length === 0) continue
 
-    const vccGroup = findTerminalGroup(groups, instance.id, 'VCC')
-    const gndGroup = findTerminalGroup(groups, instance.id, 'GND')
+    const vccGroup =
+      findTerminalGroup(groups, instance.id, 'VCC') ??
+      findComponentKindGroup(groups, instance.id, 'power_in')
+    const gndGroup =
+      findTerminalGroup(groups, instance.id, 'GND') ??
+      findComponentKindGroup(groups, instance.id, 'ground')
     const vccTerminal = vccGroup?.find(
       (terminal) =>
-        terminal.componentId === instance.id && terminal.terminalId === 'VCC',
+        terminal.componentId === instance.id && terminal.kind === 'power_in',
     )
     const missingPower = !vccGroup || !groupHasPower(vccGroup, vccTerminal?.voltage)
     const missingGround = !gndGroup || !groupHasGround(gndGroup)

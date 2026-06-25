@@ -143,6 +143,6 @@ describe('POST /api/build', () => {
     expect(json.ok).toBe(true)
     expect(json.backend).toBe('mock')
     expect(json.artifact?.firmwareHash).toMatch(/^[a-f0-9]{64}$/)
-    expect(json.artifact?.downloadUrl).toContain('/api/build/artifact?hash=')
+    expect(json.artifact?.downloadUrl).toContain('/artifacts/')
   })
 })

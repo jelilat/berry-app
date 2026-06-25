@@ -25,7 +25,7 @@ export interface BuildArtifact {
   board: BoardId
   firmwareHash: string
   files: string[]
-  binaryPath: string
+  binaryPath?: string
   binarySizeBytes?: number
   firmwareHashAlgorithm?: 'sha256'
   filename?: string

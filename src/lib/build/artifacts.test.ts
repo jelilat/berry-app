@@ -14,7 +14,7 @@ describe('persistBuildArtifact', () => {
     )
 
     expect(stored.filename).toBe('firmware.bin')
-    expect(stored.downloadUrl).toContain(encodeURIComponent(hash))
+    expect(stored.downloadUrl).toBe(`/artifacts/${encodeURIComponent(hash)}`)
 
     const loaded = await loadBuildArtifact(hash)
     expect(loaded?.binary).toEqual(binary)

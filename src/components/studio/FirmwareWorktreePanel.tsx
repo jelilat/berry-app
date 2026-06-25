@@ -51,6 +51,7 @@ export function FirmwareWorktreePanel({
     () => buildFirmwareWorktree(board, buildResult, projectName),
     [board, buildResult, projectName],
   )
+  const artifact = buildResult?.ok ? buildResult.artifact : undefined
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     src: true,
     '.pio': Boolean(buildResult?.ok),
@@ -63,6 +64,14 @@ export function FirmwareWorktreePanel({
    */
   const toggleFolder = (path: string) => {
     setExpanded((current) => ({ ...current, [path]: !current[path] }))
+  }
+
+  /**
+   * Download the latest compiled firmware artifact, when the build cached one.
+   */
+  const downloadArtifact = () => {
+    if (!artifact?.downloadUrl || !artifact.filename) return
+    downloadFirmwareArtifact(artifact.downloadUrl, artifact.filename)
   }
 
   return (
@@ -86,15 +95,10 @@ export function FirmwareWorktreePanel({
         <p className="mt-1 truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
           {worktree.label}
         </p>
-        {buildResult?.ok && buildResult.artifact?.downloadUrl && buildResult.artifact.filename && (
+        {artifact?.downloadUrl && artifact.filename && (
           <button
             type="button"
-            onClick={() =>
-              downloadFirmwareArtifact(
-                buildResult.artifact!.downloadUrl!,
-                buildResult.artifact!.filename!,
-              )
-            }
+            onClick={downloadArtifact}
             className="mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold"
             style={{
               background: 'rgba(15,168,134,0.1)',
@@ -119,6 +123,8 @@ export function FirmwareWorktreePanel({
               selectedPath={selectedPath}
               onToggleFolder={toggleFolder}
               onSelectPath={onSelectPath}
+              onDownloadArtifact={downloadArtifact}
+              canDownloadArtifact={Boolean(artifact?.downloadUrl && artifact.filename)}
             />
           ))}
         </ul>
@@ -138,6 +144,8 @@ function WorktreeNodeRow({
   selectedPath,
   onToggleFolder,
   onSelectPath,
+  onDownloadArtifact,
+  canDownloadArtifact,
 }: {
   node: FirmwareWorktreeNode
   depth: number
@@ -145,6 +153,8 @@ function WorktreeNodeRow({
   selectedPath: string
   onToggleFolder: (path: string) => void
   onSelectPath: (path: string) => void
+  onDownloadArtifact: () => void
+  canDownloadArtifact: boolean
 }) {
   const isFolder = node.kind === 'folder'
   const isOpen = expanded[node.path] ?? depth < 1
@@ -159,6 +169,10 @@ function WorktreeNodeRow({
         onClick={() => {
           if (isFolder) {
             onToggleFolder(node.path)
+            return
+          }
+          if (node.status === 'artifact' && canDownloadArtifact) {
+            onDownloadArtifact()
             return
           }
           if (node.status === 'pending') return
@@ -204,6 +218,8 @@ function WorktreeNodeRow({
               selectedPath={selectedPath}
               onToggleFolder={onToggleFolder}
               onSelectPath={onSelectPath}
+              onDownloadArtifact={onDownloadArtifact}
+              canDownloadArtifact={canDownloadArtifact}
             />
           ))}
         </ul>

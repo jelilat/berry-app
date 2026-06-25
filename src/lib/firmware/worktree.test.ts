@@ -45,6 +45,31 @@ describe('buildFirmwareWorktree', () => {
     expect(artifactPath?.status).toBe('artifact')
     expect(artifactPath?.badge).toBe('235 KB')
   })
+
+  it('shows the board artifact filename instead of a temporary cache path', () => {
+    const tree = buildFirmwareWorktree('esp32-devkit-v1', {
+      ok: true,
+      backend: 'local',
+      diagnostics: [],
+      artifact: {
+        board: 'esp32-devkit-v1',
+        firmwareHash: 'abc',
+        files: ['src/main.cpp', 'platformio.ini'],
+        binaryPath: '/tmp/berry-artifacts/abc.bin',
+        binarySizeBytes: 240_208,
+        filename: 'abc.bin',
+        downloadUrl: '/api/build/artifact?hash=abc',
+        createdAt: '2026-06-10T00:00:00.000Z',
+      },
+    })
+
+    const pio = tree.nodes.find((node) => node.path === '.pio')
+    expect(findNodeByPath(pio, '/tmp/berry-artifacts/abc.bin')).toBeUndefined()
+
+    const artifactPath = findNodeByPath(pio, '.pio/build/esp32dev/firmware.bin')
+    expect(artifactPath?.name).toBe('firmware.bin')
+    expect(artifactPath?.status).toBe('artifact')
+  })
 })
 
 describe('resolveFirmwareWorktreeFileContent', () => {
@@ -60,6 +85,35 @@ describe('resolveFirmwareWorktreeFileContent', () => {
 
     expect(content).toContain('"version"')
     expect(content).toContain('"components"')
+  })
+
+  it('previews artifact metadata without exposing temporary cache paths', () => {
+    const project = createEmptyProject()
+    const content = resolveFirmwareWorktreeFileContent(
+      '.pio/build/esp32dev/firmware.bin',
+      project,
+      project.board,
+      'void setup() {}',
+      {
+        ok: true,
+        backend: 'local',
+        diagnostics: [],
+        artifact: {
+          board: 'esp32-devkit-v1',
+          firmwareHash: 'abc',
+          files: ['src/main.cpp', 'platformio.ini'],
+          binaryPath: '/tmp/berry-artifacts/abc.bin',
+          binarySizeBytes: 240_208,
+          filename: 'abc.bin',
+          downloadUrl: '/api/build/artifact?hash=abc',
+          createdAt: '2026-06-10T00:00:00.000Z',
+        },
+      },
+    )
+
+    expect(content).toContain('# File: firmware.bin')
+    expect(content).toContain('# Worktree: .pio/build/esp32dev/firmware.bin')
+    expect(content).not.toContain('/tmp/berry-artifacts')
   })
 })
 

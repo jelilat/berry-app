@@ -1,4 +1,5 @@
 import type { BoardId } from '@/lib/project/types'
+import { BOARD_PIO_CONFIG } from './platformio-ini'
 import type { BuildArtifact, CachedBuildArtifact } from './types'
 
 /** In-memory cache for build artifacts during local Studio/API sessions. */
@@ -17,16 +18,15 @@ function toBytes(binary: Uint8Array): Uint8Array {
  * @param firmwareHash Stable firmware hash.
  */
 function createDownloadUrl(firmwareHash: string): string {
-  return `/api/build/artifact?hash=${encodeURIComponent(firmwareHash)}`
+  return `/artifacts/${encodeURIComponent(firmwareHash)}`
 }
 
 /**
- * Resolve the best filename for an artifact record.
- * @param artifact Build artifact metadata from a compiler backend.
+ * Resolve the public firmware filename for a supported board.
+ * @param board Target board id.
  */
-function resolveArtifactFilename(artifact: BuildArtifact): string {
-  if (artifact.filename) return artifact.filename
-  return artifact.binaryPath.split('/').pop() ?? 'firmware.bin'
+function resolveBoardArtifactFilename(board: BoardId): string {
+  return BOARD_PIO_CONFIG[board].artifactRelative.split('/').pop() ?? 'firmware.bin'
 }
 
 /**
@@ -45,7 +45,7 @@ export async function persistBuildArtifact(
   files: string[] = ['src/main.cpp', 'platformio.ini'],
 ): Promise<BuildArtifact> {
   const bytes = toBytes(binary)
-  const filename = binaryPath.split('/').pop() ?? 'firmware.bin'
+  const filename = resolveBoardArtifactFilename(board)
   const artifact: CachedBuildArtifact = {
     board,
     firmwareHash,
@@ -68,9 +68,10 @@ export async function persistBuildArtifact(
  * @param artifact Remote build artifact metadata.
  */
 export function rememberRemoteBuildArtifact(artifact: BuildArtifact): BuildArtifact {
-  const filename = resolveArtifactFilename(artifact)
+  const filename = resolveBoardArtifactFilename(artifact.board)
   const cached: CachedBuildArtifact = {
     ...artifact,
+    binaryPath: artifact.binaryPath ?? BOARD_PIO_CONFIG[artifact.board].artifactRelative,
     filename,
     downloadUrl: createDownloadUrl(artifact.firmwareHash),
     contentType: artifact.contentType ?? 'application/octet-stream',

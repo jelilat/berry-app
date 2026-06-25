@@ -1,5 +1,5 @@
 import type { BuildResult } from '@/lib/build/types'
-import { resolvePlatformioIni } from '@/lib/build/platformio-ini'
+import { BOARD_PIO_CONFIG, resolvePlatformioIni } from '@/lib/build/platformio-ini'
 import { serializeBerryProject } from '@/lib/project/io'
 import type { BerryProject, BoardId } from '@/lib/project/types'
 import { DEFAULT_FIRMWARE_PATH } from './source'
@@ -84,6 +84,14 @@ function artifactBranch(artifactPath: string, badge?: string): FirmwareWorktreeN
 }
 
 /**
+ * Resolve the virtual worktree path builders should see for a compiled artifact.
+ * @param artifact Build artifact metadata from the latest successful build.
+ */
+function artifactWorktreePath(artifact: NonNullable<BuildResult['artifact']>): string {
+  return BOARD_PIO_CONFIG[artifact.board].artifactRelative
+}
+
+/**
  * Build the virtual PlatformIO worktree shown in Studio Code view.
  * @param board Active project board profile.
  * @param buildResult Latest build result, if any.
@@ -100,8 +108,8 @@ export function buildFirmwareWorktree(
       ? formatFirmwareFileSize(artifact.binarySizeBytes)
       : undefined
 
-  const pioNodes: FirmwareWorktreeNode[] = artifact?.binaryPath
-    ? [artifactBranch(artifact.binaryPath, artifactBadge)]
+  const pioNodes: FirmwareWorktreeNode[] = artifact
+    ? [artifactBranch(artifactWorktreePath(artifact), artifactBadge)]
     : [
         {
           id: '.pio/build',
@@ -187,7 +195,7 @@ export function resolveFirmwareWorktreeFileContent(
   if (path === 'platformio.ini') return resolvePlatformioIni(board)
 
   const artifact = buildResult?.ok ? buildResult.artifact : undefined
-  if (artifact?.binaryPath === path) {
+  if (artifact && artifactWorktreePath(artifact) === path) {
     const size =
       artifact.binarySizeBytes !== undefined
         ? formatFirmwareFileSize(artifact.binarySizeBytes)
@@ -196,7 +204,8 @@ export function resolveFirmwareWorktreeFileContent(
       ? `# Download: ${artifact.downloadUrl}`
       : '# Download: run Build to cache firmware'
     return `# Firmware artifact (compiled locally)
-# Path: ${artifact.binaryPath}
+# File: ${artifactWorktreePath(artifact).split('/').pop() ?? 'firmware'}
+# Worktree: ${artifactWorktreePath(artifact)}
 # Board: ${artifact.board}
 # Size: ${size}
 # Hash: ${artifact.firmwareHash}

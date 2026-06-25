@@ -63,11 +63,10 @@ describe('compileWithRemote', () => {
         artifact: {
           board: 'esp32-devkit-v1',
           firmwareHash: 'a'.repeat(64),
-          files: ['src/main.cpp', 'platformio.ini'],
-          binaryPath: '.pio/build/esp32dev/firmware.bin',
+          files: ['.pio/build/esp32dev/firmware.bin'],
           binarySizeBytes: 1234,
           filename: 'firmware.bin',
-          downloadUrl: 'https://build.berry.test/artifacts/hash',
+          downloadUrl: `/artifacts/${'a'.repeat(64)}`,
           contentType: 'application/octet-stream',
           createdAt: '2026-06-23T00:00:00.000Z',
         },
@@ -89,6 +88,7 @@ describe('compileWithRemote', () => {
     )
     expect(result.ok).toBe(true)
     expect(result.backend).toBe('remote')
-    expect(result.ok ? result.artifact.downloadUrl : undefined).toContain('/api/build/artifact?hash=')
+    expect(result.ok ? result.artifact.downloadUrl : undefined).toBe(`/artifacts/${'a'.repeat(64)}`)
+    expect(result.ok ? result.artifact.binaryPath : undefined).toBe('.pio/build/esp32dev/firmware.bin')
   })
 })

@@ -9,27 +9,56 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Normalize a hosted agent result project before it reaches Studio state.
+ * Normalize a workflow state when it includes a project graph.
+ * @param state Hosted workflow state snapshot.
+ * @throws ProjectParseError when the hosted payload contains an invalid project graph.
+ */
+function normalizeStateProject(state: unknown): unknown {
+  if (!isRecord(state) || !('project' in state)) return state
+
+  return {
+    ...state,
+    project: parseBerryProject(state.project),
+  }
+}
+
+/**
+ * Normalize an agent result when it includes a workflow state.
+ * @param result Hosted workflow result or partial result.
+ * @throws ProjectParseError when the hosted payload contains an invalid project graph.
+ */
+function normalizeResultProject(result: unknown): unknown {
+  if (!isRecord(result)) return result
+  const state = normalizeStateProject(result.state)
+  if (state === result.state) return result
+
+  return {
+    ...result,
+    state,
+  }
+}
+
+/**
+ * Normalize hosted agent project snapshots before they reach Studio state.
  * @param json Hosted agent API JSON payload.
  * @throws ProjectParseError when the hosted payload contains an invalid project graph.
  */
 export function normalizeHostedAgentRunJson(json: unknown): unknown {
   if (!isRecord(json)) return json
-  const result = json.result
-  if (!isRecord(result)) return json
-  const state = result.state
-  if (!isRecord(state) || !('project' in state)) return json
 
-  const project = parseBerryProject(state.project)
+  const state = normalizeStateProject(json.state)
+  const partialResult = normalizeResultProject(json.partialResult)
+  const result = normalizeResultProject(json.result)
+
+  if (state === json.state && partialResult === json.partialResult && result === json.result) {
+    return json
+  }
+
   return {
     ...json,
-    result: {
-      ...result,
-      state: {
-        ...state,
-        project,
-      },
-    },
+    state,
+    partialResult,
+    result,
   }
 }
 

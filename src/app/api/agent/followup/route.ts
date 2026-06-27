@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import type {
+  AgentAttachment,
   AgentFollowupInput,
   AgentProjectChatMessage,
   AgentProjectIterationContext,
@@ -14,6 +15,14 @@ import { agentUsageLimitResponse, checkAgentUsageLimit } from '@/lib/agent/usage
 export const runtime = 'edge'
 
 const DEFAULT_AGENT_API_ORIGIN = 'http://localhost:8080'
+const MAX_IMAGE_ATTACHMENTS = 3
+const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024
+const IMAGE_ATTACHMENT_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+])
 
 /**
  * Type guard: value is a non-null, non-array object.
@@ -105,6 +114,66 @@ function parseChatHistoryMessage(value: unknown): AgentProjectChatMessage | null
 }
 
 /**
+ * Parse one submitted attachment.
+ * @param value Raw attachment from the request.
+ * @throws Error when the attachment payload is malformed or too large.
+ */
+function parseAttachment(value: unknown): AgentAttachment {
+  if (!isRecord(value)) {
+    throw new Error('Attachment must be an object')
+  }
+  if (value.type !== 'image') {
+    throw new Error('Attachment type must be image')
+  }
+  if (typeof value.name !== 'string' || value.name.trim().length === 0) {
+    throw new Error('Attachment is missing a filename')
+  }
+  if (typeof value.mediaType !== 'string' || !IMAGE_ATTACHMENT_MIME_TYPES.has(value.mediaType)) {
+    throw new Error('Attachment must be a PNG, JPEG, WebP, or GIF')
+  }
+  if (typeof value.data !== 'string' || value.data.trim().length === 0) {
+    throw new Error('Attachment is missing image data')
+  }
+  const size = base64Size(value.data)
+  if (size <= 0 || size > MAX_IMAGE_ATTACHMENT_BYTES) {
+    throw new Error('Attachment is too large')
+  }
+  return {
+    type: 'image',
+    name: value.name.trim(),
+    mediaType: value.mediaType as AgentAttachment['mediaType'],
+    data: value.data.trim(),
+  }
+}
+
+/**
+ * Parse submitted attachments for a follow-up request.
+ * @param value Raw attachment array.
+ * @throws Error when attachments are malformed or exceed the allowed count.
+ */
+function parseAttachments(value: unknown): AgentAttachment[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    throw new Error('Attachments must be an array')
+  }
+  if (value.length > MAX_IMAGE_ATTACHMENTS) {
+    throw new Error(`Attach up to ${MAX_IMAGE_ATTACHMENTS} images`)
+  }
+  return value.map(parseAttachment)
+}
+
+/**
+ * Estimate decoded byte size for a base64 payload.
+ * @param data Base64-encoded content without a data URL prefix.
+ */
+function base64Size(data: string): number {
+  const cleanData = data.trim()
+  if (cleanData.length === 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(cleanData)) return 0
+  const padding = cleanData.endsWith('==') ? 2 : cleanData.endsWith('=') ? 1 : 0
+  return Math.floor((cleanData.length * 3) / 4) - padding
+}
+
+/**
  * Parse project context for a follow-up request.
  * @param value Raw project context request field.
  * @throws Error when project context is missing or malformed.
@@ -145,15 +214,18 @@ function parseFollowupInput(body: unknown): AgentFollowupInput {
   }
 
   const requestedModel = parseRequestedModel(body.provider, body.model)
+  const attachments = parseAttachments(body.attachments)
+  const mode = body.mode === 'question' || body.mode === 'modify' ? body.mode : undefined
   return {
     message: message.trim(),
-    mode: body.mode === 'question' || body.mode === 'modify' ? body.mode : 'auto',
+    ...(mode ? { mode } : {}),
     projectContext: parseProjectContext(body.projectContext),
     chatHistory: Array.isArray(body.chatHistory)
       ? body.chatHistory
           .map(parseChatHistoryMessage)
           .filter((item): item is AgentProjectChatMessage => !!item)
       : [],
+    ...(attachments.length > 0 ? { attachments } : {}),
     provider: requestedModel.provider,
     model: requestedModel.model,
     reasoningEffort: resolveUserReasoning(

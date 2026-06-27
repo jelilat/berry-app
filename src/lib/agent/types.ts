@@ -97,6 +97,21 @@ export interface AgentProjectChatMessage {
   content: string
 }
 
+/** One attachment sent to the hosted agent API. */
+export interface AgentAttachment {
+  type: 'image'
+  name: string
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+  data: string
+}
+
+/** One image held locally by the in-project chat composer. */
+export interface AgentImageAttachment extends AgentAttachment {
+  id: string
+  dataUrl: string
+  size: number
+}
+
 /** Current project context sent with an in-project chat request. */
 export interface AgentProjectIterationContext {
   project: BerryProject
@@ -114,6 +129,7 @@ export interface AgentFollowupInput {
   mode?: 'auto' | 'question' | 'modify'
   projectContext: AgentProjectIterationContext
   chatHistory?: AgentProjectChatMessage[]
+  attachments?: AgentAttachment[]
   provider?: BerryModelProvider
   model?: string
   reasoningEffort?: BerryReasoningEffort
@@ -169,6 +185,7 @@ export interface AgentFollowupRecord {
 export interface AgentProjectChatContext {
   activeChatId?: string
   chatHistory: AgentProjectChatMessage[]
+  attachments?: AgentAttachment[]
 }
 
 /** Input payload for an AI workflow run. */
@@ -230,6 +247,8 @@ export interface AgentBackendRunRecord {
     answers?: Record<string, string>
   }
   answers?: Record<string, string>
+  state?: AgentRunState
+  partialResult?: AgentRunResult
   result?: AgentRunResult
   error?: string
   usageEvents?: AgentUsageEvent[]

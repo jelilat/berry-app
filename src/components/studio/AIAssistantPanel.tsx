@@ -6,16 +6,28 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Image as ImageIcon,
   MessageSquare,
   Plus,
   Send,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type ReactNode,
+} from 'react'
 import type {
   AgentAnswerSubmission,
+  AgentAttachment,
   AgentBackendRunRecord,
+  AgentImageAttachment,
   AgentProjectChatContext,
   AgentRunResult,
   ClarifyingQuestion,
@@ -36,6 +48,15 @@ import { validate } from '@/lib/validation'
 const CHAT_STORAGE_PREFIX = 'berry.studio.bench.chats.v2'
 const CHAT_SYNC_DEBOUNCE_MS = 600
 const ASSISTANT_NAME = 'Pip'
+const IMAGE_REVIEW_PROMPT = 'Please review this setup image and tell me whether the wiring looks good.'
+const MAX_IMAGE_ATTACHMENTS = 3
+const MAX_SOURCE_IMAGE_BYTES = 25 * 1024 * 1024
+const MAX_IMAGE_ATTACHMENT_BYTES = 384 * 1024
+const COMPRESSED_IMAGE_TARGET_BYTES = 320 * 1024
+const COMPRESSED_IMAGE_MAX_DIMENSION = 1280
+const COMPRESSED_IMAGE_MIN_DIMENSION = 720
+const COMPRESSED_IMAGE_QUALITY_STEPS = [0.75, 0.68, 0.6, 0.52] as const
+const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
 
 type BenchMessage = CloudBenchMessage
 type BenchChat = CloudBenchChat
@@ -113,6 +134,8 @@ export function AIAssistantPanel({
   ) => void | Promise<void>
 }) {
   const [prompt, setPrompt] = useState('')
+  const [imageAttachments, setImageAttachments] = useState<AgentImageAttachment[]>([])
+  const [imageError, setImageError] = useState<string | null>(null)
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({})
   const [chats, setChats] = useState<BenchChat[]>(() =>
     loadChats(projectChatKey, legacyProjectChatKey),
@@ -120,6 +143,7 @@ export function AIAssistantPanel({
   const [activeChatId, setActiveChatId] = useState(() => chats[0]?.id ?? createChat().id)
   const skipNextSaveRef = useRef(false)
   const cloudSaveTimerRef = useRef<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const activeChat = useMemo(
     () => chats.find((chat) => chat.id === activeChatId) ?? chats[0],
@@ -267,6 +291,8 @@ export function AIAssistantPanel({
     setChats((current) => [chat, ...current])
     setActiveChatId(chat.id)
     setPrompt('')
+    setImageAttachments([])
+    setImageError(null)
   }
 
   /**
@@ -286,13 +312,71 @@ export function AIAssistantPanel({
   }
 
   /**
-   * Submit the current prompt to the workflow.
+   * Convert selected browser files into pending image attachments.
+   * @param event File input change event.
+   */
+  async function handleImageInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    await addImageAttachments(files)
+  }
+
+  /**
+   * Attach any images included in a clipboard paste.
+   * @param event Textarea paste event.
+   */
+  async function handlePromptPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = imageFilesFromClipboard(event.clipboardData)
+    if (files.length === 0) return
+    event.preventDefault()
+    await addImageAttachments(files)
+  }
+
+  /**
+   * Validate and store pending image attachment files.
+   * @param files Image files selected or pasted by the user.
+   */
+  async function addImageAttachments(files: File[]) {
+    if (files.length === 0) return
+    setImageError(null)
+    try {
+      const nextAttachments = await attachmentsFromFiles(files, imageAttachments.length)
+      setImageAttachments((current) => current.concat(nextAttachments).slice(0, MAX_IMAGE_ATTACHMENTS))
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Could not attach image')
+    }
+  }
+
+  /**
+   * Remove one pending image attachment before submit.
+   * @param attachmentId Pending image attachment id.
+   */
+  function handleRemoveImageAttachment(attachmentId: string) {
+    setImageAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+  }
+
+  /**
+   * Open the browser image picker.
+   */
+  function handleChooseImage() {
+    fileInputRef.current?.click()
+  }
+
+  /**
+   * Submit the current prompt and any image attachments to the workflow.
    */
   function handleSubmit() {
     const cleanPrompt = prompt.trim()
-    if (!cleanPrompt || loading) return
+    const attachments = imageAttachments
+    if ((!cleanPrompt && attachments.length === 0) || loading) return
+    const submittedPromptText = cleanPrompt || IMAGE_REVIEW_PROMPT
+    const displayedPrompt = chatTextWithAttachmentSummary(submittedPromptText, attachments)
     const chat = activeChat ?? createChat()
-    const userMessage: BenchMessage = { id: `user_${Date.now()}`, role: 'user', text: cleanPrompt }
+    const userMessage: BenchMessage = {
+      id: `user_${Date.now()}`,
+      role: 'user',
+      text: displayedPrompt,
+    }
     if (!activeChat) {
       setChats((current) => [chat, ...current])
       setActiveChatId(chat.id)
@@ -302,7 +386,7 @@ export function AIAssistantPanel({
         item.id === chat.id
           ? {
               ...item,
-              title: item.messages.length === 0 ? titleFromPrompt(cleanPrompt) : item.title,
+              title: item.messages.length === 0 ? titleFromPrompt(submittedPromptText) : item.title,
               messages: [
                 ...item.messages,
                 userMessage,
@@ -313,8 +397,10 @@ export function AIAssistantPanel({
       ),
     )
     setPrompt('')
+    setImageAttachments([])
+    setImageError(null)
     onSubmit(
-      promptForWorkflow(chat.messages, cleanPrompt),
+      promptForWorkflow(chat.messages, submittedPromptText),
       undefined,
       undefined,
       undefined,
@@ -323,6 +409,7 @@ export function AIAssistantPanel({
       {
         activeChatId: chat.id,
         chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
+        attachments: attachments.map(agentAttachmentFromImage),
       },
     )
   }
@@ -516,7 +603,46 @@ export function AIAssistantPanel({
       </div>
 
       <div className="shrink-0 border-t p-3" style={{ borderColor: 'var(--border)' }}>
+        {imageAttachments.length > 0 || imageError ? (
+          <div className="mb-2 space-y-2">
+            {imageAttachments.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {imageAttachments.map((attachment) => (
+                  <ImageAttachmentChip
+                    key={attachment.id}
+                    attachment={attachment}
+                    disabled={loading}
+                    onRemove={handleRemoveImageAttachment}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {imageError ? (
+              <p className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
+                {imageError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex items-end gap-2 rounded-xl p-2" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES.join(',')}
+            multiple
+            className="hidden"
+            onChange={handleImageInputChange}
+          />
+          <button
+            type="button"
+            onClick={handleChooseImage}
+            disabled={loading || !!clarificationRequest || imageAttachments.length >= MAX_IMAGE_ATTACHMENTS}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:cursor-not-allowed disabled:opacity-45"
+            style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+            title="Attach setup image"
+          >
+            <ImageIcon size={16} />
+          </button>
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
@@ -525,6 +651,7 @@ export function AIAssistantPanel({
             disabled={!!clarificationRequest}
             className="min-h-[44px] flex-1 resize-none bg-transparent px-1 py-1 text-sm font-semibold outline-none"
             style={{ color: 'var(--text-primary)' }}
+            onPaste={handlePromptPaste}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
@@ -535,7 +662,7 @@ export function AIAssistantPanel({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={loading || !!clarificationRequest || prompt.trim().length === 0}
+            disabled={loading || !!clarificationRequest || (prompt.trim().length === 0 && imageAttachments.length === 0)}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: 'var(--accent)' }}
             title={`Send to ${ASSISTANT_NAME}`}
@@ -570,6 +697,44 @@ function ChatBubble({ message }: { message: BenchMessage }) {
         {isUser ? 'You' : ASSISTANT_NAME}
       </div>
       <MarkdownContent text={message.text} />
+    </div>
+  )
+}
+
+/**
+ * Render one pending image attachment chip.
+ * @param props Attachment metadata, disabled state, and remove callback.
+ */
+function ImageAttachmentChip({
+  attachment,
+  disabled,
+  onRemove,
+}: {
+  attachment: AgentImageAttachment
+  disabled: boolean
+  onRemove: (attachmentId: string) => void
+}) {
+  return (
+    <div
+      className="flex max-w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold"
+      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+    >
+      <img
+        src={attachment.dataUrl}
+        alt=""
+        className="h-8 w-8 shrink-0 rounded-md object-cover"
+      />
+      <span className="min-w-0 max-w-[220px] truncate">{attachment.name}</span>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onRemove(attachment.id)}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-45"
+        style={{ color: 'var(--text-muted)' }}
+        title="Remove image"
+      >
+        <X size={13} />
+      </button>
     </div>
   )
 }
@@ -1008,7 +1173,7 @@ function renderAiResponseTemplate(result: AgentRunResult): string {
   ]
 
   if (result.state.wiringGuide) {
-    lines.push('', 'Wiring guide:', result.state.wiringGuide)
+    lines.push(result.state.wiringGuide)
   }
 
   return lines.filter((line) => line !== null).join('\n')
@@ -1428,6 +1593,218 @@ function projectChatHistoryForSubmit(
   return sourceChat.messages
     .concat(pendingMessages)
     .map((message) => ({ role: message.role, content: message.text }))
+}
+
+/**
+ * Add a short image summary to the visible chat transcript.
+ * @param text User-entered text or default image-review prompt.
+ * @param attachments Images sent with the same turn.
+ */
+function chatTextWithAttachmentSummary(
+  text: string,
+  attachments: AgentImageAttachment[],
+): string {
+  if (attachments.length === 0) return text
+  const names = attachments.map((attachment) => attachment.name).join(', ')
+  return [text, '', `Attached image${attachments.length === 1 ? '' : 's'}: ${names}`].join('\n')
+}
+
+/**
+ * Extract image files from clipboard data while ignoring pasted text.
+ * @param clipboardData Browser clipboard payload from a paste event.
+ */
+function imageFilesFromClipboard(clipboardData: DataTransfer): File[] {
+  const itemFiles = Array.from(clipboardData.items ?? [])
+    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => !!file)
+  if (itemFiles.length > 0) return itemFiles
+  return Array.from(clipboardData.files ?? []).filter((file) => file.type.startsWith('image/'))
+}
+
+/**
+ * Convert browser image files into bounded agent attachments.
+ * @param files Selected files from the image input.
+ * @param existingCount Number of images already attached.
+ * @throws Error when a file is unsupported or too large.
+ */
+async function attachmentsFromFiles(
+  files: File[],
+  existingCount: number,
+): Promise<AgentImageAttachment[]> {
+  const remainingSlots = MAX_IMAGE_ATTACHMENTS - existingCount
+  if (remainingSlots <= 0) {
+    throw new Error(`Attach up to ${MAX_IMAGE_ATTACHMENTS} images`)
+  }
+  const selectedFiles = files.slice(0, remainingSlots)
+  return Promise.all(selectedFiles.map(fileToImageAttachment))
+}
+
+/**
+ * Convert one image file to a compressed JPEG attachment.
+ * @param file Browser file selected by the user.
+ * @throws Error when the file is unsupported or too large.
+ */
+async function fileToImageAttachment(file: File): Promise<AgentImageAttachment> {
+  if (!isAcceptedImageType(file.type)) {
+    throw new Error('Use a PNG, JPEG, WebP, or GIF image')
+  }
+  if (file.size > MAX_SOURCE_IMAGE_BYTES) {
+    throw new Error('Image must be 25 MB or smaller')
+  }
+  const compressed = await compressImageFile(file)
+  return {
+    id: `image_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    type: 'image',
+    name: jpegFilename(file.name || 'setup image'),
+    mediaType: 'image/jpeg',
+    data: compressed.data,
+    dataUrl: compressed.dataUrl,
+    size: compressed.size,
+  }
+}
+
+/**
+ * Resize and compress an image file before it is sent through JSON.
+ * @param file Browser image file selected or pasted by the user.
+ * @throws Error when the browser cannot decode or compress the image.
+ */
+async function compressImageFile(file: File): Promise<{ data: string; dataUrl: string; size: number }> {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Could not create canvas context')
+
+    let bestBlob: Blob | null = null
+    const dimensionSteps = imageDimensionSteps(bitmap.width, bitmap.height)
+    for (const maxDimension of dimensionSteps) {
+      const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+
+      for (const quality of COMPRESSED_IMAGE_QUALITY_STEPS) {
+        const blob = await canvasToJpegBlob(canvas, quality)
+        bestBlob = !bestBlob || blob.size < bestBlob.size ? blob : bestBlob
+        if (blob.size <= COMPRESSED_IMAGE_TARGET_BYTES) {
+          return compressedBlobToAttachmentData(blob)
+        }
+      }
+    }
+
+    if (!bestBlob || bestBlob.size > MAX_IMAGE_ATTACHMENT_BYTES) {
+      throw new Error('Image is too large after compression')
+    }
+    return compressedBlobToAttachmentData(bestBlob)
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
+ * Build descending max-dimension attempts for image compression.
+ * @param width Source image width.
+ * @param height Source image height.
+ */
+function imageDimensionSteps(width: number, height: number): number[] {
+  const largestSide = Math.max(width, height)
+  const firstStep = Math.min(COMPRESSED_IMAGE_MAX_DIMENSION, largestSide)
+  const steps = [firstStep, 1024, 900, COMPRESSED_IMAGE_MIN_DIMENSION]
+  return [...new Set(steps.filter((step) => step > 0 && step <= firstStep))]
+}
+
+/**
+ * Convert a canvas frame to a JPEG blob.
+ * @param canvas Canvas containing the resized image frame.
+ * @param quality JPEG quality from 0 to 1.
+ * @throws Error when browser canvas encoding fails.
+ */
+function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (result) => (result ? resolve(result) : reject(new Error('Image compression failed'))),
+      'image/jpeg',
+      quality,
+    )
+  })
+}
+
+/**
+ * Convert a compressed JPEG blob into attachment data and preview URL.
+ * @param blob Compressed JPEG image blob.
+ */
+async function compressedBlobToAttachmentData(
+  blob: Blob,
+): Promise<{ data: string; dataUrl: string; size: number }> {
+  const dataUrl = await readBlobAsDataUrl(blob)
+  return {
+    data: base64DataFromUrl(dataUrl),
+    dataUrl,
+    size: blob.size,
+  }
+}
+
+/**
+ * Whether a browser file MIME type is supported for AI image review.
+ * @param mimeType Browser-reported file MIME type.
+ */
+function isAcceptedImageType(mimeType: string): mimeType is AgentImageAttachment['mediaType'] {
+  return (ACCEPTED_IMAGE_TYPES as readonly string[]).includes(mimeType)
+}
+
+/**
+ * Return a backend-ready attachment from a local image preview object.
+ * @param attachment Local image attachment with preview metadata.
+ */
+function agentAttachmentFromImage(attachment: AgentImageAttachment): AgentAttachment {
+  return {
+    type: attachment.type,
+    mediaType: attachment.mediaType,
+    data: attachment.data,
+    name: attachment.name,
+  }
+}
+
+/**
+ * Extract raw base64 image data from a browser data URL.
+ * @param dataUrl Browser file data URL.
+ */
+function base64DataFromUrl(dataUrl: string): string {
+  const marker = ';base64,'
+  const markerIndex = dataUrl.indexOf(marker)
+  return markerIndex >= 0 ? dataUrl.slice(markerIndex + marker.length) : dataUrl
+}
+
+/**
+ * Return a JPEG filename for a compressed image.
+ * @param filename Original browser filename.
+ */
+function jpegFilename(filename: string): string {
+  const cleanName = filename.trim() || 'setup image'
+  return /\.[^.]+$/.test(cleanName) ? cleanName.replace(/\.[^.]+$/, '.jpg') : `${cleanName}.jpg`
+}
+
+/**
+ * Read a browser blob as a data URL.
+ * @param blob Browser blob created by canvas compression.
+ * @throws Error when the browser cannot read the blob.
+ */
+function readBlobAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error('Could not read image'))
+    }
+    reader.onerror = () => reject(new Error('Could not read image'))
+    reader.readAsDataURL(blob)
+  })
 }
 
 /**

@@ -36,7 +36,6 @@ import type {
   AgentFollowupAccepted,
   AgentFollowupRecord,
   AgentProjectIterationContext,
-  AgentRunState,
   AgentRunResult,
 } from '@/lib/agent/types'
 import { isTerminalAgentRun, type AgentRunPollingOptions } from '@/lib/agent/polling'
@@ -208,18 +207,14 @@ function visualizableResultFromRunRecord(record: AgentBackendRunRecord): AgentRu
   const terminalResult = resultFromRunRecord(record)
   if (terminalResult) return terminalResult
 
-  const snapshot = record as AgentBackendRunRecord & {
-    state?: AgentRunState
-    partialResult?: AgentRunResult
+  if (record.partialResult?.state?.project) {
+    return record.partialResult
   }
-  if (snapshot.partialResult?.state?.project) {
-    return snapshot.partialResult
-  }
-  if (snapshot.state?.project) {
+  if (record.state?.project) {
     return {
       ok: false,
       status: record.status === 'failed' ? 'failed' : 'needs_clarification',
-      state: snapshot.state,
+      state: record.state,
       error: record.error,
     }
   }
@@ -715,9 +710,9 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             message: followupMessage,
-            mode: 'auto',
             projectContext,
             chatHistory: chatContext.chatHistory,
+            attachments: chatContext.attachments,
             provider,
             model,
             reasoningEffort,
@@ -1559,7 +1554,7 @@ function EmptyBench({
     const description =
       state === 'needs_input'
         ? 'Berry has a question before it places the circuit on the bench.'
-        : 'Berry is placing the first parts as soon as the circuit JSON is ready.'
+        : 'Berry is placing the first parts as soon as the circuit is ready.'
 
     return (
       <div

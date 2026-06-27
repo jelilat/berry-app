@@ -55,6 +55,74 @@ describe('normalizeHostedAgentRunJson', () => {
     expect(normalized.result.state.project.components[0].placement).toBeUndefined()
   })
 
+  it('normalizes a partial workflow state before Studio visualizes it mid-run', () => {
+    const normalized = normalizeHostedAgentRunJson({
+      runId: 'agent_123',
+      status: 'running',
+      state: {
+        runId: 'agent_123',
+        userPrompt: 'Blink an LED',
+        clarification: {
+          status: 'ready',
+          normalizedGoal: 'Blink an LED',
+          assumptions: [],
+        },
+        circuitIntent: {
+          referenceCircuit: 'esp32_led_blink',
+          rationale: 'Use the supported ESP32 LED reference circuit.',
+          toolPlan: [],
+          toolCalls: [],
+        },
+        project: {
+          version: 1,
+          board: 'esp32-devkit-v1',
+          metadata: { name: 'Partial hosted project' },
+          components: [
+            {
+              id: 'breadboard_1',
+              type: 'breadboard-full',
+              transform: { position: { x: 0, y: 0, z: 0 } },
+              placement: { sites: {} },
+            },
+          ],
+          nets: [],
+          wires: [],
+        },
+        firmwareFiles: {},
+        validationResults: [],
+        timeline: [],
+      },
+    }) as { state: { project: { components: Array<{ placement?: unknown }> } } }
+
+    expect(normalized.state.project.components[0].placement).toBeUndefined()
+  })
+
+  it('normalizes a partial result before Studio visualizes it mid-run', () => {
+    const partialResult = hostedRunWithProject({
+      version: 1,
+      board: 'esp32-devkit-v1',
+      metadata: { name: 'Partial result project' },
+      components: [
+        {
+          id: 'breadboard_1',
+          type: 'breadboard-full',
+          transform: { position: { x: 0, y: 0, z: 0 } },
+          placement: { sites: {} },
+        },
+      ],
+      nets: [],
+      wires: [],
+    }) as { result: unknown }
+
+    const normalized = normalizeHostedAgentRunJson({
+      runId: 'agent_123',
+      status: 'running',
+      partialResult: partialResult.result,
+    }) as { partialResult: { state: { project: { components: Array<{ placement?: unknown }> } } } }
+
+    expect(normalized.partialResult.state.project.components[0].placement).toBeUndefined()
+  })
+
   it('rejects hosted projects with placements referencing a missing breadboard parent', () => {
     expect(() =>
       normalizeHostedAgentRunJson(

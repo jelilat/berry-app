@@ -69,7 +69,6 @@ describe('POST /api/agent/followup', () => {
     const forwardedRequest = fetchMock.mock.calls[0]![1] as RequestInit
     expect(JSON.parse(forwardedRequest.body as string)).toEqual({
       message: 'Fix the compile error',
-      mode: 'auto',
       projectContext: {
         project,
         firmwareFiles: { 'src/main.cpp': 'void setup() {}' },
@@ -99,5 +98,43 @@ describe('POST /api/agent/followup', () => {
 
     expect(response.status).toBe(400)
     expect(json.error).toContain('Missing project context')
+  })
+
+  it('forwards documented attachments with the project follow-up request', async () => {
+    vi.stubEnv('BERRY_BUILD_API_URL', 'http://agent.test')
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
+      Response.json(
+        {
+          requestId: 'followup_image',
+          status: 'queued',
+          statusUrl: 'http://agent.test/v1/agent/followup/followup_image',
+        },
+        { status: 202 },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const project = createEmptyProject()
+    const attachment = {
+      type: 'image',
+      name: 'bench.jpg',
+      mediaType: 'image/jpeg',
+      data: 'ZmFrZQ==',
+    }
+    const response = await POST(followupRequest({
+      message: 'Does this setup look right?',
+      projectContext: {
+        project,
+        firmwareFiles: {},
+      },
+      attachments: [attachment],
+    }))
+
+    expect(response.status).toBe(202)
+    const forwardedRequest = fetchMock.mock.calls[0]![1] as RequestInit
+    expect(JSON.parse(forwardedRequest.body as string)).toMatchObject({
+      message: 'Does this setup look right?',
+      attachments: [attachment],
+    })
   })
 })

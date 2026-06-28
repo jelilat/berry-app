@@ -584,7 +584,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const [buildResult, setBuildResult] = useState<BuildResult | null>(null)
   const [simulateLoading, setSimulateLoading] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
-  const [agentLoading, setAgentLoading] = useState(false)
+  const [agentPendingRequestCount, setAgentPendingRequestCount] = useState(0)
   const [agentWaitingForAnswers, setAgentWaitingForAnswers] = useState(false)
   const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
   const [agentRunRecord, setAgentRunRecord] = useState<AgentBackendRunRecord | null>(null)
@@ -621,6 +621,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const [cloudProjectId, setCloudProjectId] = useState<string | null>(null)
   const [cloudAutosaveReady, setCloudAutosaveReady] = useState(false)
   const [signedIn, setSignedIn] = useState(false)
+  const agentLoading = agentPendingRequestCount > 0
 
   const {
     project,
@@ -891,21 +892,27 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     answerSubmission?: AgentAnswerSubmission,
     chatContext?: ProjectChatSubmitContext,
   ) => {
-    if (agentLoading || prompt.trim().length === 0) return
-    if (agentWaitingForAnswers && !answerSubmission) return
-    setAgentLoading(true)
-    setAgentWaitingForAnswers(false)
+    const isProjectChatRequest = !!chatContext
+    if ((!isProjectChatRequest && agentLoading) || prompt.trim().length === 0) return
+    if (!isProjectChatRequest && agentWaitingForAnswers && !answerSubmission) return
+    setAgentPendingRequestCount((count) => count + 1)
+    if (!isProjectChatRequest) {
+      setAgentWaitingForAnswers(false)
+    }
     setAgentResult(null)
-    setAssistantTurn(null)
+    if (!isProjectChatRequest) {
+      setAssistantTurn(null)
+    }
     setAgentClarificationSubmitted(!!answerSubmission)
     visualizedAgentProjectRef.current = null
     if (!answerSubmission) {
       setAgentRunRecord(null)
     }
-    setAssistantTurn(null)
+    if (!isProjectChatRequest) {
+      setAssistantTurn(null)
+    }
     setErrorMessage(null)
     try {
-      const isProjectChatRequest = !!chatContext
       const projectContext = isProjectChatRequest
         ? createProjectIterationContext(project, firmwareSource, buildResult, simulationResult, agentResult)
         : undefined
@@ -974,6 +981,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
               setAssistantTurn({
                 id: `assistant_followup_${record.requestId}`,
                 text: message,
+                chatId: chatContext.activeChatId,
               })
               setErrorMessage('Pip returned an invalid project update, so I left the bench unchanged.')
               return
@@ -984,6 +992,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             setAssistantTurn({
               id: `assistant_followup_${record.requestId}`,
               text: 'Pip returned a modification response, but it did not include a usable project or firmware update.',
+              chatId: chatContext.activeChatId,
             })
             setErrorMessage('Pip did not return a usable project update.')
             return
@@ -991,6 +1000,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           setAssistantTurn({
             id: `assistant_followup_${record.requestId}`,
             text: assistantMessageFromFollowup(record),
+            chatId: chatContext.activeChatId,
           })
           if (acceptedProject) {
             skipNextPipelineResetRef.current = true
@@ -1008,6 +1018,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           setAssistantTurn({
             id: `assistant_followup_${record.requestId}`,
             text: assistantMessageFromFollowup(record),
+            chatId: chatContext.activeChatId,
           })
         }
         if (record.status === 'failed') {
@@ -1083,7 +1094,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setErrorMessage(error instanceof Error ? error.message : 'Agent request failed')
     } finally {
       setAgentClarificationSubmitted(false)
-      setAgentLoading(false)
+      setAgentPendingRequestCount((count) => Math.max(0, count - 1))
     }
   }, [
     agentLoading,

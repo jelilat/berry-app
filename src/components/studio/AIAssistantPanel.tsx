@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Clipboard,
   Image as ImageIcon,
   MessageSquare,
   Plus,
@@ -40,6 +41,7 @@ import {
   type CloudBenchChat,
   type CloudBenchMessage,
 } from '@/lib/projects/cloud-chats'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { getBoardProfile } from '@/lib/project/boards'
 import { getComponentDefinition } from '@/lib/project/catalog'
 import type { BerryProject, Net } from '@/lib/project/types'
@@ -57,6 +59,7 @@ const COMPRESSED_IMAGE_MAX_DIMENSION = 1280
 const COMPRESSED_IMAGE_MIN_DIMENSION = 720
 const COMPRESSED_IMAGE_QUALITY_STEPS = [0.75, 0.68, 0.6, 0.52] as const
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
+const COPY_FEEDBACK_MS = 1600
 
 type BenchMessage = CloudBenchMessage
 type BenchChat = CloudBenchChat
@@ -66,6 +69,7 @@ export type ProjectChatSubmitContext = AgentProjectChatContext
 export interface AssistantTurn {
   id: string
   text: string
+  chatId?: string
 }
 
 type MarkdownBlock =
@@ -141,6 +145,7 @@ export function AIAssistantPanel({
     loadChats(projectChatKey, legacyProjectChatKey),
   )
   const [activeChatId, setActiveChatId] = useState(() => chats[0]?.id ?? createChat().id)
+  const [pendingChatIds, setPendingChatIds] = useState<Set<string>>(() => new Set())
   const skipNextSaveRef = useRef(false)
   const cloudSaveTimerRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -151,6 +156,7 @@ export function AIAssistantPanel({
     () => chats.find((chat) => chat.id === activeChatId) ?? chats[0],
     [activeChatId, chats],
   )
+  const activeChatPending = isChatPending(pendingChatIds, activeChat?.id)
 
   const choiceRequest = useMemo(() => choiceRequestFromResult(result), [result])
   const clarificationRequest = useMemo(() => clarificationRequestFromResult(result), [result])
@@ -178,6 +184,7 @@ export function AIAssistantPanel({
     skipNextSaveRef.current = true
     setChats(nextChats)
     setActiveChatId(nextChats[0]?.id ?? createChat().id)
+    setPendingChatIds(new Set())
     let cancelled = false
 
     /**
@@ -275,8 +282,9 @@ export function AIAssistantPanel({
   }, [result])
 
   useEffect(() => {
-    const submittedChatId = submittedChatIdRef.current
-    if (!assistantTurn || !assistantTurn.text.trim() || !submittedChatId) return
+    if (!assistantTurn || !assistantTurn.text.trim()) return
+    const submittedChatId = assistantTurn.chatId ?? submittedChatIdRef.current
+    if (!submittedChatId) return
     setChats((current) =>
       current.map((chat) =>
         chat.id === submittedChatId
@@ -394,10 +402,10 @@ export function AIAssistantPanel({
   /**
    * Submit the current prompt and any image attachments to the workflow.
    */
-  function handleSubmit() {
+  async function handleSubmit() {
     const cleanPrompt = prompt.trim()
     const attachments = imageAttachments
-    if ((!cleanPrompt && attachments.length === 0) || loading) return
+    if ((!cleanPrompt && attachments.length === 0) || activeChatPending) return
     const submittedPromptText = cleanPrompt || IMAGE_REVIEW_PROMPT
     const displayedPrompt = chatTextWithAttachmentSummary(submittedPromptText, attachments)
     const chat = activeChat ?? createChat()
@@ -428,28 +436,32 @@ export function AIAssistantPanel({
     setPrompt('')
     clearImageAttachments()
     setImageError(null)
-    submittedChatIdRef.current = chat.id
-    onSubmit(
-      promptForWorkflow(chat.messages, submittedPromptText),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        activeChatId: chat.id,
-        chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
-        attachments: attachments.map(agentAttachmentFromImage),
-      },
-    )
+    setChatPending(chat.id, true)
+    try {
+      await onSubmit(
+        promptForWorkflow(chat.messages, submittedPromptText),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          activeChatId: chat.id,
+          chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
+          attachments: attachments.map(agentAttachmentFromImage),
+        },
+      )
+    } finally {
+      setChatPending(chat.id, false)
+    }
   }
 
   /**
    * Submit a structured assistant choice without requiring typed text.
    * @param option Selected option label.
    */
-  function handleSelectChoice(option: string) {
-    if (loading) return
+  async function handleSelectChoice(option: string) {
+    if (activeChatPending) return
     const cleanOption = option.trim()
     if (!cleanOption) return
     const chat = activeChat ?? createChat()
@@ -477,19 +489,23 @@ export function AIAssistantPanel({
           : item,
       ),
     )
-    submittedChatIdRef.current = chat.id
-    onSubmit(
-      promptForChoice(result, chat.messages, cleanOption),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        activeChatId: chat.id,
-        chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
-      },
-    )
+    setChatPending(chat.id, true)
+    try {
+      await onSubmit(
+        promptForChoice(result, chat.messages, cleanOption),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          activeChatId: chat.id,
+          chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
+        },
+      )
+    } finally {
+      setChatPending(chat.id, false)
+    }
   }
 
   /**
@@ -504,8 +520,8 @@ export function AIAssistantPanel({
   /**
    * Submit all collected clarification answers in one backend request.
    */
-  function handleSubmitClarificationAnswers() {
-    if (!clarificationRequest || loading) return
+  async function handleSubmitClarificationAnswers() {
+    if (!clarificationRequest || activeChatPending) return
     const answers = answersForQuestions(clarificationRequest.questions, clarificationAnswers)
     if (!answers) return
     const transcriptMessages = clarificationTranscriptMessages(
@@ -532,22 +548,43 @@ export function AIAssistantPanel({
           : item,
       ),
     )
-    submittedChatIdRef.current = chat.id
-    onSubmit(
-      clarificationRequest.userPrompt,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        runId: clarificationRequest.runId,
-        answers,
-      },
-      {
-        activeChatId: chat.id,
-        chatHistory: projectChatHistoryForSubmit(chats, chat, transcriptMessages),
-      },
-    )
+    setChatPending(chat.id, true)
+    try {
+      await onSubmit(
+        clarificationRequest.userPrompt,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          runId: clarificationRequest.runId,
+          answers,
+        },
+        {
+          activeChatId: chat.id,
+          chatHistory: projectChatHistoryForSubmit(chats, chat, transcriptMessages),
+        },
+      )
+    } finally {
+      setChatPending(chat.id, false)
+    }
+  }
+
+  /**
+   * Mark one chat as waiting for an assistant response.
+   * @param chatId Chat session id.
+   * @param pending Whether the chat has an in-flight request.
+   */
+  function setChatPending(chatId: string, pending: boolean) {
+    setPendingChatIds((current) => {
+      const next = new Set(current)
+      if (pending) {
+        next.add(chatId)
+      } else {
+        next.delete(chatId)
+      }
+      return next
+    })
   }
 
   return (
@@ -586,6 +623,7 @@ export function AIAssistantPanel({
                 border: '1px solid var(--border)',
               }}
             >
+              {isChatPending(pendingChatIds, chat.id) ? 'Running... ' : ''}
               {chat.title}
             </button>
           ))}
@@ -602,14 +640,14 @@ export function AIAssistantPanel({
               <ClarificationForm
                 request={clarificationRequest}
                 answers={clarificationAnswers}
-                disabled={loading}
+                disabled={activeChatPending}
                 onAnswerChange={handleClarificationAnswerChange}
                 onSubmit={handleSubmitClarificationAnswers}
               />
             ) : choiceRequest ? (
               <AssistantChoiceField
                 choiceRequest={choiceRequest}
-                disabled={loading}
+                disabled={activeChatPending}
                 onSelect={handleSelectChoice}
               />
             ) : null}
@@ -668,7 +706,7 @@ export function AIAssistantPanel({
           <button
             type="button"
             onClick={handleChooseImage}
-            disabled={loading || !!clarificationRequest || imageAttachments.length >= MAX_IMAGE_ATTACHMENTS}
+            disabled={activeChatPending || !!clarificationRequest || imageAttachments.length >= MAX_IMAGE_ATTACHMENTS}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:cursor-not-allowed disabled:opacity-45"
             style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
             title="Attach setup image"
@@ -687,19 +725,19 @@ export function AIAssistantPanel({
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
-                handleSubmit()
+                void handleSubmit()
               }
             }}
           />
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={loading || !!clarificationRequest || (prompt.trim().length === 0 && imageAttachments.length === 0)}
+            onClick={() => void handleSubmit()}
+            disabled={activeChatPending || !!clarificationRequest || (prompt.trim().length === 0 && imageAttachments.length === 0)}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: 'var(--accent)' }}
             title={`Send to ${ASSISTANT_NAME}`}
           >
-            {loading ? <Sparkles size={16} /> : <Send size={16} />}
+            {activeChatPending ? <Sparkles size={16} /> : <Send size={16} />}
           </button>
         </div>
       </div>
@@ -798,15 +836,7 @@ function MarkdownContent({ text }: { text: string }) {
           )
         }
         if (block.kind === 'code') {
-          return (
-            <pre
-              key={`${block.kind}_${index}`}
-              className="overflow-x-auto rounded-lg p-3 text-xs font-semibold"
-              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-            >
-              <code>{block.text}</code>
-            </pre>
-          )
+          return <CopyableCodeBlock key={`${block.kind}_${index}`} text={block.text} />
         }
         return (
           <p key={`${block.kind}_${index}`} className="whitespace-pre-wrap">
@@ -814,6 +844,57 @@ function MarkdownContent({ text }: { text: string }) {
           </p>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * Render a chat code block with a clipboard action.
+ * @param props Code block text.
+ */
+function CopyableCodeBlock({ text }: { text: string }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+
+  useEffect(() => {
+    if (copyState === 'idle') return undefined
+    const timeout = window.setTimeout(() => setCopyState('idle'), COPY_FEEDBACK_MS)
+    return () => window.clearTimeout(timeout)
+  }, [copyState])
+
+  /**
+   * Copy this code block to the system clipboard.
+   */
+  const copyCode = async () => {
+    try {
+      await copyTextToClipboard(text)
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+  }
+
+  return (
+    <div
+      className="group relative rounded-lg"
+      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+    >
+      <button
+        type="button"
+        onClick={copyCode}
+        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-extrabold opacity-80 transition-opacity group-hover:opacity-100"
+        style={{
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          color: copyState === 'failed' ? 'var(--accent)' : 'var(--text-primary)',
+        }}
+        title="Copy code"
+      >
+        {copyState === 'copied' ? <Check size={12} /> : <Clipboard size={12} />}
+        {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Failed' : 'Copy'}
+      </button>
+      <pre className="overflow-x-auto p-3 pr-20 text-xs font-semibold">
+        <code>{text}</code>
+      </pre>
     </div>
   )
 }
@@ -1575,6 +1656,15 @@ function createChat(): BenchChat {
     messages: [],
     updatedAt: new Date().toISOString(),
   }
+}
+
+/**
+ * Whether a chat currently has an in-flight assistant request.
+ * @param pendingChatIds Set of chat ids waiting for a response.
+ * @param chatId Chat id to check.
+ */
+function isChatPending(pendingChatIds: Set<string>, chatId?: string): boolean {
+  return !!chatId && pendingChatIds.has(chatId)
 }
 
 /**

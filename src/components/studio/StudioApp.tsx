@@ -3,7 +3,7 @@
 import { ArrowLeft, Clock3, Monitor } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadBerryProjectFromJson, serializeBerryProject } from '@/lib/project/io'
+import { loadBerryProjectFromJson, parseBerryProject, serializeBerryProject } from '@/lib/project/io'
 import {
   addComponent,
   connectTerminals,
@@ -34,6 +34,7 @@ import type {
   AgentBackendRunAccepted,
   AgentBackendRunRecord,
   AgentFollowupAccepted,
+  AgentFollowupResult,
   AgentFollowupRecord,
   AgentProjectIterationContext,
   AgentRunResult,
@@ -80,10 +81,22 @@ import type { StudioViewMode } from './ViewModeToggle'
 import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
+
+const INTERNAL_FOLLOWUP_NOTE_PREFIXES = [
+  'clarifier:',
+  'planner:',
+  'circuit design agent:',
+  'studio tools:',
+  'codegen:',
+  'validator:',
+  'simulator:',
+  'build:',
+] as const
 type EmptyBenchState = 'idle' | 'preparing' | 'needs_input'
 
 const AGENT_POLL_INTERVAL_MS = 5000
 const AGENT_MAX_POLL_ATTEMPTS = 100
+const AGENT_STATUS_REQUEST_TIMEOUT_MS = 20000
 
 /**
  * Wait for a fixed number of milliseconds.
@@ -99,6 +112,58 @@ function sleep(ms: number): Promise<void> {
  */
 async function parseJsonResponse(response: Response): Promise<unknown> {
   return response.json().catch(() => ({ error: 'Agent API returned invalid JSON' }))
+}
+
+/**
+ * Create a named timeout error for stalled status requests.
+ * @param message Human-readable timeout message.
+ */
+function agentStatusTimeoutError(message: string): Error {
+  const error = new Error(message)
+  error.name = 'AgentStatusRequestTimeoutError'
+  return error
+}
+
+/**
+ * True when an error came from a timed-out agent status request.
+ * @param error Unknown caught value.
+ */
+function isAgentStatusTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AgentStatusRequestTimeoutError'
+}
+
+/**
+ * Fetch one agent status payload with a bounded request lifetime.
+ * @param path Local API route path to poll.
+ * @param timeoutMessage Error message to use when the request stalls.
+ * @throws When the request fails, returns non-2xx, or times out.
+ */
+async function fetchAgentStatusJson<T>(
+  path: string,
+  timeoutMessage: string,
+): Promise<T> {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), AGENT_STATUS_REQUEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(path, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+    const json = await parseJsonResponse(response)
+    if (!response.ok) {
+      const error = json as { error?: string }
+      throw new Error(error.error ?? 'Agent status request failed')
+    }
+    return json as T
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw agentStatusTimeoutError(timeoutMessage)
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
+  }
 }
 
 /**
@@ -129,13 +194,18 @@ async function pollAgentRun(
     if (attempt > 0) {
       await sleep(AGENT_POLL_INTERVAL_MS)
     }
-    const response = await fetch(`${statusPathPrefix}/${encodeURIComponent(runId)}`)
-    const json = await parseJsonResponse(response)
-    if (!response.ok) {
-      const error = json as { error?: string }
-      throw new Error(error.error ?? 'Agent status request failed')
+    let record: AgentBackendRunRecord
+    try {
+      record = await fetchAgentStatusJson<AgentBackendRunRecord>(
+        `${statusPathPrefix}/${encodeURIComponent(runId)}`,
+        'Agent status request timed out',
+      )
+    } catch (error) {
+      if (isAgentStatusTimeoutError(error) && attempt < AGENT_MAX_POLL_ATTEMPTS - 1) {
+        continue
+      }
+      throw error
     }
-    const record = json as AgentBackendRunRecord
     onRecord?.(record)
     if (isTerminalAgentRun(record, options)) {
       return record
@@ -147,20 +217,30 @@ async function pollAgentRun(
 /**
  * Poll a local follow-up proxy until it reaches a terminal status.
  * @param requestId Hosted backend follow-up request id.
+ * @param onRecord Optional callback for every successful poll response.
  * @throws Error when polling fails or times out.
  */
-async function pollAgentFollowup(requestId: string): Promise<AgentFollowupRecord> {
+async function pollAgentFollowup(
+  requestId: string,
+  onRecord?: (record: AgentFollowupRecord) => void,
+): Promise<AgentFollowupRecord> {
   for (let attempt = 0; attempt < AGENT_MAX_POLL_ATTEMPTS; attempt += 1) {
     if (attempt > 0) {
       await sleep(AGENT_POLL_INTERVAL_MS)
     }
-    const response = await fetch(`/api/agent/followup/${encodeURIComponent(requestId)}`)
-    const json = await parseJsonResponse(response)
-    if (!response.ok) {
-      const error = json as { error?: string }
-      throw new Error(error.error ?? 'Follow-up status request failed')
+    let record: AgentFollowupRecord
+    try {
+      record = await fetchAgentStatusJson<AgentFollowupRecord>(
+        `/api/agent/followup/${encodeURIComponent(requestId)}`,
+        'Follow-up status request timed out',
+      )
+    } catch (error) {
+      if (isAgentStatusTimeoutError(error) && attempt < AGENT_MAX_POLL_ATTEMPTS - 1) {
+        continue
+      }
+      throw error
     }
-    const record = json as AgentFollowupRecord
+    onRecord?.(record)
     if (record.status === 'needs_clarification' || record.status === 'completed' || record.status === 'failed') {
       return record
     }
@@ -231,12 +311,145 @@ function assistantMessageFromFollowup(record: AgentFollowupRecord): string {
   }
   const result = record.result
   if (!result) return 'Pip finished, but did not return a follow-up result.'
-  const lines = [result.message ?? 'I need a bit more detail before I can continue.']
+  const lines = [visibleFollowupMessage(result.message ?? 'I need a bit more detail before I can continue.')]
   if ('suggestedChecks' in result && result.suggestedChecks?.length) {
     lines.push('', 'Suggested checks:', ...result.suggestedChecks.map((check) => `- ${check}`))
   }
-  if ('notes' in result && result.notes?.length) {
-    lines.push('', 'Notes:', ...result.notes.map((note) => `- ${note}`))
+  const notes = visibleFollowupNotes('notes' in result ? result.notes : undefined)
+  if (notes.length) {
+    lines.push('', 'Notes:', ...notes.map((note) => `- ${note}`))
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Remove internal orchestration notes when they are embedded in the main message.
+ * @param message Message returned by the hosted follow-up provider.
+ */
+function visibleFollowupMessage(message: string): string {
+  const lines = message.split('\n')
+  const visibleLines: string[] = []
+  let pendingBlank = false
+  let inNotesBlock = false
+  let removedInternalNote = false
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (/^notes:\s*$/i.test(trimmed)) {
+      inNotesBlock = true
+      pendingBlank = visibleLines.length > 0
+      removedInternalNote = false
+      continue
+    }
+
+    if (inNotesBlock) {
+      const note = noteTextFromMarkdownListItem(trimmed)
+      if (note && isInternalFollowupNote(note)) {
+        removedInternalNote = true
+        continue
+      }
+      if (trimmed.length === 0) {
+        continue
+      }
+      if (pendingBlank) {
+        visibleLines.push('')
+        pendingBlank = false
+      }
+      if (removedInternalNote) {
+        visibleLines.push('Notes:')
+        removedInternalNote = false
+      }
+      visibleLines.push(line)
+      continue
+    }
+
+    visibleLines.push(line)
+  }
+
+  return visibleLines.join('\n').trim() || message.trim()
+}
+
+/**
+ * Remove backend orchestration notes from the message shown in chat.
+ * @param notes Notes returned by the hosted follow-up provider.
+ */
+function visibleFollowupNotes(notes?: string[]): string[] {
+  return (notes ?? [])
+    .map((note) => note.trim())
+    .filter((note) => note.length > 0 && !isInternalFollowupNote(note))
+}
+
+/**
+ * Whether a backend note describes internal agent execution instead of user guidance.
+ * @param note Follow-up note text.
+ */
+function isInternalFollowupNote(note: string): boolean {
+  const normalized = note.trim().toLowerCase()
+  return INTERNAL_FOLLOWUP_NOTE_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+}
+
+/**
+ * Extract note text from a markdown bullet, preserving plain note lines.
+ * @param line Trimmed message line.
+ */
+function noteTextFromMarkdownListItem(line: string): string {
+  return line.replace(/^[-*]\s+/, '').trim()
+}
+
+/**
+ * Validate a follow-up project before accepting it into the live bench.
+ * @param current Current project whose identity should be preserved.
+ * @param candidate Candidate project returned by the hosted follow-up provider.
+ */
+function acceptedFollowupProject(
+  current: BerryProject,
+  candidate: BerryProject,
+): { project?: BerryProject; error?: string; validationErrors: ValidationResult[] } {
+  try {
+    const parsed = parseBerryProject(candidate)
+    const nextProject = replaceProject(preserveProjectIdentity(current, parsed))
+    const validationErrors = validate(nextProject).filter((result) => result.severity === 'error')
+    if (validationErrors.length > 0) {
+      return {
+        error: 'The returned project has blocking validation errors.',
+        validationErrors,
+      }
+    }
+    return { project: nextProject, validationErrors: [] }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : 'The returned project is invalid.',
+      validationErrors: [],
+    }
+  }
+}
+
+/**
+ * Render an invalid follow-up project as a short assistant message.
+ * @param result Backend modification result that could not be applied.
+ * @param error Structural or validation error summary.
+ * @param validationErrors Blocking validation findings from Berry.
+ */
+function rejectedFollowupMessage(
+  result: Extract<AgentFollowupResult, { kind: 'modification' }>,
+  error: string,
+  validationErrors: ValidationResult[],
+): string {
+  const lines = [
+    'I could not safely apply that project update.',
+    '',
+    error,
+  ]
+  const visibleNotes = visibleFollowupNotes(result.notes)
+  if (validationErrors.length > 0) {
+    lines.push(
+      '',
+      'Blocking issues:',
+      ...validationErrors.slice(0, 5).map((validationError) => `- ${validationError.message}`),
+    )
+  }
+  if (visibleNotes.length > 0) {
+    lines.push('', 'Notes:', ...visibleNotes.map((note) => `- ${note}`))
   }
   return lines.join('\n')
 }
@@ -747,24 +960,55 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           setAgentWaitingForAnswers(true)
           return
         }
-        setAssistantTurn({
-          id: `assistant_followup_${record.requestId}`,
-          text: assistantMessageFromFollowup(record),
-        })
         if (record.status === 'completed' && record.result?.kind === 'modification') {
+          let acceptedProject: BerryProject | undefined
+          const source = record.result.firmwareFiles?.[DEFAULT_FIRMWARE_PATH]
           if (record.result.project) {
+            const projectApplication = acceptedFollowupProject(project, record.result.project)
+            if (!projectApplication.project) {
+              const message = rejectedFollowupMessage(
+                record.result,
+                projectApplication.error ?? 'The returned project is invalid.',
+                projectApplication.validationErrors,
+              )
+              setAssistantTurn({
+                id: `assistant_followup_${record.requestId}`,
+                text: message,
+              })
+              setErrorMessage('Pip returned an invalid project update, so I left the bench unchanged.')
+              return
+            }
+            acceptedProject = projectApplication.project
+          }
+          if (!acceptedProject && !source) {
+            setAssistantTurn({
+              id: `assistant_followup_${record.requestId}`,
+              text: 'Pip returned a modification response, but it did not include a usable project or firmware update.',
+            })
+            setErrorMessage('Pip did not return a usable project update.')
+            return
+          }
+          setAssistantTurn({
+            id: `assistant_followup_${record.requestId}`,
+            text: assistantMessageFromFollowup(record),
+          })
+          if (acceptedProject) {
             skipNextPipelineResetRef.current = true
-            resetProject(replaceProject(preserveProjectIdentity(project, record.result.project)))
+            resetProject(acceptedProject)
             setSelectedNodeId(null)
             setSelectedWireId(null)
             setViewMode('2d')
           }
-          const source = record.result.firmwareFiles?.[DEFAULT_FIRMWARE_PATH]
           if (source) {
             setFirmwareSource(source)
             setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
           }
           setPipelineNotice('Project chat update applied')
+        } else {
+          setAssistantTurn({
+            id: `assistant_followup_${record.requestId}`,
+            text: assistantMessageFromFollowup(record),
+          })
         }
         if (record.status === 'failed') {
           setErrorMessage(record.error ?? 'Follow-up failed')

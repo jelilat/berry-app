@@ -47,24 +47,37 @@ function parseRunId(runId: string | undefined): string {
 
 /**
  * Return a JSON response while preserving the hosted API status code.
+ * @param request Incoming Studio request used for usage accounting.
  * @param response Hosted API fetch response.
  */
 async function proxyJsonResponse(request: Request, response: Response): Promise<NextResponse> {
   const json = await response.json().catch(() => ({ error: 'Agent API returned invalid JSON' }))
   if (!response.ok) {
-    return NextResponse.json(json, { status: response.status })
+    return NextResponse.json(json, {
+      status: response.status,
+      headers: { 'cache-control': 'no-store' },
+    })
   }
   try {
     const normalized = normalizeHostedAgentRunJson(json) as AgentBackendRunRecord
     await recordAgentUsageFromRun(request, normalized)
-    return NextResponse.json(normalized, { status: response.status })
+    return NextResponse.json(normalized, {
+      status: response.status,
+      headers: { 'cache-control': 'no-store' },
+    })
   } catch (error) {
     const message = hostedAgentProjectErrorMessage(error)
     if (message) {
-      return NextResponse.json({ error: message }, { status: 502 })
+      return NextResponse.json(
+        { error: message },
+        { status: 502, headers: { 'cache-control': 'no-store' } },
+      )
     }
     const fallbackMessage = error instanceof Error ? error.message : 'Could not save Pip usage.'
-    return NextResponse.json({ error: fallbackMessage }, { status: 502 })
+    return NextResponse.json(
+      { error: fallbackMessage },
+      { status: 502, headers: { 'cache-control': 'no-store' } },
+    )
   }
 }
 
@@ -89,6 +102,7 @@ export async function GET(
     const response = await fetch(`${agentApiOrigin()}/v1/agent/runs/${encodeURIComponent(runId)}`, {
       method: 'GET',
       headers: agentApiHeaders(),
+      cache: 'no-store',
     })
     return proxyJsonResponse(request, response)
   } catch (error) {

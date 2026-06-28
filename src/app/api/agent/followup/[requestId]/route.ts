@@ -45,7 +45,10 @@ function parseRequestId(requestId: string | undefined): string {
  */
 async function proxyJsonResponse(response: Response): Promise<NextResponse> {
   const json = await response.json().catch(() => ({ error: 'Follow-up API returned invalid JSON' }))
-  return NextResponse.json(json, { status: response.status })
+  return NextResponse.json(json, {
+    status: response.status,
+    headers: { 'cache-control': 'no-store' },
+  })
 }
 
 /**
@@ -71,6 +74,7 @@ export async function GET(
       {
         method: 'GET',
         headers: agentApiHeaders(),
+        cache: 'no-store',
       },
     )
     return proxyJsonResponse(response)

@@ -51,8 +51,8 @@ const ASSISTANT_NAME = 'Pip'
 const IMAGE_REVIEW_PROMPT = 'Please review this setup image and tell me whether the wiring looks good.'
 const MAX_IMAGE_ATTACHMENTS = 3
 const MAX_SOURCE_IMAGE_BYTES = 25 * 1024 * 1024
-const MAX_IMAGE_ATTACHMENT_BYTES = 384 * 1024
-const COMPRESSED_IMAGE_TARGET_BYTES = 320 * 1024
+const MAX_IMAGE_ATTACHMENT_BYTES = 220 * 1024
+const COMPRESSED_IMAGE_TARGET_BYTES = 180 * 1024
 const COMPRESSED_IMAGE_MAX_DIMENSION = 1280
 const COMPRESSED_IMAGE_MIN_DIMENSION = 720
 const COMPRESSED_IMAGE_QUALITY_STEPS = [0.75, 0.68, 0.6, 0.52] as const
@@ -144,6 +144,8 @@ export function AIAssistantPanel({
   const skipNextSaveRef = useRef(false)
   const cloudSaveTimerRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const submittedChatIdRef = useRef<string | null>(null)
+  const imageAttachmentsRef = useRef<AgentImageAttachment[]>([])
 
   const activeChat = useMemo(
     () => chats.find((chat) => chat.id === activeChatId) ?? chats[0],
@@ -164,6 +166,12 @@ export function AIAssistantPanel({
   useEffect(() => {
     setClarificationAnswers({})
   }, [clarificationRequest?.runId])
+
+  useEffect(() => {
+    imageAttachmentsRef.current = imageAttachments
+  }, [imageAttachments])
+
+  useEffect(() => () => revokeImageAttachmentUrls(imageAttachmentsRef.current), [])
 
   useEffect(() => {
     const nextChats = loadChats(projectChatKey, legacyProjectChatKey)
@@ -240,16 +248,18 @@ export function AIAssistantPanel({
         ? current
         : [chat, ...current],
     )
+    submittedChatIdRef.current = chat.id
     setActiveChatId(chat.id)
   }, [submittedPrompt])
 
   useEffect(() => {
-    if (!result || !activeChatId) return
+    const submittedChatId = submittedChatIdRef.current
+    if (!result || !submittedChatId) return
     const message = summarizeAgentResult(result)
     if (!message.trim()) return
     setChats((current) =>
       current.map((chat) =>
-        chat.id === activeChatId
+        chat.id === submittedChatId
           ? {
               ...chat,
               messages: appendUniqueMessage(chat.messages, {
@@ -262,13 +272,14 @@ export function AIAssistantPanel({
           : chat,
       ),
     )
-  }, [activeChatId, result])
+  }, [result])
 
   useEffect(() => {
-    if (!assistantTurn || !assistantTurn.text.trim() || !activeChatId) return
+    const submittedChatId = submittedChatIdRef.current
+    if (!assistantTurn || !assistantTurn.text.trim() || !submittedChatId) return
     setChats((current) =>
       current.map((chat) =>
-        chat.id === activeChatId
+        chat.id === submittedChatId
           ? {
               ...chat,
               messages: appendUniqueMessage(chat.messages, {
@@ -281,7 +292,7 @@ export function AIAssistantPanel({
           : chat,
       ),
     )
-  }, [activeChatId, assistantTurn])
+  }, [assistantTurn])
 
   /**
    * Start a blank chat session.
@@ -291,7 +302,7 @@ export function AIAssistantPanel({
     setChats((current) => [chat, ...current])
     setActiveChatId(chat.id)
     setPrompt('')
-    setImageAttachments([])
+    clearImageAttachments()
     setImageError(null)
   }
 
@@ -340,11 +351,25 @@ export function AIAssistantPanel({
     if (files.length === 0) return
     setImageError(null)
     try {
-      const nextAttachments = await attachmentsFromFiles(files, imageAttachments.length)
-      setImageAttachments((current) => current.concat(nextAttachments).slice(0, MAX_IMAGE_ATTACHMENTS))
+      const nextAttachments = await attachmentsFromFiles(files, imageAttachmentsRef.current.length)
+      setImageAttachments((current) => {
+        const next = current.concat(nextAttachments)
+        const kept = next.slice(0, MAX_IMAGE_ATTACHMENTS)
+        revokeImageAttachmentUrls(next.slice(MAX_IMAGE_ATTACHMENTS))
+        return kept
+      })
     } catch (error) {
       setImageError(error instanceof Error ? error.message : 'Could not attach image')
     }
+  }
+
+  /**
+   * Clear pending image attachments and release local preview URLs.
+   */
+  function clearImageAttachments() {
+    revokeImageAttachmentUrls(imageAttachmentsRef.current)
+    imageAttachmentsRef.current = []
+    setImageAttachments([])
   }
 
   /**
@@ -352,7 +377,11 @@ export function AIAssistantPanel({
    * @param attachmentId Pending image attachment id.
    */
   function handleRemoveImageAttachment(attachmentId: string) {
-    setImageAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+    setImageAttachments((current) => {
+      const removed = current.filter((attachment) => attachment.id === attachmentId)
+      revokeImageAttachmentUrls(removed)
+      return current.filter((attachment) => attachment.id !== attachmentId)
+    })
   }
 
   /**
@@ -397,8 +426,9 @@ export function AIAssistantPanel({
       ),
     )
     setPrompt('')
-    setImageAttachments([])
+    clearImageAttachments()
     setImageError(null)
+    submittedChatIdRef.current = chat.id
     onSubmit(
       promptForWorkflow(chat.messages, submittedPromptText),
       undefined,
@@ -447,6 +477,7 @@ export function AIAssistantPanel({
           : item,
       ),
     )
+    submittedChatIdRef.current = chat.id
     onSubmit(
       promptForChoice(result, chat.messages, cleanOption),
       undefined,
@@ -501,6 +532,7 @@ export function AIAssistantPanel({
           : item,
       ),
     )
+    submittedChatIdRef.current = chat.id
     onSubmit(
       clarificationRequest.userPrompt,
       undefined,
@@ -1637,7 +1669,11 @@ async function attachmentsFromFiles(
     throw new Error(`Attach up to ${MAX_IMAGE_ATTACHMENTS} images`)
   }
   const selectedFiles = files.slice(0, remainingSlots)
-  return Promise.all(selectedFiles.map(fileToImageAttachment))
+  const attachments: AgentImageAttachment[] = []
+  for (const file of selectedFiles) {
+    attachments.push(await fileToImageAttachment(file))
+  }
+  return attachments
 }
 
 /**
@@ -1742,8 +1778,20 @@ async function compressedBlobToAttachmentData(
   const dataUrl = await readBlobAsDataUrl(blob)
   return {
     data: base64DataFromUrl(dataUrl),
-    dataUrl,
+    dataUrl: URL.createObjectURL(blob),
     size: blob.size,
+  }
+}
+
+/**
+ * Release object URLs owned by pending image previews.
+ * @param attachments Image attachments that may hold local object URLs.
+ */
+function revokeImageAttachmentUrls(attachments: AgentImageAttachment[]): void {
+  for (const attachment of attachments) {
+    if (attachment.dataUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(attachment.dataUrl)
+    }
   }
 }
 

@@ -322,7 +322,7 @@ export const componentCatalog: Record<ComponentTypeId, ComponentDefinition> = {
     terminals: [
       { id: 'VCC', kind: 'power_in', voltage: 5 },
       { id: 'GND', kind: 'ground' },
-      { id: 'SIG', kind: 'pwm' },
+      { id: 'SIG', kind: 'pwm', capabilities: ['pwm_input'] },
     ],
   },
   'analog-joystick': {

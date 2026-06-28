@@ -269,6 +269,40 @@ describe('validate', () => {
     expect(hasValidationErrors(results)).toBe(false)
   })
 
+  it('allows an ESP32 GPIO PWM signal to control a powered servo', () => {
+    const project = projectWithPairs(
+      'Powered servo',
+      [
+        esp32Instance(),
+        {
+          id: 'servo_1',
+          type: 'servo-sg90',
+          transform: { position: { x: 1, y: 0, z: 0 } },
+        },
+      ],
+      [
+        [
+          { component: 'servo_1', terminal: 'SIG' },
+          { component: 'esp32_1', terminal: 'IO13' },
+        ],
+        [
+          { component: 'servo_1', terminal: 'VCC' },
+          { component: 'esp32_1', terminal: 'VIN' },
+        ],
+        [
+          { component: 'servo_1', terminal: 'GND' },
+          { component: 'esp32_1', terminal: 'GND_R' },
+        ],
+      ],
+    )
+
+    const results = validate(project)
+
+    expect(results.some((r) => r.code === 'net.incompatible_pin_kinds')).toBe(false)
+    expect(results.some((r) => r.code === 'component.unpowered')).toBe(false)
+    expect(hasValidationErrors(results)).toBe(false)
+  })
+
   it('warns when a button input has no pull-up or pull-down reference', () => {
     const project = projectWithPairs(
       'Floating button',

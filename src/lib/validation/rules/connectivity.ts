@@ -146,6 +146,14 @@ function supportsRole(terminal: ResolvedTerminal, role: 'i2c_sda' | 'i2c_scl'): 
 }
 
 /**
+ * Whether a terminal consumes a PWM control signal instead of driving one.
+ * @param terminal Resolved terminal metadata.
+ */
+function isPwmControlInput(terminal: ResolvedTerminal): boolean {
+  return terminal.kind === 'pwm' && hasCapability(terminal, 'pwm_input')
+}
+
+/**
  * Whether a terminal is an active drive source that should not be shorted to another output.
  * @param terminal Resolved terminal metadata.
  */
@@ -156,6 +164,7 @@ function isActiveOutput(terminal: ResolvedTerminal): boolean {
       terminal.componentType === 'arduino-uno'
     )
   }
+  if (isPwmControlInput(terminal)) return false
   return terminal.kind !== null && ACTIVE_OUTPUT_KINDS.includes(terminal.kind)
 }
 
@@ -204,16 +213,33 @@ function isSignalTerminal(terminal: ResolvedTerminal): boolean {
 }
 
 /**
+ * Whether a terminal can supply module power in the current Studio model.
+ * @param terminal Resolved terminal metadata.
+ * @param expectedVoltage Required voltage when specified.
+ */
+function isPowerSourceTerminal(
+  terminal: ResolvedTerminal,
+  expectedVoltage?: number,
+): boolean {
+  const voltageMatches =
+    expectedVoltage === undefined || terminal.voltage === expectedVoltage
+
+  if (terminal.kind === 'power_out') return voltageMatches
+
+  return (
+    terminal.componentType === 'esp32-devkit-v1' &&
+    terminal.terminalId === 'VIN' &&
+    voltageMatches
+  )
+}
+
+/**
  * Whether a group includes a terminal connected to board or rail power.
  * @param group Connected terminal group.
  * @param expectedVoltage Required voltage when specified.
  */
 function groupHasPower(group: ResolvedTerminal[], expectedVoltage?: number): boolean {
-  return group.some(
-    (terminal) =>
-      terminal.kind === 'power_out' &&
-      (expectedVoltage === undefined || terminal.voltage === expectedVoltage),
-  )
+  return group.some((terminal) => isPowerSourceTerminal(terminal, expectedVoltage))
 }
 
 /**

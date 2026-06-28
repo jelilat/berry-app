@@ -65,6 +65,14 @@ BERRY_BUILD_API_TOKEN=change-me
 
 Set `BERRY_BUILD_BACKEND=remote` explicitly if you want to force the build API outside Cloudflare Pages. Local development defaults to PlatformIO unless `BERRY_BUILD_BACKEND` is set.
 
+### Agent usage limits
+
+Self-hosted installs have no monthly agent token limit by default. To opt in to a per-user monthly cap, configure Supabase auth/storage and set:
+
+```bash
+AGENT_MONTHLY_TOKEN_LIMIT=50000
+```
+
 ### Build timing
 
 - **First ESP32 build:** often 5–15 minutes while PlatformIO downloads toolchains.

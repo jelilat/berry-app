@@ -1,10 +1,14 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { cpp } from '@codemirror/lang-cpp'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { RotateCcw } from 'lucide-react'
+import { Check, Clipboard, RotateCcw } from 'lucide-react'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import type { BoardId } from '@/lib/project/types'
+
+const COPY_FEEDBACK_MS = 1600
 
 /**
  * Count source lines for compact editor status.
@@ -35,6 +39,25 @@ export function FirmwareEditorPanel({
   onReset?: () => void
 }) {
   const lineCount = countLines(source)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+
+  useEffect(() => {
+    if (copyState === 'idle') return undefined
+    const timeout = window.setTimeout(() => setCopyState('idle'), COPY_FEEDBACK_MS)
+    return () => window.clearTimeout(timeout)
+  }, [copyState])
+
+  /**
+   * Copy the current firmware source to the system clipboard.
+   */
+  const copySource = async () => {
+    try {
+      await copyTextToClipboard(source)
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+  }
 
   return (
     <section
@@ -55,6 +78,23 @@ export function FirmwareEditorPanel({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={copySource}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+            style={{
+              background: copyState === 'failed' ? 'rgba(214, 51, 108, 0.1)' : 'var(--bg-elevated)',
+              border:
+                copyState === 'failed'
+                  ? '1px solid rgba(214, 51, 108, 0.28)'
+                  : '1px solid var(--border)',
+              color: copyState === 'failed' ? 'var(--accent)' : 'var(--text-primary)',
+            }}
+            title="Copy code"
+          >
+            {copyState === 'copied' ? <Check size={14} /> : <Clipboard size={14} />}
+            {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy'}
+          </button>
           <span
             className="rounded-lg px-2.5 py-1 text-xs font-bold"
             style={{

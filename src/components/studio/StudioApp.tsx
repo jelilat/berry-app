@@ -82,6 +82,12 @@ import { WireInspectorPanel } from './WireInspectorPanel'
 
 type StudioStatus = 'loading' | 'ready' | 'error'
 
+interface AppliedFollowupChanges {
+  projectChanged: boolean
+  firmwareChanged: boolean
+  wiringGuideChanged: boolean
+}
+
 const INTERNAL_FOLLOWUP_NOTE_PREFIXES = [
   'clarifier:',
   'planner:',
@@ -304,22 +310,53 @@ function visualizableResultFromRunRecord(record: AgentBackendRunRecord): AgentRu
 /**
  * Render a completed follow-up result into an assistant chat message.
  * @param record Terminal follow-up record from the backend.
+ * @param appliedChanges What changed after comparing the result with the current bench.
  */
-function assistantMessageFromFollowup(record: AgentFollowupRecord): string {
+function assistantMessageFromFollowup(
+  record: AgentFollowupRecord,
+  appliedChanges?: AppliedFollowupChanges,
+): string {
   if (record.status === 'failed') {
     return record.error ?? 'Pip could not finish that follow-up.'
   }
   const result = record.result
   if (!result) return 'Pip finished, but did not return a follow-up result.'
-  const lines = [visibleFollowupMessage(result.message ?? 'I need a bit more detail before I can continue.')]
+  const message = appliedFollowupMessage(result, appliedChanges)
+  const lines = [visibleFollowupMessage(message)]
   if ('suggestedChecks' in result && result.suggestedChecks?.length) {
     lines.push('', 'Suggested checks:', ...result.suggestedChecks.map((check) => `- ${check}`))
   }
-  const notes = visibleFollowupNotes('notes' in result ? result.notes : undefined)
-  if (notes.length) {
-    lines.push('', 'Notes:', ...notes.map((note) => `- ${note}`))
+  if (result.kind === 'modification' && result.wiringGuide?.trim()) {
+    lines.push('', result.wiringGuide.trim())
   }
   return lines.join('\n')
+}
+
+/**
+ * Choose a visible follow-up message based on the data actually applied locally.
+ * @param result Completed follow-up result.
+ * @param appliedChanges What changed after comparing the result with the current bench.
+ */
+function appliedFollowupMessage(
+  result: AgentFollowupResult,
+  appliedChanges?: AppliedFollowupChanges,
+): string {
+  if (result.kind !== 'modification' || !appliedChanges) {
+    return result.message ?? 'I need a bit more detail before I can continue.'
+  }
+  if (appliedChanges.projectChanged) {
+    return result.message
+  }
+  if (appliedChanges.wiringGuideChanged && appliedChanges.firmwareChanged) {
+    return 'I applied firmware and wiring guide updates, but the returned project graph did not change.'
+  }
+  if (appliedChanges.firmwareChanged) {
+    return 'I applied a firmware update, but the returned project graph did not change.'
+  }
+  if (appliedChanges.wiringGuideChanged) {
+    return 'I applied a wiring guide update, but the returned project graph did not change.'
+  }
+  return 'Pip finished, but the returned project and firmware matched the current bench.'
 }
 
 /**
@@ -355,10 +392,6 @@ function visibleFollowupMessage(message: string): string {
         visibleLines.push('')
         pendingBlank = false
       }
-      if (removedInternalNote) {
-        visibleLines.push('Notes:')
-        removedInternalNote = false
-      }
       visibleLines.push(line)
       continue
     }
@@ -367,16 +400,6 @@ function visibleFollowupMessage(message: string): string {
   }
 
   return visibleLines.join('\n').trim() || message.trim()
-}
-
-/**
- * Remove backend orchestration notes from the message shown in chat.
- * @param notes Notes returned by the hosted follow-up provider.
- */
-function visibleFollowupNotes(notes?: string[]): string[] {
-  return (notes ?? [])
-    .map((note) => note.trim())
-    .filter((note) => note.length > 0 && !isInternalFollowupNote(note))
 }
 
 /**
@@ -425,13 +448,35 @@ function acceptedFollowupProject(
 }
 
 /**
+ * Compare the hardware graph fields that affect the visible project.
+ * @param current Current bench project.
+ * @param candidate Accepted follow-up project.
+ */
+function followupProjectGraphChanged(current: BerryProject, candidate: BerryProject): boolean {
+  return JSON.stringify(projectGraphSnapshot(current)) !== JSON.stringify(projectGraphSnapshot(candidate))
+}
+
+/**
+ * Return the project fields that represent circuit structure rather than metadata.
+ * @param project Project to summarize for graph comparison.
+ */
+function projectGraphSnapshot(project: BerryProject): Pick<BerryProject, 'board' | 'components' | 'nets' | 'wires'> {
+  return {
+    board: project.board,
+    components: project.components,
+    nets: project.nets,
+    wires: project.wires,
+  }
+}
+
+/**
  * Render an invalid follow-up project as a short assistant message.
  * @param result Backend modification result that could not be applied.
  * @param error Structural or validation error summary.
  * @param validationErrors Blocking validation findings from Berry.
  */
 function rejectedFollowupMessage(
-  result: Extract<AgentFollowupResult, { kind: 'modification' }>,
+  _result: Extract<AgentFollowupResult, { kind: 'modification' }>,
   error: string,
   validationErrors: ValidationResult[],
 ): string {
@@ -440,16 +485,12 @@ function rejectedFollowupMessage(
     '',
     error,
   ]
-  const visibleNotes = visibleFollowupNotes(result.notes)
   if (validationErrors.length > 0) {
     lines.push(
       '',
       'Blocking issues:',
       ...validationErrors.slice(0, 5).map((validationError) => `- ${validationError.message}`),
     )
-  }
-  if (visibleNotes.length > 0) {
-    lines.push('', 'Notes:', ...visibleNotes.map((note) => `- ${note}`))
   }
   return lines.join('\n')
 }
@@ -486,6 +527,7 @@ function createProjectIterationContext(
   buildResult: BuildResult | null,
   simulationResult: SimulationResult | null,
   agentResult: AgentRunResult | null,
+  wiringGuide?: string | null,
 ): AgentProjectIterationContext {
   const buildErrors = buildResult?.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')
   return {
@@ -494,7 +536,7 @@ function createProjectIterationContext(
     buildErrors: buildErrors && buildErrors.length > 0 ? buildErrors : undefined,
     buildResult: buildResult ?? undefined,
     simulationResult: simulationResult ?? undefined,
-    wiringGuide: agentResult?.state.wiringGuide,
+    wiringGuide: wiringGuide ?? agentResult?.state.wiringGuide,
     timeline: agentResult?.state.timeline,
   }
 }
@@ -587,6 +629,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const [agentPendingRequestCount, setAgentPendingRequestCount] = useState(0)
   const [agentWaitingForAnswers, setAgentWaitingForAnswers] = useState(false)
   const [agentResult, setAgentResult] = useState<AgentRunResult | null>(null)
+  const [currentWiringGuide, setCurrentWiringGuide] = useState<string | null>(null)
   const [agentRunRecord, setAgentRunRecord] = useState<AgentBackendRunRecord | null>(null)
   const [assistantTurn, setAssistantTurn] = useState<AssistantTurn | null>(null)
   const [agentClarificationSubmitted, setAgentClarificationSubmitted] = useState(false)
@@ -691,6 +734,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         loadFirmwareSourceFromStorage() ??
           createDefaultFirmwareSource(stored?.board ?? 'esp32-devkit-v1'),
       )
+      setCurrentWiringGuide(null)
       setStatus('ready')
     }
 
@@ -746,6 +790,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             entry.firmwareFiles?.[DEFAULT_FIRMWARE_PATH] ??
               createDefaultFirmwareSource(loadedProject.board),
           )
+          setCurrentWiringGuide(null)
           setCloudProjectId(entry.id)
           setStatus('ready')
           setCloudAutosaveReady(true)
@@ -756,6 +801,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         resetProject(freshProject)
         setProjectChatKey(createProjectChatKey(freshProject))
         setFirmwareSource(createDefaultFirmwareSource(freshProject.board))
+        setCurrentWiringGuide(null)
         setCloudProjectId(null)
         setStatus('ready')
         setCloudAutosaveReady(true)
@@ -892,7 +938,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     answerSubmission?: AgentAnswerSubmission,
     chatContext?: ProjectChatSubmitContext,
   ) => {
-    const isProjectChatRequest = !!chatContext
+    const isProjectChatRequest = !!chatContext && !answerSubmission
     if ((!isProjectChatRequest && agentLoading) || prompt.trim().length === 0) return
     if (!isProjectChatRequest && agentWaitingForAnswers && !answerSubmission) return
     setAgentPendingRequestCount((count) => count + 1)
@@ -914,22 +960,21 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     setErrorMessage(null)
     try {
       const projectContext = isProjectChatRequest
-        ? createProjectIterationContext(project, firmwareSource, buildResult, simulationResult, agentResult)
+        ? createProjectIterationContext(
+            project,
+            firmwareSource,
+            buildResult,
+            simulationResult,
+            agentResult,
+            currentWiringGuide,
+          )
         : undefined
       if (isProjectChatRequest && projectContext) {
-        const followupMessage = answerSubmission
-          ? [
-              prompt,
-              '',
-              'Clarification answers:',
-              ...Object.entries(answerSubmission.answers).map(([key, value]) => `- ${key}: ${value}`),
-            ].join('\n')
-          : prompt
         const response = await fetch('/api/agent/followup', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            message: followupMessage,
+            message: prompt,
             projectContext,
             chatHistory: chatContext.chatHistory,
             attachments: chatContext.attachments,
@@ -970,6 +1015,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         if (record.status === 'completed' && record.result?.kind === 'modification') {
           let acceptedProject: BerryProject | undefined
           const source = record.result.firmwareFiles?.[DEFAULT_FIRMWARE_PATH]
+          const nextWiringGuide = record.result.wiringGuide?.trim()
+          const appliedChanges: AppliedFollowupChanges = {
+            projectChanged: false,
+            firmwareChanged: typeof source === 'string' && source !== firmwareSource,
+            wiringGuideChanged: typeof nextWiringGuide === 'string' && nextWiringGuide !== (currentWiringGuide ?? agentResult?.state.wiringGuide ?? ''),
+          }
           if (record.result.project) {
             const projectApplication = acceptedFollowupProject(project, record.result.project)
             if (!projectApplication.project) {
@@ -987,11 +1038,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
               return
             }
             acceptedProject = projectApplication.project
+            appliedChanges.projectChanged = followupProjectGraphChanged(project, acceptedProject)
           }
-          if (!acceptedProject && !source) {
+          if (!acceptedProject && !source && !nextWiringGuide) {
             setAssistantTurn({
               id: `assistant_followup_${record.requestId}`,
-              text: 'Pip returned a modification response, but it did not include a usable project or firmware update.',
+              text: 'Pip returned a modification response, but it did not include a usable project, firmware, or wiring guide update.',
               chatId: chatContext.activeChatId,
             })
             setErrorMessage('Pip did not return a usable project update.')
@@ -999,10 +1051,10 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           }
           setAssistantTurn({
             id: `assistant_followup_${record.requestId}`,
-            text: assistantMessageFromFollowup(record),
+            text: assistantMessageFromFollowup(record, appliedChanges),
             chatId: chatContext.activeChatId,
           })
-          if (acceptedProject) {
+          if (acceptedProject && appliedChanges.projectChanged) {
             skipNextPipelineResetRef.current = true
             resetProject(acceptedProject)
             setSelectedNodeId(null)
@@ -1013,7 +1065,18 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             setFirmwareSource(source)
             setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
           }
-          setPipelineNotice('Project chat update applied')
+          if (nextWiringGuide) {
+            setCurrentWiringGuide(nextWiringGuide)
+          }
+          setPipelineNotice(
+            appliedChanges.projectChanged
+              ? 'Project chat update applied'
+              : appliedChanges.firmwareChanged
+                ? 'Firmware update applied'
+                : appliedChanges.wiringGuideChanged
+                  ? 'Wiring guide update applied'
+                  : 'No project changes returned',
+          )
         } else {
           setAssistantTurn({
             id: `assistant_followup_${record.requestId}`,
@@ -1075,6 +1138,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setAgentResult(result)
       setAgentWaitingForAnswers(result.status === 'needs_clarification')
       if (result.status === 'completed') {
+        setCurrentWiringGuide(result.state.wiringGuide ?? null)
         visualizeAgentProject(result)
         const source = result.state.firmwareFiles[DEFAULT_FIRMWARE_PATH]
         if (source) {
@@ -1101,6 +1165,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     agentResult,
     agentWaitingForAnswers,
     buildResult,
+    currentWiringGuide,
     firmwareSource,
     project,
     resetProject,
@@ -1207,6 +1272,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     setSelectedWireId(null)
     setAgentWaitingForAnswers(false)
     setAgentResult(null)
+    setCurrentWiringGuide(null)
     setAssistantTurn(null)
     setErrorMessage(null)
     setViewMode('2d')
@@ -1228,6 +1294,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setFirmwareSource(createEsp32BlinkFirmwareSource())
       setAgentWaitingForAnswers(false)
       setAgentResult(null)
+      setCurrentWiringGuide(null)
       setAssistantTurn(null)
       setViewMode('2d')
       setStatus('ready')

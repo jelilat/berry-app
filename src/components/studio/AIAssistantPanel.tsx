@@ -86,6 +86,7 @@ interface AssistantChoiceRequest {
 
 interface ClarificationFormRequest {
   runId: string
+  source: 'run' | 'followup'
   userPrompt: string
   questions: ClarifyingQuestion[]
 }
@@ -529,6 +530,10 @@ export function AIAssistantPanel({
       clarificationRequest.questions,
       answers,
     )
+    const followupAnswerMessage = clarificationAnswerMessage(
+      clarificationRequest.questions,
+      answers,
+    )
     const chat = activeChat ?? createChat()
     if (!activeChat) {
       setChats((current) => [chat, ...current])
@@ -550,6 +555,21 @@ export function AIAssistantPanel({
     )
     setChatPending(chat.id, true)
     try {
+      if (clarificationRequest.source === 'followup') {
+        await onSubmit(
+          followupAnswerMessage,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
+            activeChatId: chat.id,
+            chatHistory: projectChatHistoryForSubmit(chats, chat, transcriptMessages),
+          },
+        )
+        return
+      }
       await onSubmit(
         clarificationRequest.userPrompt,
         undefined,
@@ -1448,6 +1468,7 @@ function clarificationRequestFromResult(result: AgentRunResult | null): Clarific
   }
   return {
     runId: result.state.runId,
+    source: result.state.clarificationSource ?? 'run',
     userPrompt: result.state.userPrompt,
     questions: result.state.clarification.questions,
   }
@@ -2011,6 +2032,26 @@ function clarificationTranscriptMessages(
       },
     ]
   })
+}
+
+/**
+ * Build the follow-up turn message from submitted clarification answers.
+ * @param questions Clarification questions that were answered.
+ * @param answers Submitted answer map.
+ */
+function clarificationAnswerMessage(
+  questions: ClarifyingQuestion[],
+  answers: Record<string, string>,
+): string {
+  if (questions.length === 1) {
+    return answers[questions[0]!.id]?.trim() ?? ''
+  }
+  return questions
+    .map((question) => {
+      const answer = answers[question.id]?.trim() ?? ''
+      return `${question.question}\n${answer}`
+    })
+    .join('\n\n')
 }
 
 /**

@@ -204,6 +204,7 @@ export interface AgentRunInput {
 export interface AgentRunState {
   runId: string
   userPrompt: string
+  clarificationSource?: 'run' | 'followup'
   clarification: ClarificationResult
   plan?: AgentBuildPlan
   circuitIntent?: AgentCircuitIntent

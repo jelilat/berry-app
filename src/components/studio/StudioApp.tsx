@@ -999,6 +999,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             state: {
               runId: record.requestId,
               userPrompt: prompt,
+              clarificationSource: 'followup',
               clarification: {
                 status: 'needs_clarification',
                 questions: record.result.questions,

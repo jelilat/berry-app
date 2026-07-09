@@ -11,7 +11,7 @@ const structuredRequest: StructuredModelRequest<{ status: string }> = {
   role: 'clarifier',
   model: {
     provider: 'openai',
-    model: 'gpt-5.5',
+    model: 'gpt-5.6-sol',
     supportsTools: true,
     supportsStructuredOutput: true,
     temperature: 0.1,

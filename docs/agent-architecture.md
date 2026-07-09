@@ -424,10 +424,10 @@ Current production switch:
 OPENAI_API_KEY=...
 BERRY_AI_PROVIDER=openai
 BERRY_AI_REQUIRE_REAL=true
-BERRY_AI_FAST_MODEL=gpt-5-mini
-BERRY_AI_STRONG_MODEL=gpt-5
-BERRY_AI_CODE_MODEL=gpt-5
-BERRY_AI_WRITER_MODEL=gpt-5-mini
+BERRY_AI_FAST_MODEL=gpt-5.6-luna
+BERRY_AI_STRONG_MODEL=gpt-5.6-sol
+BERRY_AI_CODE_MODEL=gpt-5.6-sol
+BERRY_AI_WRITER_MODEL=gpt-5.6-luna
 ```
 
 When `OPENAI_API_KEY` is present, the default client calls OpenAI's Responses API with strict structured outputs. When no key is present, local development falls back to deterministic outputs unless real mode is explicitly required.

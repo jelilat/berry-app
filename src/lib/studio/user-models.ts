@@ -31,6 +31,33 @@ export interface UserReasoningOption {
 /** Models builders can pick before starting a hardware project. */
 export const USER_MODEL_OPTIONS: UserModelOption[] = [
   {
+    id: 'gpt-5.6-sol',
+    label: 'GPT-5.6 Sol',
+    shortLabel: '5.6 Sol',
+    description: 'OpenAI flagship model for complex reasoning and coding',
+    provider: 'openai',
+    model: 'gpt-5.6-sol',
+    mode: 'auto',
+  },
+  {
+    id: 'gpt-5.6-terra',
+    label: 'GPT-5.6 Terra',
+    shortLabel: '5.6 Terra',
+    description: 'Balanced OpenAI intelligence and cost for project work',
+    provider: 'openai',
+    model: 'gpt-5.6-terra',
+    mode: 'auto',
+  },
+  {
+    id: 'gpt-5.6-luna',
+    label: 'GPT-5.6 Luna',
+    shortLabel: '5.6 Luna',
+    description: 'Cost-efficient OpenAI model for fast hardware iteration',
+    provider: 'openai',
+    model: 'gpt-5.6-luna',
+    mode: 'auto',
+  },
+  {
     id: 'gpt-5.5',
     label: 'GPT-5.5',
     shortLabel: '5.5',
@@ -58,6 +85,15 @@ export const USER_MODEL_OPTIONS: UserModelOption[] = [
     mode: 'auto',
   },
   {
+    id: 'claude-sonnet-5',
+    label: 'Claude Sonnet 5',
+    shortLabel: 'Sonnet 5',
+    description: 'Anthropic speed/intelligence balance for agentic coding',
+    provider: 'anthropic',
+    model: 'claude-sonnet-5',
+    mode: 'auto',
+  },
+  {
     id: 'claude-fable-5',
     label: 'Claude Fable 5',
     shortLabel: 'Fable 5',
@@ -82,6 +118,15 @@ export const USER_MODEL_OPTIONS: UserModelOption[] = [
     description: 'Anthropic speed/intelligence balance for coding workflows',
     provider: 'anthropic',
     model: 'claude-sonnet-4-6',
+    mode: 'auto',
+  },
+  {
+    id: 'claude-haiku-4.5',
+    label: 'Claude Haiku 4.5',
+    shortLabel: 'Haiku 4.5',
+    description: 'Fast Anthropic model for lightweight wiring and code passes',
+    provider: 'anthropic',
+    model: 'claude-haiku-4-5',
     mode: 'auto',
   },
 ]

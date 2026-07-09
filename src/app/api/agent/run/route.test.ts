@@ -44,7 +44,7 @@ describe('POST /api/agent/run', () => {
       body: JSON.stringify({
         prompt: 'Build me a plant monitor',
         provider: 'openai',
-        model: 'gpt-5.5',
+        model: 'gpt-5.6-sol',
         reasoningEffort: 'medium',
       }),
     })
@@ -85,7 +85,7 @@ describe('POST /api/agent/run', () => {
       body: JSON.stringify({
         prompt: 'Build me an LED',
         provider: 'openai',
-        model: 'gpt-5.5',
+        model: 'gpt-5.6-sol',
         reasoningEffort: 'medium',
       }),
     })

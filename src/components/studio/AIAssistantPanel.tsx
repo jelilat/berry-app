@@ -150,6 +150,7 @@ export function AIAssistantPanel({
   const skipNextSaveRef = useRef(false)
   const cloudSaveTimerRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null)
   const submittedChatIdRef = useRef<string | null>(null)
   const imageAttachmentsRef = useRef<AgentImageAttachment[]>([])
 
@@ -179,6 +180,16 @@ export function AIAssistantPanel({
   }, [imageAttachments])
 
   useEffect(() => () => revokeImageAttachmentUrls(imageAttachmentsRef.current), [])
+
+  useEffect(() => {
+    scrollTranscriptToBottom(transcriptScrollRef.current)
+  }, [
+    activeChatId,
+    activeChat?.messages.length,
+    choiceRequest?.id,
+    clarificationRequest?.runId,
+    workflowLog.length,
+  ])
 
   useEffect(() => {
     const nextChats = loadChats(projectChatKey, legacyProjectChatKey)
@@ -650,7 +661,7 @@ export function AIAssistantPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div ref={transcriptScrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
         {activeChat?.messages.length ? (
           <div className="space-y-3">
             {activeChat.messages.map((message) => (
@@ -1208,6 +1219,17 @@ function WorkflowStepRow({ step }: { step: WorkflowLogStep }) {
       <span className="min-w-0 truncate">{step.label}</span>
     </div>
   )
+}
+
+/**
+ * Move the chat transcript to the newest visible content after React paints updates.
+ * @param element Scrollable transcript container.
+ */
+function scrollTranscriptToBottom(element: HTMLDivElement | null): void {
+  if (!element) return
+  window.requestAnimationFrame(() => {
+    element.scrollTop = element.scrollHeight
+  })
 }
 
 /**

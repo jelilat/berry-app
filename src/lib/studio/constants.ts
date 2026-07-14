@@ -20,3 +20,11 @@ export const INSPECTOR_WIDTH_STORAGE_KEY = 'berry-studio-inspector-width'
 export const INSPECTOR_WIDTH_DEFAULT = 300
 export const INSPECTOR_WIDTH_MIN = 260
 export const INSPECTOR_WIDTH_MAX = 720
+
+/** localStorage key for assistant panel width (px). */
+export const ASSISTANT_PANEL_WIDTH_STORAGE_KEY = 'berry-studio-assistant-width'
+
+/** Default / min / max width for the assistant panel (px). */
+export const ASSISTANT_PANEL_WIDTH_DEFAULT = 360
+export const ASSISTANT_PANEL_WIDTH_MIN = 320
+export const ASSISTANT_PANEL_WIDTH_MAX = 680

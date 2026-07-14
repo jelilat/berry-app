@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock3,
   Clipboard,
+  GripVertical,
   Image as ImageIcon,
   MessageSquare,
   Plus,
@@ -41,6 +42,13 @@ import {
   type CloudBenchChat,
   type CloudBenchMessage,
 } from '@/lib/projects/cloud-chats'
+import {
+  ASSISTANT_PANEL_WIDTH_DEFAULT,
+  ASSISTANT_PANEL_WIDTH_MAX,
+  ASSISTANT_PANEL_WIDTH_MIN,
+  ASSISTANT_PANEL_WIDTH_STORAGE_KEY,
+} from '@/lib/studio/constants'
+import { useRightDockedResizableWidth } from '@/lib/studio/use-resizable-width'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getBoardProfile } from '@/lib/project/boards'
 import { getComponentDefinition } from '@/lib/project/catalog'
@@ -73,10 +81,11 @@ export interface AssistantTurn {
 }
 
 type MarkdownBlock =
-  | { kind: 'heading'; level: 2 | 3; text: string }
+  | { kind: 'heading'; level: 1 | 2 | 3; text: string }
   | { kind: 'paragraph'; text: string }
   | { kind: 'list'; items: string[] }
   | { kind: 'code'; text: string }
+  | { kind: 'table'; headers: string[]; rows: string[][] }
 
 interface AssistantChoiceRequest {
   id: string
@@ -618,11 +627,39 @@ export function AIAssistantPanel({
     })
   }
 
+  const { width: panelWidth, onResizePointerDown } = useRightDockedResizableWidth({
+    min: ASSISTANT_PANEL_WIDTH_MIN,
+    max: ASSISTANT_PANEL_WIDTH_MAX,
+    defaultWidth: ASSISTANT_PANEL_WIDTH_DEFAULT,
+    storageKey: ASSISTANT_PANEL_WIDTH_STORAGE_KEY,
+  })
+
   return (
     <aside
-      className="flex w-[360px] shrink-0 flex-col border-l"
-      style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+      className="relative flex shrink-0 flex-col border-l"
+      style={{
+        width: panelWidth,
+        minWidth: ASSISTANT_PANEL_WIDTH_MIN,
+        maxWidth: ASSISTANT_PANEL_WIDTH_MAX,
+        background: 'var(--bg-surface)',
+        borderColor: 'var(--border)',
+      }}
     >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize assistant panel"
+        onPointerDown={onResizePointerDown}
+        className="absolute left-0 top-0 z-20 flex h-full w-3 -translate-x-1/2 cursor-col-resize items-center justify-center touch-none select-none"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        <span
+          className="flex h-10 w-1.5 items-center justify-center rounded-full opacity-60 transition-opacity hover:opacity-100"
+          style={{ background: 'var(--border-strong)' }}
+        >
+          <GripVertical size={10} className="-ml-px opacity-70" />
+        </span>
+      </div>
       <div className="flex h-[58px] shrink-0 items-center gap-2 border-b px-4" style={{ borderColor: 'var(--border)' }}>
         <div className="min-w-0">
           <p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
@@ -850,9 +887,9 @@ function MarkdownContent({ text }: { text: string }) {
     <div className="space-y-2">
       {blocks.map((block, index) => {
         if (block.kind === 'heading') {
-          const Heading = block.level === 2 ? 'h2' : 'h3'
+          const Heading = block.level === 1 ? 'h2' : 'h3'
           return (
-            <Heading key={`${block.kind}_${index}`} className="text-sm font-extrabold">
+            <Heading key={`${block.kind}_${index}`} className={block.level === 1 ? 'text-base font-extrabold' : 'text-sm font-extrabold'}>
               {renderInlineMarkdown(block.text)}
             </Heading>
           )
@@ -869,12 +906,62 @@ function MarkdownContent({ text }: { text: string }) {
         if (block.kind === 'code') {
           return <CopyableCodeBlock key={`${block.kind}_${index}`} text={block.text} />
         }
+        if (block.kind === 'table') {
+          return <MarkdownTable key={`${block.kind}_${index}`} headers={block.headers} rows={block.rows} />
+        }
         return (
           <p key={`${block.kind}_${index}`} className="whitespace-pre-wrap">
             {renderInlineMarkdown(block.text)}
           </p>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * Render a markdown table in a horizontally scrollable assistant bubble.
+ * @param props Table headers and body rows.
+ */
+function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  return (
+    <div
+      className="overflow-x-auto rounded-lg"
+      style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)' }}
+    >
+      <table className="min-w-full border-collapse text-left text-[11px] leading-snug">
+        <thead>
+          <tr style={{ background: 'var(--bg-elevated)' }}>
+            {headers.map((header, index) => (
+              <th
+                key={`${header}_${index}`}
+                className="whitespace-nowrap px-2.5 py-2 font-extrabold"
+                style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}
+              >
+                {renderInlineMarkdown(header)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`row_${rowIndex}`}>
+              {headers.map((_, cellIndex) => (
+                <td
+                  key={`cell_${rowIndex}_${cellIndex}`}
+                  className="max-w-[180px] px-2.5 py-2 align-top font-semibold"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    borderTop: rowIndex === 0 ? undefined : '1px solid var(--border)',
+                  }}
+                >
+                  <span className="break-words">{renderInlineMarkdown(row[cellIndex] ?? '')}</span>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -2151,7 +2238,8 @@ function parseMarkdownBlocks(text: string): MarkdownBlock[] {
     listItems = []
   }
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex] ?? ''
     const trimmed = line.trim()
     if (codeLines) {
       if (trimmed.startsWith('```')) {
@@ -2176,13 +2264,32 @@ function parseMarkdownBlocks(text: string): MarkdownBlock[] {
       continue
     }
 
-    const headingMatch = /^(#{2,3})\s+(.+)$/.exec(trimmed)
+    const tableSeparator = lines[lineIndex + 1]?.trim() ?? ''
+    if (isMarkdownTableStart(trimmed, tableSeparator)) {
+      flushParagraph()
+      flushList()
+      const headers = parseMarkdownTableRow(trimmed)
+      const rows: string[][] = []
+      lineIndex += 1
+
+      while (lineIndex + 1 < lines.length) {
+        const nextLine = lines[lineIndex + 1]?.trim() ?? ''
+        if (!nextLine || !nextLine.includes('|') || isMarkdownTableSeparator(nextLine)) break
+        rows.push(parseMarkdownTableRow(nextLine))
+        lineIndex += 1
+      }
+
+      blocks.push({ kind: 'table', headers, rows })
+      continue
+    }
+
+    const headingMatch = /^(#{1,3})\s+(.+)$/.exec(trimmed)
     if (headingMatch) {
       flushParagraph()
       flushList()
       blocks.push({
         kind: 'heading',
-        level: headingMatch[1]!.length === 2 ? 2 : 3,
+        level: headingMatch[1]!.length as 1 | 2 | 3,
         text: headingMatch[2]!,
       })
       continue
@@ -2205,6 +2312,34 @@ function parseMarkdownBlocks(text: string): MarkdownBlock[] {
     blocks.push({ kind: 'code', text: codeLines.join('\n') })
   }
   return blocks.length > 0 ? blocks : [{ kind: 'paragraph', text }]
+}
+
+/**
+ * Determine whether two consecutive lines form a markdown pipe table.
+ * @param headerLine Candidate header row.
+ * @param separatorLine Candidate divider row.
+ */
+function isMarkdownTableStart(headerLine: string, separatorLine: string): boolean {
+  return headerLine.includes('|') && parseMarkdownTableRow(headerLine).length > 1 && isMarkdownTableSeparator(separatorLine)
+}
+
+/**
+ * Determine whether a line is the separator row for a markdown pipe table.
+ * @param line Candidate separator line.
+ */
+function isMarkdownTableSeparator(line: string): boolean {
+  const cells = parseMarkdownTableRow(line)
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
+}
+
+/**
+ * Parse one markdown pipe table row into cell text.
+ * @param line Raw table row line.
+ */
+function parseMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim()
+  const withoutOuterPipes = trimmed.replace(/^\|/, '').replace(/\|$/, '')
+  return withoutOuterPipes.split('|').map((cell) => cell.trim())
 }
 
 /**

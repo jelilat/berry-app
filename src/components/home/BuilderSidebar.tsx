@@ -1,11 +1,14 @@
 'use client'
 
 import Image from 'next/image'
+import { useState } from 'react'
 import {
   Cpu,
   Home,
   LogIn,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -36,24 +39,49 @@ export function BuilderSidebar({
   onNewProject: () => void
   onDeleteProject: (projectId: string) => void
 }) {
+  const [collapsed, setCollapsed] = useState(false)
+
+  /**
+   * Toggle the desktop sidebar between full project navigation and compact rail.
+   */
+  function handleToggleSidebar() {
+    setCollapsed((nextCollapsed) => !nextCollapsed)
+  }
+
   return (
     <aside
-      className="flex w-full shrink-0 flex-col border-b px-3 py-3 md:h-[100dvh] md:w-[248px] md:border-b-0 md:border-r md:py-4"
+      className={`flex w-full shrink-0 flex-col border-b px-3 py-3 transition-[width,padding] duration-200 md:h-[100dvh] md:border-b-0 md:border-r md:py-4 ${
+        collapsed ? 'md:w-[72px] md:px-2' : 'md:w-[248px]'
+      }`}
       style={{
         background: 'var(--bg-overlay)',
         borderColor: 'var(--border)',
       }}
     >
-      <div className="flex items-center gap-2 px-1 md:mb-6 md:px-2">
+      <div className={`flex items-center gap-2 px-1 md:mb-6 md:px-2 ${collapsed ? 'md:justify-center md:px-0' : ''}`}>
         <Image src={brand.assets.icon} alt="" width={24} height={24} />
-        <span className="text-base font-extrabold tracking-[-0.04em] md:text-sm">{brand.name}</span>
+        <span className={`text-base font-extrabold tracking-[-0.04em] md:text-sm ${collapsed ? 'md:hidden' : ''}`}>
+          {brand.name}
+        </span>
+        <button
+          type="button"
+          onClick={handleToggleSidebar}
+          className={`ml-auto hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-black/5 md:inline-flex ${
+            collapsed ? 'md:ml-0' : ''
+          }`}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          style={{ color: 'var(--text-muted)' }}
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
       </div>
 
       <nav className="mt-3 space-y-1 md:mt-0">
-        <SidebarButton active icon={Home} label="Home" />
+        <SidebarButton active collapsed={collapsed} icon={Home} label="Home" />
       </nav>
 
-      <div className="mt-4 min-w-0 px-1 md:mt-8 md:px-2">
+      <div className={`mt-4 min-w-0 px-1 md:mt-8 md:px-2 ${collapsed ? 'md:hidden' : ''}`}>
         <p
           className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
           style={{ color: 'var(--text-muted)' }}
@@ -136,7 +164,7 @@ export function BuilderSidebar({
         )}
       </div>
 
-      <div className="mt-3 space-y-2 px-1 md:mt-auto md:px-2 md:pt-6">
+      <div className={`mt-3 space-y-2 px-1 md:mt-auto md:px-2 md:pt-6 ${collapsed ? 'md:px-0' : ''}`}>
         {/* <a
           href="https://berry.studio"
           className="inline-flex items-center gap-2 text-xs font-semibold transition-opacity hover:opacity-80"
@@ -150,24 +178,32 @@ export function BuilderSidebar({
           <button
             type="button"
             onClick={onSignOut}
-            className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors hover:bg-black/[0.04] md:justify-start"
+            className={`flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors hover:bg-black/[0.04] ${
+              collapsed ? 'md:px-0' : 'md:justify-start'
+            }`}
+            aria-label={collapsed ? 'Sign out' : undefined}
+            title={collapsed ? 'Sign out' : undefined}
             style={{ color: 'var(--text-secondary)' }}
           >
             <LogOut size={15} />
-            Sign out
+            <span className={collapsed ? 'md:hidden' : ''}>Sign out</span>
           </button>
         ) : (
           <button
             type="button"
             onClick={onSignIn}
-            className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-white transition-transform hover:-translate-y-0.5"
+            className={`flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 ${
+              collapsed ? 'md:px-0' : ''
+            }`}
+            aria-label={collapsed ? 'Sign in' : undefined}
+            title={collapsed ? 'Sign in' : undefined}
             style={{
               background: 'linear-gradient(135deg, #F05F8D 0%, #D6336C 55%, #A61E4D 100%)',
               boxShadow: '0 12px 28px rgba(214,51,108,0.22)',
             }}
           >
             <LogIn size={15} />
-            Sign in
+            <span className={collapsed ? 'md:hidden' : ''}>Sign in</span>
           </button>
         )}
       </div>
@@ -220,14 +256,19 @@ function SidebarButton({
   icon: Icon,
   label,
   active = false,
+  collapsed = false,
 }: {
   icon: typeof Home
   label: string
   active?: boolean
+  collapsed?: boolean
 }) {
   return (
     <div
-      className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
+      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${
+        collapsed ? 'md:justify-center md:px-0' : ''
+      }`}
+      title={collapsed ? label : undefined}
       style={{
         background: active ? 'rgba(255,255,255,0.72)' : 'transparent',
         color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -235,7 +276,7 @@ function SidebarButton({
       }}
     >
       <Icon size={16} />
-      {label}
+      <span className={collapsed ? 'md:hidden' : ''}>{label}</span>
     </div>
   )
 }

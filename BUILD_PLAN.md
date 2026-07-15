@@ -6,7 +6,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Current phase:** Phase 6 — AI build loop demo (Phase 5 deploy intentionally deferred)
 
-**Last updated:** 2026-06-12
+**Last updated:** 2026-07-14
 
 ---
 
@@ -14,7 +14,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 ```mermaid
 flowchart TD
-  A[0. Project model + component catalog] --> B[1. Studio 2D]
+  A[0. Project model + component catalog] --> B[1. Studio Visual]
   B --> C[2. Connection rules]
   C --> D[3. Codegen + compile]
   D --> E[4. Simulation]
@@ -36,13 +36,13 @@ flowchart TD
 |-------|------|--------|
 | — | Repo bootstrap & brand | Done |
 | 0 | Foundation | Done |
-| 1 | Studio 2D | Done |
+| 1 | Studio Visual | Done |
 | 2 | Functional wiring / validation | Done |
 | 3 | Codegen + compile | Done |
 | 4 | Simulation | Demo-ready (mock contract shipped) |
 | 5 | Deploy to device | Deferred (show coming soon) |
 | 6 | AI build loop | In progress (video-first demo) |
-| 7 | 3D + advanced sim (optional) | Not started |
+| 7 | Advanced simulation + board support (optional) | Not started |
 
 ---
 
@@ -72,7 +72,7 @@ flowchart TD
 
 ---
 
-## Phase 1 — Studio (2D)
+## Phase 1 — Studio Visual
 
 **Outcome:** Drag-and-drop schematic editor backed by the project graph.
 
@@ -83,10 +83,9 @@ flowchart TD
 - [x] Undo / redo
 - [x] Persist project to storage (local first, cloud later)
 - [x] Empty / loading / error states
+- [x] Beginner-friendly **Components** overview between Visual and Firmware, with visual cards for the parts used in the project and grouped jumper counts.
 
 **Exit criteria:** User can build a schematic visually; saved file round-trips through load.
-
-**Defer:** 3D breadboard view until Phase 7.
 
 ---
 
@@ -97,7 +96,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 | Item | Description |
 |------|-------------|
 | **Project folder menu** | Sidebar or panel listing all files in the hardware project (e.g. `project.json`, sketch, `platformio.ini`, README, wiring export). Prerequisite for diagram + doc tabs. |
-| **Wiring diagram view** | Board-centric schematic (reference: ESP32 pin column in the center, peripheral cards around it, color-coded orthogonal wires, pin labels like `TRIG → GPIO27`, short part descriptions). Read-only or lightly editable renderer over `components` + `nets` + `wires` + `project.board` — not a second schema. Complements the 2D breadboard bench; good for review, AI explanation, and validation overlays (Phase 2). |
+| **Wiring diagram view** | Board-centric schematic (reference: ESP32 pin column in the center, peripheral cards around it, color-coded orthogonal wires, pin labels like `TRIG → GPIO27`, short part descriptions). Read-only or lightly editable renderer over `components` + `nets` + `wires` + `project.board` — not a second schema. Complements the visual breadboard bench; good for review, AI explanation, and validation overlays (Phase 2). |
 
 **Likely placement:** Folder menu first; wiring diagram as a file/tab (e.g. `wiring.diagram` or in-app **Bench \| Diagram** toggle) once the file tree ships.
 
@@ -207,9 +206,8 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 ---
 
-## Phase 7 — 3D & advanced simulation (optional)
+## Phase 7 — Advanced simulation + board support (optional)
 
-- [ ] 3D breadboard view driven from same 2D graph (Three.js / R3F)
 - [ ] Additional board support
 - [ ] Richer peripheral models (I2C devices, PWM, analog warnings)
 - [ ] Analog / power sanity checks (simplified, not full SPICE)
@@ -220,7 +218,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 | # | Pillar | Primary phase(s) |
 |---|--------|----------------|
-| 1 | Studio (2D / 3D) | 1, 7 |
+| 1 | Studio Visual | 1 |
 | 2 | Functional wiring | 2 |
 | 3 | Simulation | 4 |
 | 4 | Deploy browser → device | 5 |
@@ -242,7 +240,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 ## What not to build first
 
-- Full 3D Studio before 2D graph works
+- Alternate dimensional views before the visual build flow is beginner-friendly
 - Full SPICE / analog simulation
 - Cycle-accurate ESP32 in-browser
 - LangChain agents before `validate` / `build` APIs exist
@@ -268,7 +266,7 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 |------|--------|
 | 2026-06-03 | Initial build plan from product brainstorm |
 | 2026-06-03 | Phase 0: 3D-native project schema, catalog, boards, io, example |
-| 2026-06-03 | Phase 1: Studio 2D (`/studio`), mutations, React Flow, localStorage, undo/redo |
+| 2026-06-03 | Phase 1: Studio Visual (`/studio`), mutations, React Flow, localStorage, undo/redo |
 | 2026-06-03 | Planned: project folder menu + wiring diagram view (board-centric schematic) after file tree ships |
 | 2026-06-05 | Phase 2 MVP: `src/lib/validation/`, Studio panel + overlays, Build/Deploy gate, `/api/validate` |
 | 2026-06-09 | Phase 2 hardening: protocol pairing, pin compatibility, power/floating warnings, connect preflight, net-row selection, API route tests |
@@ -277,3 +275,4 @@ mcp-server/            # Phase 6 — optional MCP wrapper
 | 2026-06-12 | Phase 6 foundation: model registry, deterministic agent workflow, `/api/agent/run`, Studio AI panel, wiring guide |
 | 2026-06-12 | Real AI provider path: OpenAI structured model client, agent schemas/prompts, model-backed clarifier/planner/circuit intent/wiring guide |
 | 2026-06-12 | Phase 6 multi-board: ESP32 + Arduino Uno LED blink AI targets, board-aware reference intents, Arduino reference circuit + codegen + mock sim, typed tool-call executor with post-batch validation |
+| 2026-07-14 | Studio beginner flow: renamed 2D/Code tabs to Visual/Firmware and added Components overview before Firmware |

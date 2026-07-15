@@ -92,7 +92,7 @@ function artifactWorktreePath(artifact: NonNullable<BuildResult['artifact']>): s
 }
 
 /**
- * Build the virtual PlatformIO worktree shown in Studio Code view.
+ * Build the virtual PlatformIO worktree shown in Studio Firmware view.
  * @param board Active project board profile.
  * @param buildResult Latest build result, if any.
  * @param projectName Optional project label for the tree root.

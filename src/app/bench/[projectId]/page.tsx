@@ -4,7 +4,7 @@ export const runtime = 'edge'
 
 export const metadata = {
   title: 'berry. | Bench',
-  description: '2D hardware bench: place parts, wire pins, generate firmware, build, and simulate.',
+  description: 'Visual hardware bench: place parts, review components, generate firmware, build, and simulate.',
 }
 
 /**

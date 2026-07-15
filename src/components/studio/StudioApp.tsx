@@ -20,7 +20,7 @@ import {
   type WireEndpointRef,
 } from '@/lib/project/mutations'
 import { parseBreadboardHoleLabel } from '@/lib/project/breadboard'
-import { getComponentDefinition, getWireTemplate } from '@/lib/project/catalog'
+import { getWireTemplate } from '@/lib/project/catalog'
 import type { BerryProject, BreadboardSite, ComponentTypeId, WireTypeId } from '@/lib/project/types'
 import {
   createDefaultFirmwareSource,
@@ -63,6 +63,7 @@ import {
   upsertCloudUserProject,
 } from '@/lib/projects/cloud-projects'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
+import { ComponentsOverviewPanel } from './ComponentsOverviewPanel'
 import {
   AIAssistantPanel,
   type AssistantTurn,
@@ -73,7 +74,6 @@ import { ComponentTray } from './ComponentTray'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
 import { FirmwareWorktreePanel } from './FirmwareWorktreePanel'
 import { PipelineTerminalPanel } from './PipelineTerminalPanel'
-import { Studio3DPlaceholder } from './Studio3DPlaceholder'
 import { StudioCanvas } from './StudioCanvas'
 import { StudioToolbar } from './StudioToolbar'
 import { ValidationFlyout } from './ValidationFlyout'
@@ -610,14 +610,14 @@ function newValidationErrors(
 }
 
 /**
- * Client Studio shell: visual tray, 2D canvas, persistence, undo/redo.
+ * Client Studio shell: visual bench, components overview, firmware, persistence, undo/redo.
  * @param props Studio route options.
  */
 export function StudioApp({ projectId }: { projectId?: string }) {
   const router = useRouter()
   const [status, setStatus] = useState<StudioStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<StudioViewMode>('2d')
+  const [viewMode, setViewMode] = useState<StudioViewMode>('visual')
   const [activeWireType, setActiveWireType] = useState<WireTypeId>('jumper-mm')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
@@ -923,7 +923,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     resetProject(nextProject)
     setSelectedNodeId(null)
     setSelectedWireId(null)
-    setViewMode('2d')
+    setViewMode('visual')
     if (notice) {
       setPipelineNotice(notice)
     }
@@ -1060,7 +1060,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             resetProject(acceptedProject)
             setSelectedNodeId(null)
             setSelectedWireId(null)
-            setViewMode('2d')
+            setViewMode('visual')
           }
           if (source) {
             setFirmwareSource(source)
@@ -1148,7 +1148,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         }
         setBuildResult(result.state.buildResult ?? null)
         setSimulationResult(result.state.simulationResult ?? null)
-        setViewMode('2d')
+        setViewMode('visual')
         setPipelineNotice('AI build loop completed')
       }
       if (result.status === 'failed') {
@@ -1276,7 +1276,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     setCurrentWiringGuide(null)
     setAssistantTurn(null)
     setErrorMessage(null)
-    setViewMode('2d')
+    setViewMode('visual')
   }, [projectId, resetProject, router, signedIn])
 
   const handleLoadExample = useCallback(async () => {
@@ -1297,7 +1297,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setAgentResult(null)
       setCurrentWiringGuide(null)
       setAssistantTurn(null)
-      setViewMode('2d')
+      setViewMode('visual')
       setStatus('ready')
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : 'Failed to load example')
@@ -1637,12 +1637,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
 
         <div className="flex min-h-0 flex-1">
           <div className="flex min-h-0 flex-1 gap-0">
-            {viewMode === 'code' ? (
+            {viewMode === 'firmware' ? (
               <>
-                  <FirmwareWorktreePanel
-                    board={project.board}
-                    projectName={projectTitle(project)}
-                    buildResult={buildResult}
+                <FirmwareWorktreePanel
+                  board={project.board}
+                  projectName={projectTitle(project)}
+                  buildResult={buildResult}
                   selectedPath={selectedFirmwarePath}
                   onSelectPath={setSelectedFirmwarePath}
                 />
@@ -1659,6 +1659,18 @@ export function StudioApp({ projectId }: { projectId?: string }) {
                   />
                 </div>
               </>
+            ) : viewMode === 'components' ? (
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {isEmpty ? (
+                  <EmptyBench
+                    state={emptyBenchState}
+                    onNew={handleNew}
+                    onLoadExample={handleLoadExample}
+                  />
+                ) : (
+                  <ComponentsOverviewPanel project={project} />
+                )}
+              </div>
             ) : (
               <>
                 <ComponentTray
@@ -1674,40 +1686,19 @@ export function StudioApp({ projectId }: { projectId?: string }) {
                       onLoadExample={handleLoadExample}
                     />
                   ) : (
-                    <>
-                      {viewMode === '2d' ? (
-                        <StudioCanvas
-                          project={project}
-                          activeWireType={activeWireType}
-                          selectedNodeId={selectedNodeId}
-                          selectedWireId={selectedWireId}
-                          validationResults={validationResults}
-                          onProjectChange={setProject}
-                          onPartDrop={handleDropPart}
-                          onWireConnect={handleWireConnect}
-                          onSelectionChange={handleSelectionChange}
-                          onWireSelectionChange={handleWireSelectionChange}
-                          onPlacementError={setErrorMessage}
-                        />
-                      ) : (
-                        <div className="relative h-full min-h-0">
-                          <StudioCanvas
-                            project={project}
-                            activeWireType={activeWireType}
-                            selectedNodeId={selectedNodeId}
-                            selectedWireId={selectedWireId}
-                            validationResults={validationResults}
-                            onProjectChange={setProject}
-                            onPartDrop={handleDropPart}
-                            onWireConnect={() => {}}
-                            onSelectionChange={handleSelectionChange}
-                            onWireSelectionChange={handleWireSelectionChange}
-                            onPlacementError={setErrorMessage}
-                          />
-                          <Studio3DPlaceholder />
-                        </div>
-                      )}
-                    </>
+                    <StudioCanvas
+                      project={project}
+                      activeWireType={activeWireType}
+                      selectedNodeId={selectedNodeId}
+                      selectedWireId={selectedWireId}
+                      validationResults={validationResults}
+                      onProjectChange={setProject}
+                      onPartDrop={handleDropPart}
+                      onWireConnect={handleWireConnect}
+                      onSelectionChange={handleSelectionChange}
+                      onWireSelectionChange={handleWireSelectionChange}
+                      onPlacementError={setErrorMessage}
+                    />
                   )}
                 </div>
                 {selectedNodeId && !isEmpty && (
@@ -1776,25 +1767,6 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           onClearBuild={() => setBuildResult(null)}
           onClearSimulation={() => setSimulationResult(null)}
         />
-
-        {/* {viewMode === '2d' && !isEmpty && (
-          <div
-            className="rounded-xl px-4 py-2.5 text-center text-xs font-semibold"
-            style={{ background: 'rgba(15,168,134,0.08)', color: 'var(--leaf)' }}
-          >
-            <strong>Wiring</strong> ({getComponentDefinition(activeWireType).name}): drag from a pin
-            to another pin, or drop it onto a breadboard hole to plug in. Click a wire to
-            select it; press{' '}
-            <kbd className="rounded px-1 py-0.5 text-[10px]" style={{ background: 'var(--bg-elevated)' }}>
-              Delete
-            </kbd>{' '}
-            or toolbar Delete to remove. Press{' '}
-            <kbd className="rounded px-1 py-0.5 text-[10px]" style={{ background: 'var(--bg-elevated)' }}>
-              Esc
-            </kbd>{' '}
-            to cancel wire placement.
-          </div>
-        )} */}
       </div>
     </div>
     </>

@@ -96,7 +96,7 @@ export function StudioToolbar({
 
       <div className="flex items-center gap-1">
         <IconButton label="New chat-ready project" icon={Sparkles} onClick={onNew} />
-        <IconButton label="Load example" icon={FolderOpen} onClick={onLoadExample} />
+        {/* <IconButton label="Load example" icon={FolderOpen} onClick={onLoadExample} /> */}
         <IconButton label="Save" icon={Save} onClick={onSave} />
         <IconButton label="Undo" icon={Undo2} onClick={onUndo} disabled={!canUndo} />
         <IconButton label="Redo" icon={Redo2} onClick={onRedo} disabled={!canRedo} />

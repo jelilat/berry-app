@@ -2,10 +2,10 @@
 
 import type { ReactNode } from 'react'
 
-export type StudioViewMode = '2d' | 'code' | '3d'
+export type StudioViewMode = 'visual' | 'components' | 'firmware'
 
 /**
- * Studio workspace view switcher. 3D is reserved for a later phase.
+ * Studio workspace view switcher for the beginner build flow.
  * @param viewMode Active view.
  * @param onChange Called when the user picks a workspace view.
  */
@@ -23,14 +23,14 @@ export function ViewModeToggle({
       role="group"
       aria-label="Bench view mode"
     >
-      <ViewButton active={viewMode === '2d'} onClick={() => onChange('2d')}>
-        2D
+      <ViewButton active={viewMode === 'visual'} onClick={() => onChange('visual')}>
+        Visual
       </ViewButton>
-      <ViewButton active={viewMode === 'code'} onClick={() => onChange('code')}>
-        Code
+      <ViewButton active={viewMode === 'components'} onClick={() => onChange('components')}>
+        Components
       </ViewButton>
-      <ViewButton active={viewMode === '3d'} onClick={() => onChange('3d')}>
-        3D
+      <ViewButton active={viewMode === 'firmware'} onClick={() => onChange('firmware')}>
+        Firmware
       </ViewButton>
     </div>
   )

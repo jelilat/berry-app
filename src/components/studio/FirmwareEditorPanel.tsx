@@ -20,7 +20,7 @@ function countLines(source: string): number {
 }
 
 /**
- * Browser firmware editor for a worktree file in the Code workspace.
+ * Browser firmware editor for a worktree file in the Firmware workspace.
  * @param props Editor state and event handlers.
  */
 export function FirmwareEditorPanel({

@@ -32,7 +32,7 @@ const STATUS_TINT: Record<FirmwareWorktreeFileStatus, string> = {
 }
 
 /**
- * Left-rail firmware worktree for the Code workspace.
+ * Left-rail firmware worktree for the Firmware workspace.
  */
 export function FirmwareWorktreePanel({
   board,

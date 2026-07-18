@@ -3,13 +3,15 @@
 import {
   Bot,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
-  Clipboard,
+  Copy,
   GripVertical,
   Image as ImageIcon,
   MessageSquare,
+  Pencil,
   Plus,
   Send,
   Sparkles,
@@ -48,6 +50,16 @@ import {
   ASSISTANT_PANEL_WIDTH_MIN,
   ASSISTANT_PANEL_WIDTH_STORAGE_KEY,
 } from '@/lib/studio/constants'
+import {
+  loadSelectedModelId,
+  loadSelectedReasoningId,
+  resolveUserModel,
+  saveSelectedModelId,
+  saveSelectedReasoningId,
+  USER_MODEL_OPTIONS,
+  USER_REASONING_OPTIONS,
+  type UserReasoningEffort,
+} from '@/lib/studio/user-models'
 import { useRightDockedResizableWidth } from '@/lib/studio/use-resizable-width'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getBoardProfile } from '@/lib/project/boards'
@@ -148,6 +160,8 @@ export function AIAssistantPanel({
   ) => void | Promise<void>
 }) {
   const [prompt, setPrompt] = useState('')
+  const [selectedModelId, setSelectedModelId] = useState(USER_MODEL_OPTIONS[0]!.id)
+  const [selectedReasoningId, setSelectedReasoningId] = useState<UserReasoningEffort>('medium')
   const [imageAttachments, setImageAttachments] = useState<AgentImageAttachment[]>([])
   const [imageError, setImageError] = useState<string | null>(null)
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({})
@@ -168,6 +182,7 @@ export function AIAssistantPanel({
     [activeChatId, chats],
   )
   const activeChatPending = isChatPending(pendingChatIds, activeChat?.id)
+  const selectedModel = useMemo(() => resolveUserModel(selectedModelId), [selectedModelId])
 
   const choiceRequest = useMemo(() => choiceRequestFromResult(result), [result])
   const clarificationRequest = useMemo(() => clarificationRequestFromResult(result), [result])
@@ -179,6 +194,11 @@ export function AIAssistantPanel({
     }),
     [backendRunRecord, clarificationSubmitted, loading, result],
   )
+
+  useEffect(() => {
+    setSelectedModelId(loadSelectedModelId())
+    setSelectedReasoningId(loadSelectedReasoningId())
+  }, [])
 
   useEffect(() => {
     setClarificationAnswers({})
@@ -336,6 +356,28 @@ export function AIAssistantPanel({
   }
 
   /**
+   * Persist and apply the selected assistant model.
+   * @param modelId User-facing model option id.
+   */
+  function handleModelChange(modelId: string) {
+    const nextModel = resolveUserModel(modelId)
+    setSelectedModelId(nextModel.id)
+    saveSelectedModelId(nextModel.id)
+  }
+
+  /**
+   * Persist and apply the selected reasoning effort.
+   * @param reasoningId User-facing reasoning effort id.
+   */
+  function handleReasoningChange(reasoningId: string) {
+    const nextReasoning =
+      USER_REASONING_OPTIONS.find((option) => option.id === reasoningId) ??
+      USER_REASONING_OPTIONS[1]!
+    setSelectedReasoningId(nextReasoning.id)
+    saveSelectedReasoningId(nextReasoning.id)
+  }
+
+  /**
    * Delete the active chat session.
    */
   function handleDeleteChat() {
@@ -349,6 +391,58 @@ export function AIAssistantPanel({
       setActiveChatId(next[0]!.id)
       return next
     })
+  }
+
+  /**
+   * Submit an edited user prompt as a fresh assistant turn.
+   * @param messageId Original message id that supplied the edit action.
+   * @param text Edited prompt text to send.
+   */
+  async function handleEditPromptMessage(messageId: string, text: string) {
+    const cleanText = text.trim()
+    if (!cleanText || activeChatPending) return
+    const chat = activeChat ?? createChat()
+    const userMessage: BenchMessage = {
+      id: `user_edit_${messageId}_${Date.now()}`,
+      role: 'user',
+      text: cleanText,
+    }
+    if (!activeChat) {
+      setChats((current) => [chat, ...current])
+      setActiveChatId(chat.id)
+    }
+    setChats((current) =>
+      current.map((item) =>
+        item.id === chat.id
+          ? {
+              ...item,
+              title: item.messages.length === 0 ? titleFromPrompt(cleanText) : item.title,
+              messages: [
+                ...item.messages,
+                userMessage,
+              ],
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    )
+    setChatPending(chat.id, true)
+    try {
+      await onSubmit(
+        cleanText,
+        selectedModel.mode,
+        selectedModel.provider,
+        selectedModel.model,
+        selectedReasoningId,
+        undefined,
+        {
+          activeChatId: chat.id,
+          chatHistory: projectChatHistoryForSubmit(chats, chat),
+        },
+      )
+    } finally {
+      setChatPending(chat.id, false)
+    }
   }
 
   /**
@@ -461,14 +555,14 @@ export function AIAssistantPanel({
     try {
       await onSubmit(
         promptForWorkflow(chat.messages, submittedPromptText),
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+        selectedModel.mode,
+        selectedModel.provider,
+        selectedModel.model,
+        selectedReasoningId,
         undefined,
         {
           activeChatId: chat.id,
-          chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
+          chatHistory: projectChatHistoryForSubmit(chats, chat),
           attachments: attachments.map(agentAttachmentFromImage),
         },
       )
@@ -514,14 +608,14 @@ export function AIAssistantPanel({
     try {
       await onSubmit(
         promptForChoice(result, chat.messages, cleanOption),
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+        selectedModel.mode,
+        selectedModel.provider,
+        selectedModel.model,
+        selectedReasoningId,
         undefined,
         {
           activeChatId: chat.id,
-          chatHistory: projectChatHistoryForSubmit(chats, chat, [userMessage]),
+          chatHistory: projectChatHistoryForSubmit(chats, chat),
         },
       )
     } finally {
@@ -578,31 +672,31 @@ export function AIAssistantPanel({
       if (clarificationRequest.source === 'followup') {
         await onSubmit(
           followupAnswerMessage,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+          selectedModel.mode,
+          selectedModel.provider,
+          selectedModel.model,
+          selectedReasoningId,
           undefined,
           {
             activeChatId: chat.id,
-            chatHistory: projectChatHistoryForSubmit(chats, chat, transcriptMessages),
+            chatHistory: projectChatHistoryForSubmit(chats, chat),
           },
         )
         return
       }
       await onSubmit(
         clarificationRequest.userPrompt,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+        selectedModel.mode,
+        selectedModel.provider,
+        selectedModel.model,
+        selectedReasoningId,
         {
           runId: clarificationRequest.runId,
           answers,
         },
         {
           activeChatId: chat.id,
-          chatHistory: projectChatHistoryForSubmit(chats, chat, transcriptMessages),
+          chatHistory: projectChatHistoryForSubmit(chats, chat),
         },
       )
     } finally {
@@ -702,7 +796,12 @@ export function AIAssistantPanel({
         {activeChat?.messages.length ? (
           <div className="space-y-3">
             {activeChat.messages.map((message) => (
-              <ChatBubble key={message.id} message={message} />
+              <ChatBubble
+                key={message.id}
+                message={message}
+                editDisabled={activeChatPending}
+                onEdit={handleEditPromptMessage}
+              />
             ))}
             {clarificationRequest ? (
               <ClarificationForm
@@ -741,6 +840,32 @@ export function AIAssistantPanel({
       </div>
 
       <div className="shrink-0 border-t p-3" style={{ borderColor: 'var(--border)' }}>
+        <div className="mb-2 grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+          <AssistantSelect
+            ariaLabel="Assistant model"
+            value={selectedModelId}
+            disabled={activeChatPending}
+            onChange={handleModelChange}
+          >
+            {USER_MODEL_OPTIONS.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label}
+              </option>
+            ))}
+          </AssistantSelect>
+          <AssistantSelect
+            ariaLabel="Reasoning effort"
+            value={selectedReasoningId}
+            disabled={activeChatPending}
+            onChange={handleReasoningChange}
+          >
+            {USER_REASONING_OPTIONS.map((reasoning) => (
+              <option key={reasoning.id} value={reasoning.id}>
+                {reasoning.label}
+              </option>
+            ))}
+          </AssistantSelect>
+        </div>
         {imageAttachments.length > 0 || imageError ? (
           <div className="mb-2 space-y-2">
             {imageAttachments.length > 0 ? (
@@ -814,28 +939,198 @@ export function AIAssistantPanel({
 }
 
 /**
- * Render one compact chat bubble.
- * @param props Chat message.
+ * Render one compact chat bubble with prompt edit and transcript copy actions.
+ * @param props Chat message, edit state, and edit callback.
  */
-function ChatBubble({ message }: { message: BenchMessage }) {
+function ChatBubble({
+  message,
+  editDisabled,
+  onEdit,
+}: {
+  message: BenchMessage
+  editDisabled: boolean
+  onEdit: (messageId: string, text: string) => void | Promise<void>
+}) {
   const isUser = message.role === 'user'
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const [editing, setEditing] = useState(false)
+  const [draftText, setDraftText] = useState(message.text)
+
+  useEffect(() => {
+    if (!editing) {
+      setDraftText(message.text)
+    }
+  }, [editing, message.text])
+
+  useEffect(() => {
+    if (copyState === 'idle') return undefined
+    const timeout = window.setTimeout(() => setCopyState('idle'), COPY_FEEDBACK_MS)
+    return () => window.clearTimeout(timeout)
+  }, [copyState])
+
+  /**
+   * Copy the whole chat message to the system clipboard.
+   */
+  async function handleCopyMessage() {
+    try {
+      await copyTextToClipboard(message.text)
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+  }
+
+  /**
+   * Enter inline prompt editing for this user message.
+   */
+  function handleStartEditing() {
+    setDraftText(message.text)
+    setEditing(true)
+  }
+
+  /**
+   * Discard the current prompt edit draft.
+   */
+  function handleCancelEditing() {
+    setDraftText(message.text)
+    setEditing(false)
+  }
+
+  /**
+   * Save the current prompt edit draft.
+   */
+  async function handleSaveEditing() {
+    const cleanText = draftText.trim()
+    if (!cleanText || editDisabled) return
+    setEditing(false)
+    await onEdit(message.id, cleanText)
+  }
+
   return (
     <div
-      className="rounded-xl px-4 py-3 text-sm font-semibold leading-relaxed"
+      className="group"
       style={{
         marginLeft: isUser ? 28 : 0,
         marginRight: isUser ? 0 : 28,
-        background: isUser ? 'rgba(214,51,108,0.1)' : 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        color: 'var(--text-primary)',
       }}
     >
-      <div className="mb-1 flex items-center gap-1.5 text-xs font-extrabold" style={{ color: isUser ? 'var(--accent)' : 'var(--leaf)' }}>
-        {isUser ? <MessageSquare size={13} /> : <Bot size={13} />}
-        {isUser ? 'You' : ASSISTANT_NAME}
+      <div
+        className="rounded-xl px-4 py-3 text-sm font-semibold leading-relaxed"
+        style={{
+          background: isUser ? 'rgba(214,51,108,0.1)' : 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-primary)',
+        }}
+      >
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-extrabold" style={{ color: isUser ? 'var(--accent)' : 'var(--leaf)' }}>
+          {isUser ? <MessageSquare size={13} /> : <Bot size={13} />}
+          <span>{isUser ? 'You' : ASSISTANT_NAME}</span>
+        </div>
+        {editing ? (
+          <div className="space-y-2">
+            <textarea
+              value={draftText}
+              onChange={(event) => setDraftText(event.target.value)}
+              rows={Math.min(8, Math.max(3, draftText.split('\n').length))}
+              className="min-h-[96px] w-full resize-y rounded-lg bg-transparent px-3 py-2 text-sm font-semibold leading-relaxed outline-none"
+              style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleCancelEditing}
+                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                title="Cancel edit"
+              >
+                <X size={14} />
+              </button>
+              <button
+                type="button"
+                disabled={editDisabled || draftText.trim().length === 0}
+                onClick={handleSaveEditing}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-white disabled:cursor-not-allowed disabled:opacity-45"
+                style={{ background: 'var(--accent)' }}
+                title="Save prompt"
+              >
+                <Check size={14} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <MarkdownContent text={message.text} />
+        )}
       </div>
-      <MarkdownContent text={message.text} />
+      {!editing ? (
+        <div
+          className={`mt-1.5 flex items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100 ${isUser ? 'justify-end pr-3' : 'justify-start pl-3'}`}
+        >
+          <button
+            type="button"
+            onClick={() => void handleCopyMessage()}
+            className="flex h-7 w-7 items-center justify-center rounded-md"
+            style={{ color: copyState === 'failed' ? 'var(--accent)' : 'var(--text-muted)' }}
+            title={copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : `Copy ${isUser ? 'prompt' : 'response'}`}
+          >
+            {copyState === 'copied' ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+          {isUser ? (
+            <button
+              type="button"
+              disabled={editDisabled}
+              onClick={handleStartEditing}
+              className="flex h-7 w-7 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ color: 'var(--text-muted)' }}
+              title="Edit prompt"
+            >
+              <Pencil size={14} />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+/**
+ * Render one compact assistant settings select.
+ * @param props Select label, value, disabled state, change callback, and options.
+ */
+function AssistantSelect({
+  ariaLabel,
+  value,
+  disabled,
+  onChange,
+  children,
+}: {
+  ariaLabel: string
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+  children: ReactNode
+}) {
+  return (
+    <label
+      className="relative flex h-9 min-w-0 items-center rounded-lg"
+      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+    >
+      <select
+        aria-label={ariaLabel}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-full w-full appearance-none truncate rounded-lg bg-transparent pl-3 pr-8 text-xs font-extrabold outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        size={14}
+        className="pointer-events-none absolute right-2.5"
+        style={{ color: 'var(--text-muted)' }}
+      />
+    </label>
   )
 }
 
@@ -1007,7 +1302,7 @@ function CopyableCodeBlock({ text }: { text: string }) {
         }}
         title="Copy code"
       >
-        {copyState === 'copied' ? <Check size={12} /> : <Clipboard size={12} />}
+        {copyState === 'copied' ? <Check size={12} /> : <Copy size={12} />}
         {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Failed' : 'Copy'}
       </button>
       <pre className="overflow-x-auto p-3 pr-20 text-xs font-semibold">
@@ -1831,20 +2126,16 @@ function appendUniqueMessage(messages: BenchMessage[], message: BenchMessage): B
 }
 
 /**
- * Convert the active bench chat into backend follow-up history.
+ * Convert the active bench chat into backend follow-up history before the latest turn.
  * @param chats Current project chat sessions.
- * @param activeChat Chat that is receiving the new messages.
- * @param pendingMessages Messages being submitted before React state updates.
+ * @param activeChat Chat that is receiving the latest message separately.
  */
 function projectChatHistoryForSubmit(
   chats: BenchChat[],
   activeChat: BenchChat,
-  pendingMessages: BenchMessage[],
 ): AgentProjectChatContext['chatHistory'] {
   const sourceChat = chats.find((chat) => chat.id === activeChat.id) ?? activeChat
-  return sourceChat.messages
-    .concat(pendingMessages)
-    .map((message) => ({ role: message.role, content: message.text }))
+  return sourceChat.messages.map((message) => ({ role: message.role, content: message.text }))
 }
 
 /**

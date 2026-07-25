@@ -26,6 +26,7 @@ import {
   createDefaultFirmwareSource,
   createEsp32BlinkFirmwareSource,
   DEFAULT_FIRMWARE_PATH,
+  shouldPreserveExistingFirmwareSource,
 } from '@/lib/firmware/source'
 import type { BuildResult } from '@/lib/build/types'
 import type { SimulationResult } from '@/lib/simulation'
@@ -1015,6 +1016,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         }
         if (record.status === 'completed' && record.result?.kind === 'modification') {
           let acceptedProject: BerryProject | undefined
+          let preservedExistingFirmware = false
           const source = record.result.firmwareFiles?.[DEFAULT_FIRMWARE_PATH]
           const nextWiringGuide = record.result.wiringGuide?.trim()
           const appliedChanges: AppliedFollowupChanges = {
@@ -1063,8 +1065,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             setViewMode('visual')
           }
           if (source) {
-            setFirmwareSource(source)
-            setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+            if (shouldPreserveExistingFirmwareSource(firmwareSource, source)) {
+              preservedExistingFirmware = true
+            } else {
+              setFirmwareSource(source)
+              setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+            }
           }
           if (nextWiringGuide) {
             setCurrentWiringGuide(nextWiringGuide)
@@ -1072,7 +1078,9 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           setPipelineNotice(
             appliedChanges.projectChanged
               ? 'Project chat update applied'
-              : appliedChanges.firmwareChanged
+              : preservedExistingFirmware
+                ? 'Kept existing firmware; ignored an empty generated sketch'
+                : appliedChanges.firmwareChanged
                 ? 'Firmware update applied'
                 : appliedChanges.wiringGuideChanged
                   ? 'Wiring guide update applied'
@@ -1139,17 +1147,26 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setAgentResult(result)
       setAgentWaitingForAnswers(result.status === 'needs_clarification')
       if (result.status === 'completed') {
+        let preservedExistingFirmware = false
         setCurrentWiringGuide(result.state.wiringGuide ?? null)
         visualizeAgentProject(result)
         const source = result.state.firmwareFiles[DEFAULT_FIRMWARE_PATH]
         if (source) {
-          setFirmwareSource(source)
-          setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+          if (shouldPreserveExistingFirmwareSource(firmwareSource, source)) {
+            preservedExistingFirmware = true
+          } else {
+            setFirmwareSource(source)
+            setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
+          }
         }
         setBuildResult(result.state.buildResult ?? null)
         setSimulationResult(result.state.simulationResult ?? null)
         setViewMode('visual')
-        setPipelineNotice('AI build loop completed')
+        setPipelineNotice(
+          preservedExistingFirmware
+            ? 'Kept existing firmware; ignored an empty generated sketch'
+            : 'AI build loop completed',
+        )
       }
       if (result.status === 'failed') {
         setAgentWaitingForAnswers(false)

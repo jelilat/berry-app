@@ -6,7 +6,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Current phase:** Phase 6 — AI build loop demo (Phase 5 deploy intentionally deferred)
 
-**Last updated:** 2026-07-14
+**Last updated:** 2026-07-22
 
 ---
 
@@ -201,6 +201,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 - [x] Board-aware AI build loop: ESP32 DevKit V1 **and** Arduino Uno LED blink as first-class targets
 - [x] Board-aware reference intents (`esp32_led_blink`, `arduino_uno_led_blink`, `unsupported`)
 - [x] Typed structured tool-call executor (`studio.set_board`, `studio.add_component`, `studio.connect_terminals`, `studio.move_component`, `project.validate`) with post-batch validation; no raw `project.json` edits
+- [x] Hosted run modes (`ask`, `build`, `auto`) with explicit Ask/Build composer controls, Ask-safe rendering, conversation handoff, and “Build this” action
 
 **Exit criteria:** One polished scripted “talk → design → build → simulate” demo without manual canvas edits, suitable for a short product video.
 

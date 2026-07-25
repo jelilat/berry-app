@@ -38,6 +38,7 @@ import type {
   AgentFollowupResult,
   AgentFollowupRecord,
   AgentProjectIterationContext,
+  AgentRunMode,
   AgentRunResult,
 } from '@/lib/agent/types'
 import { isTerminalAgentRun, type AgentRunPollingOptions } from '@/lib/agent/polling'
@@ -292,7 +293,11 @@ function resultFromRunRecord(record: AgentBackendRunRecord): AgentRunResult | nu
  */
 function visualizableResultFromRunRecord(record: AgentBackendRunRecord): AgentRunResult | null {
   const terminalResult = resultFromRunRecord(record)
-  if (terminalResult) return terminalResult
+  if (terminalResult) {
+    return terminalResult.kind === 'answer' || terminalResult.resolvedMode === 'ask'
+      ? null
+      : terminalResult
+  }
 
   if (record.partialResult?.state?.project) {
     return record.partialResult
@@ -647,7 +652,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const handleAgentRunRef = useRef<
     (
       prompt: string,
-      mode?: 'auto' | 'deterministic' | 'real',
+      mode?: AgentRunMode,
       provider?: string,
       model?: string,
       reasoningEffort?: string,
@@ -912,6 +917,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
    * @param notice Optional status notice after visualizing the graph.
    */
   const visualizeAgentProject = useCallback((result: AgentRunResult, notice?: string) => {
+    if (result.kind === 'answer' || result.resolvedMode === 'ask') return
     if (!result.state.circuitIntent && result.status !== 'completed') return
     const nextProject = replaceProject(
       preserveProjectIdentity(project, result.state.project),
@@ -932,14 +938,14 @@ export function StudioApp({ projectId }: { projectId?: string }) {
 
   const handleAgentRun = useCallback(async (
     prompt: string,
-    mode: 'auto' | 'deterministic' | 'real' = 'auto',
+    mode: AgentRunMode = 'build',
     provider?: string,
     model?: string,
     reasoningEffort?: string,
     answerSubmission?: AgentAnswerSubmission,
     chatContext?: ProjectChatSubmitContext,
   ) => {
-    const isProjectChatRequest = !!chatContext && !answerSubmission
+    const isProjectChatRequest = !!chatContext && !chatContext.startRun && !answerSubmission
     if ((!isProjectChatRequest && agentLoading) || prompt.trim().length === 0) return
     if (!isProjectChatRequest && agentWaitingForAnswers && !answerSubmission) return
     setAgentPendingRequestCount((count) => count + 1)
@@ -1110,8 +1116,8 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             body: JSON.stringify({
               prompt,
               project,
-              projectContext,
               mode,
+              chatHistory: chatContext?.chatHistory,
               provider,
               model,
               reasoningEffort,
@@ -1147,6 +1153,10 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setAgentResult(result)
       setAgentWaitingForAnswers(result.status === 'needs_clarification')
       if (result.status === 'completed') {
+        if (result.kind === 'answer' || result.resolvedMode === 'ask') {
+          setPipelineNotice('Ask response ready')
+          return
+        }
         let preservedExistingFirmware = false
         setCurrentWiringGuide(result.state.wiringGuide ?? null)
         visualizeAgentProject(result)

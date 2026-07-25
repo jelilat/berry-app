@@ -33,6 +33,7 @@ import type {
   AgentBackendRunRecord,
   AgentImageAttachment,
   AgentProjectChatContext,
+  AgentRunMode,
   AgentRunResult,
   ClarifyingQuestion,
 } from '@/lib/agent/types'
@@ -53,12 +54,15 @@ import {
 import {
   loadSelectedModelId,
   loadSelectedReasoningId,
+  loadSelectedRunMode,
   resolveUserModel,
   saveSelectedModelId,
   saveSelectedReasoningId,
+  saveSelectedRunMode,
   USER_MODEL_OPTIONS,
   USER_REASONING_OPTIONS,
   type UserReasoningEffort,
+  type UserRunMode,
 } from '@/lib/studio/user-models'
 import { useRightDockedResizableWidth } from '@/lib/studio/use-resizable-width'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -151,7 +155,7 @@ export function AIAssistantPanel({
   clarificationSubmitted?: boolean
   onSubmit: (
     prompt: string,
-    mode?: 'auto' | 'deterministic' | 'real',
+    mode?: AgentRunMode,
     provider?: string,
     model?: string,
     reasoningEffort?: string,
@@ -162,6 +166,7 @@ export function AIAssistantPanel({
   const [prompt, setPrompt] = useState('')
   const [selectedModelId, setSelectedModelId] = useState(USER_MODEL_OPTIONS[0]!.id)
   const [selectedReasoningId, setSelectedReasoningId] = useState<UserReasoningEffort>('medium')
+  const [selectedRunMode, setSelectedRunMode] = useState<UserRunMode>('build')
   const [imageAttachments, setImageAttachments] = useState<AgentImageAttachment[]>([])
   const [imageError, setImageError] = useState<string | null>(null)
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({})
@@ -198,6 +203,7 @@ export function AIAssistantPanel({
   useEffect(() => {
     setSelectedModelId(loadSelectedModelId())
     setSelectedReasoningId(loadSelectedReasoningId())
+    setSelectedRunMode(loadSelectedRunMode())
   }, [])
 
   useEffect(() => {
@@ -378,6 +384,15 @@ export function AIAssistantPanel({
   }
 
   /**
+   * Persist the explicit behavior for the next newly created run.
+   * @param mode Selected Ask/Build behavior.
+   */
+  function handleRunModeChange(mode: UserRunMode) {
+    setSelectedRunMode(mode)
+    saveSelectedRunMode(mode)
+  }
+
+  /**
    * Delete the active chat session.
    */
   function handleDeleteChat() {
@@ -430,7 +445,7 @@ export function AIAssistantPanel({
     try {
       await onSubmit(
         cleanText,
-        selectedModel.mode,
+        selectedRunMode,
         selectedModel.provider,
         selectedModel.model,
         selectedReasoningId,
@@ -552,10 +567,14 @@ export function AIAssistantPanel({
     clearImageAttachments()
     setImageError(null)
     setChatPending(chat.id, true)
+    const startRun = chat.messages.length === 0 && attachments.length === 0
+    if (startRun) {
+      submittedChatIdRef.current = chat.id
+    }
     try {
       await onSubmit(
         promptForWorkflow(chat.messages, submittedPromptText),
-        selectedModel.mode,
+        selectedRunMode,
         selectedModel.provider,
         selectedModel.model,
         selectedReasoningId,
@@ -564,10 +583,54 @@ export function AIAssistantPanel({
           activeChatId: chat.id,
           chatHistory: projectChatHistoryForSubmit(chats, chat),
           attachments: attachments.map(agentAttachmentFromImage),
+          startRun,
         },
       )
     } finally {
       setChatPending(chat.id, false)
+    }
+  }
+
+  /** Start a Build run using the current Ask conversation as context. */
+  async function handleBuildThis() {
+    if (activeChatPending || !activeChat) return
+    const buildPrompt = 'Build this based on our discussion.'
+    const userMessage: BenchMessage = {
+      id: `user_build_${Date.now()}`,
+      role: 'user',
+      text: buildPrompt,
+    }
+    setSelectedRunMode('build')
+    saveSelectedRunMode('build')
+    setChats((current) =>
+      current.map((chat) =>
+        chat.id === activeChat.id
+          ? {
+              ...chat,
+              messages: [...chat.messages, userMessage],
+              updatedAt: new Date().toISOString(),
+            }
+          : chat,
+      ),
+    )
+    submittedChatIdRef.current = activeChat.id
+    setChatPending(activeChat.id, true)
+    try {
+      await onSubmit(
+        buildPrompt,
+        'build',
+        selectedModel.provider,
+        selectedModel.model,
+        selectedReasoningId,
+        undefined,
+        {
+          activeChatId: activeChat.id,
+          chatHistory: projectChatHistoryForSubmit(chats, activeChat),
+          startRun: true,
+        },
+      )
+    } finally {
+      setChatPending(activeChat.id, false)
     }
   }
 
@@ -608,7 +671,7 @@ export function AIAssistantPanel({
     try {
       await onSubmit(
         promptForChoice(result, chat.messages, cleanOption),
-        selectedModel.mode,
+        selectedRunMode,
         selectedModel.provider,
         selectedModel.model,
         selectedReasoningId,
@@ -672,7 +735,7 @@ export function AIAssistantPanel({
       if (clarificationRequest.source === 'followup') {
         await onSubmit(
           followupAnswerMessage,
-          selectedModel.mode,
+          selectedRunMode,
           selectedModel.provider,
           selectedModel.model,
           selectedReasoningId,
@@ -686,7 +749,7 @@ export function AIAssistantPanel({
       }
       await onSubmit(
         clarificationRequest.userPrompt,
-        selectedModel.mode,
+        selectedRunMode,
         selectedModel.provider,
         selectedModel.model,
         selectedReasoningId,
@@ -818,6 +881,19 @@ export function AIAssistantPanel({
                 onSelect={handleSelectChoice}
               />
             ) : null}
+            {result?.status === 'completed' &&
+            (result.kind === 'answer' || result.resolvedMode === 'ask') &&
+            activeChat?.id === submittedChatIdRef.current ? (
+              <button
+                type="button"
+                onClick={() => void handleBuildThis()}
+                disabled={activeChatPending}
+                className="w-full rounded-xl px-4 py-2.5 text-sm font-extrabold text-white disabled:opacity-45"
+                style={{ background: 'var(--accent)' }}
+              >
+                Build this
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3">
@@ -840,6 +916,31 @@ export function AIAssistantPanel({
       </div>
 
       <div className="shrink-0 border-t p-3" style={{ borderColor: 'var(--border)' }}>
+        {!activeChat?.messages.length ? (
+          <div
+            className="mb-2 inline-flex rounded-lg p-1"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+            aria-label="Run mode"
+          >
+            {(['ask', 'build'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => handleRunModeChange(mode)}
+                disabled={activeChatPending || !!clarificationRequest}
+                className="rounded-md px-3 py-1.5 text-xs font-extrabold capitalize disabled:opacity-45"
+                style={{
+                  background:
+                    selectedRunMode === mode ? 'rgba(214,51,108,0.12)' : 'transparent',
+                  color: selectedRunMode === mode ? 'var(--accent)' : 'var(--text-secondary)',
+                }}
+                aria-pressed={selectedRunMode === mode}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="mb-2 grid grid-cols-[minmax(0,1fr)_112px] gap-2">
           <AssistantSelect
             ariaLabel="Assistant model"
@@ -1690,6 +1791,10 @@ function summarizeAgentResult(result: AgentRunResult): string {
 function renderAiResponseTemplate(result: AgentRunResult): string {
   if (result.status === 'needs_clarification' && result.state.clarification.status === 'needs_clarification') {
     return ''
+  }
+
+  if (result.kind === 'answer' || result.resolvedMode === 'ask') {
+    return result.message?.trim() || 'Pip finished the discussion without returning a message.'
   }
 
   if (isScriptedStarterResult(result)) {

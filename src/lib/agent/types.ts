@@ -186,15 +186,25 @@ export interface AgentProjectChatContext {
   activeChatId?: string
   chatHistory: AgentProjectChatMessage[]
   attachments?: AgentAttachment[]
+  /** Start a new run instead of sending a project follow-up. */
+  startRun?: boolean
 }
+
+/** User-selectable behavior for a newly created agent run. */
+export type AgentRunMode = 'ask' | 'build' | 'auto'
+
+/** Concrete workflow selected by the backend for a completed run. */
+export type AgentResolvedRunMode = 'ask' | 'build'
 
 /** Input payload for an AI workflow run. */
 export interface AgentRunInput {
   prompt: string
+  chatHistory?: AgentProjectChatMessage[]
   project?: BerryProject
   projectContext?: AgentProjectIterationContext
   answers?: Record<string, string>
-  mode?: 'auto' | 'deterministic' | 'real'
+  /** Hosted run behavior, plus legacy local workflow controls used by the deterministic demo. */
+  mode?: AgentRunMode | 'deterministic' | 'real'
   provider?: BerryModelProvider
   model?: string
   reasoningEffort?: BerryReasoningEffort
@@ -223,6 +233,10 @@ export interface AgentRunResult {
   ok: boolean
   status: AgentRunStatus
   state: AgentRunState
+  kind?: 'answer' | 'build'
+  resolvedMode?: AgentResolvedRunMode
+  message?: string
+  notes?: string[]
   error?: string
 }
 
@@ -242,6 +256,8 @@ export interface AgentBackendRunRecord {
   status: AgentBackendRunStatus
   input?: {
     prompt: string
+    mode?: AgentRunMode
+    chatHistory?: AgentProjectChatMessage[]
     provider: BerryModelProvider
     model: string
     reasoningEffort?: BerryReasoningEffort

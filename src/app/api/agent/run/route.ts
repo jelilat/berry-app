@@ -82,6 +82,24 @@ function parseAgentRunInput(body: unknown): AgentRunInput {
     ).id,
   }
 
+  if (body.mode === 'ask' || body.mode === 'build' || body.mode === 'auto') {
+    input.mode = body.mode
+  } else if ('mode' in body && body.mode !== undefined) {
+    throw new Error('Unsupported run mode')
+  }
+  if (Array.isArray(body.chatHistory)) {
+    input.chatHistory = body.chatHistory.flatMap((turn) => {
+      if (
+        !isRecord(turn) ||
+        (turn.role !== 'user' && turn.role !== 'assistant') ||
+        typeof turn.content !== 'string'
+      ) {
+        return []
+      }
+      return [{ role: turn.role, content: turn.content }]
+    })
+  }
+
   if ('project' in body && body.project !== undefined) {
     input.project = parseBerryProject(body.project)
   }

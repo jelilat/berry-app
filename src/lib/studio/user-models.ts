@@ -6,8 +6,14 @@ export const SELECTED_MODEL_STORAGE_KEY = 'berry-selected-model'
 /** localStorage key for the builder home reasoning preference. */
 export const SELECTED_REASONING_STORAGE_KEY = 'berry-selected-reasoning'
 
+/** localStorage key for the user's last explicit Ask/Build choice. */
+export const SELECTED_RUN_MODE_STORAGE_KEY = 'berry-selected-run-mode'
+
 /** Reasoning effort levels exposed by current GPT models. */
 export type UserReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+
+/** Explicit run choices shown in the composer. */
+export type UserRunMode = 'ask' | 'build'
 
 /** User-facing AI model option shown in the builder prompt. */
 export interface UserModelOption {
@@ -210,4 +216,16 @@ export function loadSelectedReasoningId(): UserReasoningEffort {
 export function saveSelectedReasoningId(reasoningId: UserReasoningEffort): void {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(SELECTED_REASONING_STORAGE_KEY, reasoningId)
+}
+
+/** Load the last explicit run mode, defaulting new users to Build. */
+export function loadSelectedRunMode(): UserRunMode {
+  if (typeof window === 'undefined') return 'build'
+  return window.localStorage.getItem(SELECTED_RUN_MODE_STORAGE_KEY) === 'ask' ? 'ask' : 'build'
+}
+
+/** Persist an explicit Ask/Build composer choice. */
+export function saveSelectedRunMode(mode: UserRunMode): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(SELECTED_RUN_MODE_STORAGE_KEY, mode)
 }

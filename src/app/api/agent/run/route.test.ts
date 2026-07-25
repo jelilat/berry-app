@@ -58,6 +58,48 @@ describe('POST /api/agent/run', () => {
     expect(json.error).toContain('Missing prompt')
   })
 
+  it('forwards Ask mode and valid chat history', async () => {
+    vi.stubEnv('BERRY_BUILD_API_URL', 'http://agent.test')
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        { runId: 'agent_ask', status: 'queued', statusUrl: 'http://agent.test/v1/agent/runs/agent_ask' },
+        { status: 202 },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await POST(agentRunRequest({
+      prompt: 'Which sensor should I use?',
+      mode: 'ask',
+      chatHistory: [
+        { role: 'user', content: 'I need low power.' },
+        { role: 'tool', content: 'discard me' },
+      ],
+    }))
+
+    expect(response.status).toBe(202)
+    expect(fetchMock).toHaveBeenCalledWith('http://agent.test/v1/agent/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Which sensor should I use?',
+        provider: 'openai',
+        model: 'gpt-5.6-sol',
+        reasoningEffort: 'medium',
+        mode: 'ask',
+        chatHistory: [{ role: 'user', content: 'I need low power.' }],
+      }),
+    })
+  })
+
+  it('rejects legacy run modes that the hosted endpoint no longer accepts', async () => {
+    const response = await POST(agentRunRequest({ prompt: 'Build an LED', mode: 'real' }))
+    const json = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(json.error).toContain('Unsupported run mode')
+  })
+
   it('forwards the configured bearer token', async () => {
     vi.stubEnv('BERRY_BUILD_API_URL', 'http://agent.test')
     vi.stubEnv('BERRY_BUILD_API_TOKEN', 'secret-token')

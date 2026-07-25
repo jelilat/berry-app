@@ -41,14 +41,17 @@ import { BUILDER_TEMPLATES } from '@/lib/studio/templates'
 import {
   loadSelectedModelId,
   loadSelectedReasoningId,
+  loadSelectedRunMode,
   resolveUserModel,
   resolveUserReasoning,
   saveSelectedModelId,
   saveSelectedReasoningId,
+  saveSelectedRunMode,
   USER_REASONING_OPTIONS,
   USER_MODEL_OPTIONS,
   type UserReasoningOption,
   type UserModelOption,
+  type UserRunMode,
 } from '@/lib/studio/user-models'
 import { BuilderSidebar } from './BuilderSidebar'
 import { LoginPromptModal } from './LoginPromptModal'
@@ -67,6 +70,7 @@ export function BuilderHome() {
   const [prompt, setPrompt] = useState('')
   const [selectedModelId, setSelectedModelId] = useState(USER_MODEL_OPTIONS[0]!.id)
   const [selectedReasoningId, setSelectedReasoningId] = useState(loadSelectedReasoningId())
+  const [selectedRunMode, setSelectedRunMode] = useState<UserRunMode>(loadSelectedRunMode())
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
@@ -187,6 +191,15 @@ export function BuilderHome() {
   }, [])
 
   /**
+   * Persist the explicit Ask/Build choice used for the next bench run.
+   * @param mode Selected run mode.
+   */
+  const handleSelectRunMode = useCallback((mode: UserRunMode) => {
+    setSelectedRunMode(mode)
+    saveSelectedRunMode(mode)
+  }, [])
+
+  /**
    * Open the bench after bootstrapping a reference template.
    * @param templateId Template id from a chip.
    */
@@ -241,7 +254,7 @@ export function BuilderHome() {
     const starter = createEmptyProject()
     starter.metadata.name = cleanPrompt.slice(0, 64)
     starter.metadata.description = cleanPrompt
-    stashPendingAgentRun(cleanPrompt, selectedModel, selectedReasoning.id)
+    stashPendingAgentRun(cleanPrompt, selectedModel, selectedReasoning.id, selectedRunMode)
     if (session && cloudSyncEnabled) {
       setBootstrapping(true)
       setErrorMessage(null)
@@ -276,6 +289,7 @@ export function BuilderHome() {
     router,
     selectedModel,
     selectedReasoning.id,
+    selectedRunMode,
     session,
   ])
 
@@ -464,7 +478,30 @@ export function BuilderHome() {
             />
 
             <div className="mt-3 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div ref={modelMenuRef} className="relative min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div
+                  className="inline-flex rounded-full p-1"
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                  aria-label="Run mode"
+                >
+                  {(['ask', 'build'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => handleSelectRunMode(mode)}
+                      className="rounded-full px-3 py-1.5 text-sm font-bold capitalize"
+                      style={{
+                        background:
+                          selectedRunMode === mode ? 'rgba(214,51,108,0.12)' : 'transparent',
+                        color: selectedRunMode === mode ? 'var(--accent)' : 'var(--text-secondary)',
+                      }}
+                      aria-pressed={selectedRunMode === mode}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+                <div ref={modelMenuRef} className="relative min-w-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -566,6 +603,7 @@ export function BuilderHome() {
                     )}
                   </div>
                 )}
+                </div>
               </div>
 
               <button

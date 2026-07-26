@@ -16,6 +16,17 @@ interface CloudProjectRow {
   firmware_files?: unknown
 }
 
+interface CloudProjectShareRow {
+  is_shared: boolean
+  shared_at: string | null
+}
+
+/** Current public-sharing state for a cloud project. */
+export interface CloudProjectShareState {
+  isShared: boolean
+  sharedAt: string | null
+}
+
 /**
  * Clear the active Supabase project id when opening a guest/local-only bench.
  */
@@ -68,6 +79,17 @@ function cloudRowToProjectEntry(row: CloudProjectRow): UserProjectEntry {
 }
 
 /**
+ * Convert a Supabase share row into the app-facing sharing state.
+ * @param row Share fields returned from the `projects` table.
+ */
+function cloudRowToShareState(row: CloudProjectShareRow): CloudProjectShareState {
+  return {
+    isShared: row.is_shared,
+    sharedAt: row.shared_at,
+  }
+}
+
+/**
  * Load cloud projects for the currently signed-in Supabase user.
  * @param supabase Browser Supabase client with an active user session.
  */
@@ -100,6 +122,69 @@ export async function loadCloudUserProject(
 
   if (error) throw error
   return data ? cloudRowToProjectEntry(data as CloudProjectRow) : null
+}
+
+/**
+ * Load a project through the public, read-only sharing RPC.
+ * @param supabase Browser Supabase client; no signed-in session is required.
+ * @param projectId Shared project UUID from the URL.
+ */
+export async function loadPublicCloudProject(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<UserProjectEntry | null> {
+  const { data, error } = await supabase
+    .rpc('get_shared_project', { project_id: projectId })
+    .maybeSingle()
+
+  if (error) throw error
+  return data ? cloudRowToProjectEntry(data as CloudProjectRow) : null
+}
+
+/**
+ * Load sharing state for a project owned by the current user.
+ * @param supabase Browser Supabase client with an active user session.
+ * @param projectId Supabase project row id.
+ */
+export async function loadCloudProjectShareState(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<CloudProjectShareState> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('is_shared,shared_at')
+    .eq('id', projectId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) throw new Error('Project not found')
+  return cloudRowToShareState(data as CloudProjectShareRow)
+}
+
+/**
+ * Enable or revoke public, view-only access for an owned cloud project.
+ * @param supabase Browser Supabase client with an active user session.
+ * @param projectId Supabase project row id.
+ * @param isShared Whether anyone with the project URL may view it.
+ */
+export async function setCloudProjectSharing(
+  supabase: SupabaseClient,
+  projectId: string,
+  isShared: boolean,
+): Promise<CloudProjectShareState> {
+  const { data, error } = await supabase
+    .from('projects')
+    .update({
+      is_shared: isShared,
+      shared_at: isShared ? new Date().toISOString() : null,
+    })
+    .eq('id', projectId)
+    .select('is_shared,shared_at')
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) throw new Error('Project not found')
+  return cloudRowToShareState(data as CloudProjectShareRow)
 }
 
 /**

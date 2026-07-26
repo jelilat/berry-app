@@ -124,6 +124,7 @@ export function StudioCanvas({
   onSelectionChange,
   onWireSelectionChange,
   onPlacementError,
+  readOnly = false,
 }: {
   project: BerryProject
   activeWireType: WireTypeId
@@ -140,6 +141,7 @@ export function StudioCanvas({
   onSelectionChange: (nodeId: string | null) => void
   onWireSelectionChange: (wireId: string | null) => void
   onPlacementError?: (message: string | null) => void
+  readOnly?: boolean
 }) {
   return (
     <ReactFlowProvider>
@@ -155,6 +157,7 @@ export function StudioCanvas({
         onSelectionChange={onSelectionChange}
         onWireSelectionChange={onWireSelectionChange}
         onPlacementError={onPlacementError}
+        readOnly={readOnly}
       />
     </ReactFlowProvider>
   )
@@ -175,6 +178,7 @@ function StudioCanvasInner({
   onSelectionChange,
   onWireSelectionChange,
   onPlacementError,
+  readOnly,
 }: {
   project: BerryProject
   activeWireType: WireTypeId
@@ -191,6 +195,7 @@ function StudioCanvasInner({
   onSelectionChange: (nodeId: string | null) => void
   onWireSelectionChange: (wireId: string | null) => void
   onPlacementError?: (message: string | null) => void
+  readOnly: boolean
 }) {
   const { screenToFlowPosition } = useReactFlow()
   const projectRef = useRef(project)
@@ -989,15 +994,22 @@ function StudioCanvasInner({
       projectToFlowNodes(projectRef.current, selectedNodeId, validationIndex).map((n) => ({
         ...n,
         selected: n.id === selectedNodeId,
+        draggable: !readOnly,
+        selectable: !readOnly,
+        connectable: !readOnly,
         data: {
           ...n.data,
-          onPinWireStart: handlePinWireStart,
-          onPinWireTarget: handlePinWireTarget,
+          onPinWireStart: readOnly ? undefined : handlePinWireStart,
+          onPinWireTarget: readOnly ? undefined : handlePinWireTarget,
           onVisualPinLayout: handleVisualPinLayout,
-          onPartDragMove: (sceneX: number, sceneY: number) =>
-            handlePartDragMove(n.id, sceneX, sceneY),
-          onPartDragEnd: (sceneX: number, sceneY: number) =>
-            handlePartDragEnd(n.id, sceneX, sceneY),
+          onPartDragMove: readOnly
+            ? undefined
+            : (sceneX: number, sceneY: number) =>
+                handlePartDragMove(n.id, sceneX, sceneY),
+          onPartDragEnd: readOnly
+            ? undefined
+            : (sceneX: number, sceneY: number) =>
+                handlePartDragEnd(n.id, sceneX, sceneY),
         },
       })),
     [
@@ -1008,6 +1020,7 @@ function StudioCanvasInner({
       handleVisualPinLayout,
       handlePartDragMove,
       handlePartDragEnd,
+      readOnly,
     ],
   )
 
@@ -1095,18 +1108,18 @@ function StudioCanvasInner({
     <div
       className="relative h-full min-h-0 w-full overflow-hidden rounded-2xl"
       style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
-      onDragOver={handleCanvasDragOver}
-      onDrop={handleCanvasDrop}
+      onDragOver={readOnly ? undefined : handleCanvasDragOver}
+      onDrop={readOnly ? undefined : handleCanvasDrop}
     >
       <ReactFlow
         nodes={nodes}
         edges={[]}
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
-        onConnect={handleReactFlowConnect}
-        onConnectStart={handleConnectStart}
-        onConnectEnd={handleConnectEnd}
-        isValidConnection={isValidReactFlowConnection}
+        onConnect={readOnly ? undefined : handleReactFlowConnect}
+        onConnectStart={readOnly ? undefined : handleConnectStart}
+        onConnectEnd={readOnly ? undefined : handleConnectEnd}
+        isValidConnection={readOnly ? undefined : isValidReactFlowConnection}
         onPaneClick={onPaneClick}
         connectionMode={ConnectionMode.Loose}
         connectionLineType={ConnectionLineType.Step}
@@ -1116,7 +1129,10 @@ function StudioCanvasInner({
           strokeLinecap: 'round',
         }}
         connectionRadius={24}
-        connectOnClick
+        connectOnClick={!readOnly}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        elementsSelectable={!readOnly}
         elevateNodesOnSelect={false}
         zIndexMode="manual"
         fitView
@@ -1129,7 +1145,7 @@ function StudioCanvasInner({
         zoomOnPinch
         zoomOnDoubleClick
         deleteKeyCode={
-          wireDraft || breadboardWireDraft || selectedWireId
+          readOnly || wireDraft || breadboardWireDraft || selectedWireId
             ? null
             : ['Backspace', 'Delete']
         }
@@ -1146,7 +1162,7 @@ function StudioCanvasInner({
           selectedWireId={selectedWireId}
           hoveredWireId={hoveredWireId}
           wireValidation={validationIndex?.byWireId}
-          onWireSelect={handleWireSelect}
+          onWireSelect={readOnly ? () => {} : handleWireSelect}
           onWireHover={setHoveredWireId}
         />
         {(!wireDraft || reactFlowConnecting) && (
@@ -1155,9 +1171,9 @@ function StudioCanvasInner({
             selectedId={selectedNodeId}
             hoverMarkers={breadboardHoverMarkers}
             wireStart={breadboardWireDraft?.from ?? null}
-            interactiveHoles={activeWireType === 'jumper-mm'}
+            interactiveHoles={!readOnly && activeWireType === 'jumper-mm'}
             elevateForWireConnect={!!breadboardWireDraft}
-            onHolePointerDown={handleBreadboardHolePointerDown}
+            onHolePointerDown={readOnly ? () => {} : handleBreadboardHolePointerDown}
           />
         )}
       </ReactFlow>

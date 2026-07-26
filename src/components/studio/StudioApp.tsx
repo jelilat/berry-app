@@ -64,6 +64,7 @@ import {
   loadCloudUserProject,
   upsertCloudUserProject,
 } from '@/lib/projects/cloud-projects'
+import { ProjectShareDialog } from './ProjectShareDialog'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
 import { ComponentsOverviewPanel } from './ComponentsOverviewPanel'
 import {
@@ -642,6 +643,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPrompt | null>(null)
   const [validationFlyoutOpen, setValidationFlyoutOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
     createDefaultFirmwareSource('esp32-devkit-v1'),
   )
@@ -1332,39 +1334,56 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     }
   }, [cloudProjectId, resetProject, signedIn])
 
+  /**
+   * Persist the current signed-in project immediately and return its cloud id.
+   */
+  const saveCloudProjectNow = useCallback(async (): Promise<string | null> => {
+    try {
+      if (!isAuthEnabled() || !hasSupabaseBrowserConfig()) return null
+      const supabase = createSupabaseBrowserClient()
+      const { data } = await supabase.auth.getUser()
+      if (!data.user) return null
+      const entry = await upsertCloudUserProject(
+        supabase,
+        project,
+        { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+        cloudProjectId,
+      )
+      setCloudProjectId(entry.id)
+      if (!projectId) {
+        router.replace(`/bench/${entry.id}`)
+      }
+      return entry.id
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save cloud project')
+      return null
+    }
+  }, [cloudProjectId, firmwareSource, project, projectId, router])
+
   const handleSave = useCallback(() => {
     if (!signedIn) {
       saveProjectToStorage(project)
       saveFirmwareSourceToStorage(firmwareSource)
       return
     }
+    void saveCloudProjectNow()
+  }, [firmwareSource, project, saveCloudProjectNow, signedIn])
 
-    /**
-     * Save the current bench to Supabase when a signed-in user presses Save.
-     */
-    async function saveCloudNow() {
-      try {
-        if (!isAuthEnabled() || !hasSupabaseBrowserConfig()) return
-        const supabase = createSupabaseBrowserClient()
-        const { data } = await supabase.auth.getUser()
-        if (!data.user) return
-        const entry = await upsertCloudUserProject(
-          supabase,
-          project,
-          { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
-          cloudProjectId,
-        )
-        setCloudProjectId(entry.id)
-        if (!projectId) {
-          router.replace(`/bench/${entry.id}`)
-        }
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Failed to save cloud project')
-      }
+  /**
+   * Open project sharing for signed-in cloud projects.
+   */
+  const handleShare = useCallback(async () => {
+    if (!signedIn) {
+      setPipelineNotice('Sign in and save this project before sharing it')
+      return
     }
-
-    void saveCloudNow()
-  }, [cloudProjectId, firmwareSource, project, projectId, router, signedIn])
+    const shareProjectId = cloudProjectId ?? await saveCloudProjectNow()
+    if (!shareProjectId) {
+      setPipelineNotice('Could not save this project for sharing')
+      return
+    }
+    setShareDialogOpen(true)
+  }, [cloudProjectId, saveCloudProjectNow, signedIn])
 
   const handleRenameProject = useCallback((name: string) => {
     try {
@@ -1606,6 +1625,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
           onLoadExample={handleLoadExample}
           onRename={handleRenameProject}
           onSave={handleSave}
+          onShare={handleShare}
           onUndo={undo}
           onRedo={redo}
           canUndo={canUndo}
@@ -1796,6 +1816,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         />
       </div>
     </div>
+    <ProjectShareDialog
+      open={shareDialogOpen}
+      projectId={cloudProjectId}
+      projectName={projectTitle(project)}
+      onClose={() => setShareDialogOpen(false)}
+    />
     </>
   )
 }

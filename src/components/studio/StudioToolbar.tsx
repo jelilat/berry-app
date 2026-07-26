@@ -10,6 +10,7 @@ import {
   Play,
   Rocket,
   Save,
+  Share2,
   Sparkles,
   Trash2,
   Undo2,
@@ -30,6 +31,7 @@ export function StudioToolbar({
   onLoadExample,
   onRename,
   onSave,
+  onShare,
   onUndo,
   onRedo,
   canUndo,
@@ -52,6 +54,7 @@ export function StudioToolbar({
   onLoadExample: () => void
   onRename: (name: string) => void
   onSave: () => void
+  onShare: () => void
   onUndo: () => void
   onRedo: () => void
   canUndo: boolean
@@ -98,6 +101,7 @@ export function StudioToolbar({
         <IconButton label="New chat-ready project" icon={Sparkles} onClick={onNew} />
         {/* <IconButton label="Load example" icon={FolderOpen} onClick={onLoadExample} /> */}
         <IconButton label="Save" icon={Save} onClick={onSave} />
+        <IconButton label="Share project" icon={Share2} onClick={onShare} />
         <IconButton label="Undo" icon={Undo2} onClick={onUndo} disabled={!canUndo} />
         <IconButton label="Redo" icon={Redo2} onClick={onRedo} disabled={!canRedo} />
         <IconButton label="Delete selected" icon={Trash2} onClick={onDeleteSelected} disabled={!hasSelection} />

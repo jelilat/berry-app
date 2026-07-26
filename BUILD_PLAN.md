@@ -100,6 +100,10 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 **Likely placement:** Folder menu first; wiring diagram as a file/tab (e.g. `wiring.diagram` or in-app **Bench \| Diagram** toggle) once the file tree ships.
 
+## Product capabilities
+
+- [x] Owner-controlled public project sharing with a stable view-only URL and revocable access.
+
 ---
 
 ## Phase 2 — Functional wiring (validation)

@@ -10,14 +10,20 @@ describe('writeBuildFiles', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'berry-build-test-'))
     const files: FirmwareSourceFiles = {
       'src/main.cpp': '#include <Arduino.h>\n\nvoid setup() {}\nvoid loop() {}\n',
+      'src/drivers/sensor.cpp': '#include <Arduino.h>\n',
     }
 
     await writeBuildFiles(rootDir, files, 'esp32-devkit-v1')
 
     const mainCpp = await readFile(path.join(rootDir, 'src', 'main.cpp'), 'utf8')
     const platformioIni = await readFile(path.join(rootDir, 'platformio.ini'), 'utf8')
+    const sensorCpp = await readFile(
+      path.join(rootDir, 'src', 'drivers', 'sensor.cpp'),
+      'utf8',
+    )
 
     expect(mainCpp).toBe(files['src/main.cpp'])
+    expect(sensorCpp).toBe(files['src/drivers/sensor.cpp'])
     expect(platformioIni).toContain('[env:esp32dev]')
   })
 })

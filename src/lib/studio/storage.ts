@@ -1,13 +1,21 @@
 import { loadBerryProjectFromJson, serializeBerryProject } from '@/lib/project/io'
 import type { BerryProject } from '@/lib/project/types'
+import type { FirmwareSourceFiles } from '@/lib/build/types'
 import {
   FIRMWARE_SOURCE_STORAGE_KEY,
+  FIRMWARE_WORKSPACE_STORAGE_KEY,
   INSPECTOR_WIDTH_DEFAULT,
   INSPECTOR_WIDTH_MAX,
   INSPECTOR_WIDTH_MIN,
   INSPECTOR_WIDTH_STORAGE_KEY,
   STUDIO_STORAGE_KEY,
 } from './constants'
+
+/** Persisted supplemental firmware workspace data. */
+export interface StoredFirmwareWorkspace {
+  files: FirmwareSourceFiles
+  folders: string[]
+}
 
 /**
  * Persist the current project to `localStorage`.
@@ -63,6 +71,50 @@ export function loadFirmwareSourceFromStorage(): string | null {
 export function clearFirmwareSourceStorage(): void {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(FIRMWARE_SOURCE_STORAGE_KEY)
+  window.localStorage.removeItem(FIRMWARE_WORKSPACE_STORAGE_KEY)
+}
+
+/**
+ * Persist additional firmware files and explicit folders to `localStorage`.
+ * @param files Additional source files keyed by project-relative path.
+ * @param folders Explicit source folder paths.
+ */
+export function saveFirmwareWorkspaceToStorage(
+  files: FirmwareSourceFiles,
+  folders: string[],
+): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(
+    FIRMWARE_WORKSPACE_STORAGE_KEY,
+    JSON.stringify({ files, folders } satisfies StoredFirmwareWorkspace),
+  )
+}
+
+/**
+ * Load supplemental firmware workspace data from `localStorage`.
+ */
+export function loadFirmwareWorkspaceFromStorage(): StoredFirmwareWorkspace | null {
+  if (typeof window === 'undefined') return null
+  const raw = window.localStorage.getItem(FIRMWARE_WORKSPACE_STORAGE_KEY)
+  if (!raw) return null
+  try {
+    const value = JSON.parse(raw) as unknown
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+    const record = value as Record<string, unknown>
+    if (typeof record.files !== 'object' || record.files === null || Array.isArray(record.files)) {
+      return null
+    }
+    const files = Object.fromEntries(
+      Object.entries(record.files).filter((entry): entry is [string, string] =>
+        typeof entry[1] === 'string'),
+    )
+    const folders = Array.isArray(record.folders)
+      ? record.folders.filter((path): path is string => typeof path === 'string')
+      : []
+    return { files, folders }
+  } catch {
+    return null
+  }
 }
 
 /**

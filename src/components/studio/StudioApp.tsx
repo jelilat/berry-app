@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Clock3, Monitor } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadBerryProjectFromJson, parseBerryProject, serializeBerryProject } from '@/lib/project/io'
 import {
   addComponent,
@@ -28,7 +28,14 @@ import {
   DEFAULT_FIRMWARE_PATH,
   shouldPreserveExistingFirmwareSource,
 } from '@/lib/firmware/source'
-import type { BuildResult } from '@/lib/build/types'
+import type { BuildResult, FirmwareSourceFiles } from '@/lib/build/types'
+import {
+  additionalFirmwareFiles,
+  createFirmwareFileContent,
+  createFirmwareSourceFiles,
+  inferFirmwareFolders,
+  firmwareParentFolders,
+} from '@/lib/firmware/workspace'
 import type { SimulationResult } from '@/lib/simulation'
 import type {
   AgentAnswerSubmission,
@@ -53,8 +60,10 @@ import { useValidation } from '@/lib/studio/use-validation'
 import type { ValidationSubject } from '@/lib/validation'
 import {
   loadFirmwareSourceFromStorage,
+  loadFirmwareWorkspaceFromStorage,
   loadProjectFromStorage,
   saveFirmwareSourceToStorage,
+  saveFirmwareWorkspaceToStorage,
   saveProjectToStorage,
 } from '@/lib/studio/storage'
 import { consumePendingAgentRun } from '@/lib/studio/session-bootstrap'
@@ -524,13 +533,13 @@ function projectTitle(project: BerryProject): string {
 
 /**
  * Build the project-iteration context sent with a project chat request.
- * @param firmwareSource Current editable firmware source.
+ * @param firmwareFiles Current editable firmware source files.
  * @param buildResult Latest build result, when one exists.
  * @param chatContext Current project chat transcript context.
  */
 function createProjectIterationContext(
   project: BerryProject,
-  firmwareSource: string,
+  firmwareFiles: FirmwareSourceFiles,
   buildResult: BuildResult | null,
   simulationResult: SimulationResult | null,
   agentResult: AgentRunResult | null,
@@ -539,7 +548,7 @@ function createProjectIterationContext(
   const buildErrors = buildResult?.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')
   return {
     project,
-    firmwareFiles: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+    firmwareFiles,
     buildErrors: buildErrors && buildErrors.length > 0 ? buildErrors : undefined,
     buildResult: buildResult ?? undefined,
     simulationResult: simulationResult ?? undefined,
@@ -647,6 +656,8 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const [firmwareSource, setFirmwareSource] = useState<string>(() =>
     createDefaultFirmwareSource('esp32-devkit-v1'),
   )
+  const [additionalSourceFiles, setAdditionalSourceFiles] = useState<FirmwareSourceFiles>({})
+  const [firmwareSourceFolders, setFirmwareSourceFolders] = useState<string[]>([])
   const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
   const skipNextPipelineResetRef = useRef(false)
   const visualizedAgentProjectRef = useRef<string | null>(null)
@@ -686,6 +697,10 @@ export function StudioApp({ projectId }: { projectId?: string }) {
 
   const validationResults = useValidation(project)
   const validationHasErrors = hasValidationErrors(validationResults)
+  const firmwareSourceFiles = useMemo(
+    () => createFirmwareSourceFiles(firmwareSource, additionalSourceFiles),
+    [additionalSourceFiles, firmwareSource],
+  )
   const selectedFirmwareContent =
     resolveFirmwareWorktreeFileContent(
       selectedFirmwarePath,
@@ -693,6 +708,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       project.board,
       firmwareSource,
       buildResult,
+      additionalSourceFiles,
     ) ?? firmwareSource
   const selectedFirmwareReadOnly =
     !isEditableFirmwareWorktreePath(selectedFirmwarePath) ||
@@ -718,7 +734,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     }
     setBuildResult(null)
     setSimulationResult(null)
-  }, [project, firmwareSource])
+  }, [firmwareSourceFiles, project])
 
   useEffect(() => {
     if (buildLoading || simulateLoading || buildResult || simulationResult) {
@@ -734,14 +750,18 @@ export function StudioApp({ projectId }: { projectId?: string }) {
      */
     function loadGuestBench(): void {
       const stored = loadProjectFromStorage()
+      const storedFirmwareWorkspace = loadFirmwareWorkspaceFromStorage()
       if (stored) {
         resetProject(stored)
       }
       setProjectChatKey(createProjectChatKey(stored ?? initialProjectRef.current!))
       setFirmwareSource(
-        loadFirmwareSourceFromStorage() ??
+        storedFirmwareWorkspace?.files[DEFAULT_FIRMWARE_PATH] ??
+          loadFirmwareSourceFromStorage() ??
           createDefaultFirmwareSource(stored?.board ?? 'esp32-devkit-v1'),
       )
+      setAdditionalSourceFiles(additionalFirmwareFiles(storedFirmwareWorkspace?.files))
+      setFirmwareSourceFolders(storedFirmwareWorkspace?.folders ?? [])
       setCurrentWiringGuide(null)
       setStatus('ready')
     }
@@ -798,6 +818,8 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             entry.firmwareFiles?.[DEFAULT_FIRMWARE_PATH] ??
               createDefaultFirmwareSource(loadedProject.board),
           )
+          setAdditionalSourceFiles(additionalFirmwareFiles(entry.firmwareFiles))
+          setFirmwareSourceFolders(inferFirmwareFolders(entry.firmwareFiles ?? {}))
           setCurrentWiringGuide(null)
           setCloudProjectId(entry.id)
           setStatus('ready')
@@ -809,6 +831,8 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         resetProject(freshProject)
         setProjectChatKey(createProjectChatKey(freshProject))
         setFirmwareSource(createDefaultFirmwareSource(freshProject.board))
+        setAdditionalSourceFiles({})
+        setFirmwareSourceFolders([])
         setCurrentWiringGuide(null)
         setCloudProjectId(null)
         setStatus('ready')
@@ -843,7 +867,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         body: JSON.stringify({
           project,
           artifact: { firmwareHash },
-          files: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+          files: firmwareSourceFiles,
         }),
       })
       const json = await response.json()
@@ -866,7 +890,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     }
   }, [
     buildResult,
-    firmwareSource,
+    firmwareSourceFiles,
     hasSuccessfulBuildArtifact,
     project,
     simulateLoading,
@@ -885,7 +909,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           project,
-          files: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+          files: firmwareSourceFiles,
         }),
       })
       const json = await response.json()
@@ -911,7 +935,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     } finally {
       setBuildLoading(false)
     }
-  }, [buildLoading, firmwareSource, project, validationHasErrors])
+  }, [buildLoading, firmwareSourceFiles, project, validationHasErrors])
 
   /**
    * Show the agent-designed project graph as soon as it is available.
@@ -971,7 +995,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       const projectContext = isProjectChatRequest
         ? createProjectIterationContext(
             project,
-            firmwareSource,
+            firmwareSourceFiles,
             buildResult,
             simulationResult,
             agentResult,
@@ -1014,7 +1038,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
                 questions: record.result.questions,
               },
               project,
-              firmwareFiles: { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+              firmwareFiles: firmwareSourceFiles,
               validationResults: validationResults,
               timeline: [],
             },
@@ -1197,6 +1221,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     buildResult,
     currentWiringGuide,
     firmwareSource,
+    firmwareSourceFiles,
     project,
     resetProject,
     simulationResult,
@@ -1248,7 +1273,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
         const entry = await upsertCloudUserProject(
           supabase,
           project,
-          { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+          firmwareSourceFiles,
           cloudProjectId,
         )
         if (entry.id !== cloudProjectId) {
@@ -1274,7 +1299,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   }, [
     cloudAutosaveReady,
     cloudProjectId,
-    firmwareSource,
+    firmwareSourceFiles,
     project,
     projectId,
     router,
@@ -1285,7 +1310,8 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   useEffect(() => {
     if (signedIn || status !== 'ready') return
     saveFirmwareSourceToStorage(firmwareSource)
-  }, [firmwareSource, signedIn, status])
+    saveFirmwareWorkspaceToStorage(firmwareSourceFiles, firmwareSourceFolders)
+  }, [firmwareSource, firmwareSourceFiles, firmwareSourceFolders, signedIn, status])
 
   const handleNew = useCallback(() => {
     if (signedIn && projectId) {
@@ -1298,6 +1324,9 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     resetProject(nextProject)
     setProjectChatKey(createProjectChatKey(nextProject))
     setFirmwareSource(createDefaultFirmwareSource(nextProject.board))
+    setAdditionalSourceFiles({})
+    setFirmwareSourceFolders([])
+    setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
     setSelectedNodeId(null)
     setSelectedWireId(null)
     setAgentWaitingForAnswers(false)
@@ -1322,6 +1351,9 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       }
       setProjectChatKey(signedIn && cloudProjectId ? cloudProjectId : createProjectChatKey(parsed))
       setFirmwareSource(createEsp32BlinkFirmwareSource())
+      setAdditionalSourceFiles({})
+      setFirmwareSourceFolders([])
+      setSelectedFirmwarePath(DEFAULT_FIRMWARE_PATH)
       setAgentWaitingForAnswers(false)
       setAgentResult(null)
       setCurrentWiringGuide(null)
@@ -1346,7 +1378,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       const entry = await upsertCloudUserProject(
         supabase,
         project,
-        { [DEFAULT_FIRMWARE_PATH]: firmwareSource },
+        firmwareSourceFiles,
         cloudProjectId,
       )
       setCloudProjectId(entry.id)
@@ -1358,16 +1390,24 @@ export function StudioApp({ projectId }: { projectId?: string }) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to save cloud project')
       return null
     }
-  }, [cloudProjectId, firmwareSource, project, projectId, router])
+  }, [cloudProjectId, firmwareSourceFiles, project, projectId, router])
 
   const handleSave = useCallback(() => {
     if (!signedIn) {
       saveProjectToStorage(project)
       saveFirmwareSourceToStorage(firmwareSource)
+      saveFirmwareWorkspaceToStorage(firmwareSourceFiles, firmwareSourceFolders)
       return
     }
     void saveCloudProjectNow()
-  }, [firmwareSource, project, saveCloudProjectNow, signedIn])
+  }, [
+    firmwareSource,
+    firmwareSourceFiles,
+    firmwareSourceFolders,
+    project,
+    saveCloudProjectNow,
+    signedIn,
+  ])
 
   /**
    * Open project sharing for signed-in cloud projects.
@@ -1399,6 +1439,60 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   const handleResetFirmwareSource = useCallback(() => {
     setFirmwareSource(createDefaultFirmwareSource(project.board))
   }, [project.board])
+
+  /**
+   * Update whichever editable source file is open in the firmware editor.
+   * @param source Updated source text.
+   */
+  const handleFirmwareSourceChange = useCallback((source: string) => {
+    if (selectedFirmwarePath === DEFAULT_FIRMWARE_PATH) {
+      setFirmwareSource(source)
+      return
+    }
+    setAdditionalSourceFiles((current) => ({
+      ...current,
+      [selectedFirmwarePath]: source,
+    }))
+  }, [selectedFirmwarePath])
+
+  /**
+   * Add a new editable file under the firmware `src` tree.
+   * @param path Valid project-relative source file path.
+   */
+  const handleCreateFirmwareFile = useCallback((path: string) => {
+    setAdditionalSourceFiles((current) => ({
+      ...current,
+      [path]: createFirmwareFileContent(path),
+    }))
+    setFirmwareSourceFolders((current) =>
+      Array.from(new Set([...current, ...firmwareParentFolders(path)])).sort(),
+    )
+    setSelectedFirmwarePath(path)
+  }, [])
+
+  /**
+   * Add an explicit folder under the firmware `src` tree.
+   * @param path Valid project-relative source folder path.
+   */
+  const handleCreateFirmwareFolder = useCallback((path: string) => {
+    setFirmwareSourceFolders((current) =>
+      Array.from(new Set([...current, ...firmwareParentFolders(path), path])).sort(),
+    )
+  }, [])
+
+  /**
+   * Delete a custom firmware source file and return the editor to main.cpp.
+   * @param path Project-relative source file path to delete.
+   */
+  const handleDeleteFirmwareFile = useCallback((path: string) => {
+    if (path === DEFAULT_FIRMWARE_PATH) return
+    setAdditionalSourceFiles((current) =>
+      Object.fromEntries(Object.entries(current).filter(([filePath]) => filePath !== path)),
+    )
+    setSelectedFirmwarePath((current) =>
+      current === path ? DEFAULT_FIRMWARE_PATH : current,
+    )
+  }, [])
 
   const handleAddPart = useCallback(
     (type: ComponentTypeId) => {
@@ -1691,7 +1785,12 @@ export function StudioApp({ projectId }: { projectId?: string }) {
                   projectName={projectTitle(project)}
                   buildResult={buildResult}
                   selectedPath={selectedFirmwarePath}
+                  sourceFiles={firmwareSourceFiles}
+                  sourceFolders={firmwareSourceFolders}
                   onSelectPath={setSelectedFirmwarePath}
+                  onCreateFile={handleCreateFirmwareFile}
+                  onCreateFolder={handleCreateFirmwareFolder}
+                  onDeleteFile={handleDeleteFirmwareFile}
                 />
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <FirmwareEditorPanel
@@ -1699,9 +1798,11 @@ export function StudioApp({ projectId }: { projectId?: string }) {
                     filePath={selectedFirmwarePath}
                     source={selectedFirmwareContent}
                     readOnly={selectedFirmwareReadOnly}
-                    onChange={setFirmwareSource}
+                    onChange={handleFirmwareSourceChange}
                     onReset={
-                      selectedFirmwareReadOnly ? undefined : handleResetFirmwareSource
+                      selectedFirmwarePath === DEFAULT_FIRMWARE_PATH
+                        ? handleResetFirmwareSource
+                        : undefined
                     }
                   />
                 </div>

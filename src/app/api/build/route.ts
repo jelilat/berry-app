@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { compileFirmwareEdge } from '@/lib/build/compile-edge'
 import { getBuildBackend } from '@/lib/build/config'
 import type { FirmwareSourceFiles } from '@/lib/build/types'
+import { isSafeFirmwareBuildPath } from '@/lib/firmware/workspace'
 import { parseBerryProject, ProjectParseError } from '@/lib/project/io'
 import { hasValidationErrors, validate } from '@/lib/validation'
 import type { ValidationResult } from '@/lib/validation'
@@ -28,10 +29,12 @@ function extractFirmwareFiles(body: unknown): FirmwareSourceFiles | null {
   if (typeof mainCpp !== 'string') {
     return null
   }
-  const platformioIni = body.files['platformio.ini']
-  const files: FirmwareSourceFiles = { 'src/main.cpp': mainCpp }
-  if (typeof platformioIni === 'string') {
-    files['platformio.ini'] = platformioIni
+  const files: FirmwareSourceFiles = {}
+  for (const [path, source] of Object.entries(body.files)) {
+    if (typeof source !== 'string' || !isSafeFirmwareBuildPath(path)) {
+      return null
+    }
+    files[path] = source
   }
   return files
 }
@@ -54,7 +57,13 @@ export async function POST(request: Request) {
 
   const files = extractFirmwareFiles(body)
   if (!files) {
-    return NextResponse.json({ error: 'Missing files["src/main.cpp"] in request body' }, { status: 400 })
+    return NextResponse.json(
+      {
+        error:
+          'Missing files["src/main.cpp"], or a firmware file is not a string with a safe path under src.',
+      },
+      { status: 400 },
+    )
   }
 
   try {

@@ -6,7 +6,7 @@ Living roadmap for `app.berry.studio`. Check items off as each stage ships. Upda
 
 **Current phase:** Phase 6 — AI build loop demo (Phase 5 deploy intentionally deferred)
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-27
 
 ---
 
@@ -133,6 +133,7 @@ Items to ship **after** a project **folder / file menu** exists (list of project
 
 - [x] Pick first target board (ESP32 devkit + Arduino UNO in compile pipeline)
 - [x] Browser firmware editor for `src/main.cpp`
+- [x] Manual multi-file firmware workspace with editable files and nested folders under `src`
 - [x] Graph → sketch / PlatformIO tree (`generateFirmwareFromProject`, toolbar **Generate**)
 - [x] Pin map from graph to board pins in generated code (`buildProjectPinMap`)
 - [x] Compile pipeline (`BERRY_BUILD_BACKEND`: PlatformIO local, mock, hosted build API)

@@ -79,6 +79,20 @@ describe('POST /api/build', () => {
     expect(json.error).toContain('src/main.cpp')
   })
 
+  it('rejects source paths that escape src', async () => {
+    const response = await POST(
+      buildRequest({
+        project: loadExampleProject(),
+        files: {
+          'src/main.cpp': createDefaultFirmwareSource('esp32-devkit-v1'),
+          '../secret.cpp': 'secret',
+        },
+      }),
+    )
+
+    expect(response.status).toBe(400)
+  })
+
   it('returns 400 when wiring validation has errors', async () => {
     const invalidProject = {
       version: 1,
@@ -134,7 +148,10 @@ describe('POST /api/build', () => {
     const response = await POST(
       buildRequest({
         project: loadExampleProject(),
-        files: { 'src/main.cpp': createDefaultFirmwareSource('esp32-devkit-v1') },
+        files: {
+          'src/main.cpp': createDefaultFirmwareSource('esp32-devkit-v1'),
+          'src/drivers/sensor.cpp': '#include <Arduino.h>\n',
+        },
       }),
     )
     const json = await response.json()
@@ -144,5 +161,6 @@ describe('POST /api/build', () => {
     expect(json.backend).toBe('mock')
     expect(json.artifact?.firmwareHash).toMatch(/^[a-f0-9]{64}$/)
     expect(json.artifact?.downloadUrl).toContain('/artifacts/')
+    expect(json.artifact?.files).toContain('src/drivers/sensor.cpp')
   })
 })

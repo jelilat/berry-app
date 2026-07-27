@@ -3,6 +3,11 @@ import { BOARD_PIO_CONFIG, resolvePlatformioIni } from '@/lib/build/platformio-i
 import { serializeBerryProject } from '@/lib/project/io'
 import type { BerryProject, BoardId } from '@/lib/project/types'
 import { DEFAULT_FIRMWARE_PATH } from './source'
+import {
+  FIRMWARE_SOURCE_ROOT,
+  inferFirmwareFolders,
+  validateFirmwareSourcePath,
+} from './workspace'
 
 /** Read-only worktree path for the current Berry project graph. */
 export const PROJECT_JSON_PATH = 'project.json'
@@ -28,6 +33,89 @@ export interface FirmwareWorktreeNode {
 export interface FirmwareWorktree {
   label: string
   nodes: FirmwareWorktreeNode[]
+}
+
+/**
+ * Find a direct child folder or create it when it does not exist.
+ * @param parent Parent worktree folder.
+ * @param name Folder segment name.
+ * @param path Full project-relative folder path.
+ */
+function ensureSourceFolder(
+  parent: FirmwareWorktreeNode,
+  name: string,
+  path: string,
+): FirmwareWorktreeNode {
+  const existing = parent.children?.find(
+    (node) => node.kind === 'folder' && node.name === name,
+  )
+  if (existing) return existing
+  const folder: FirmwareWorktreeNode = {
+    id: path,
+    name,
+    path,
+    kind: 'folder',
+    children: [],
+  }
+  parent.children = [...(parent.children ?? []), folder]
+  return folder
+}
+
+/**
+ * Build the editable `src` branch from explicit folders and source files.
+ * @param sourceFiles Firmware files keyed by project-relative path.
+ * @param sourceFolders Explicit source folders, including empty folders.
+ */
+function buildSourceBranch(
+  sourceFiles: Record<string, string>,
+  sourceFolders: string[],
+): FirmwareWorktreeNode {
+  const root: FirmwareWorktreeNode = {
+    id: FIRMWARE_SOURCE_ROOT,
+    name: FIRMWARE_SOURCE_ROOT,
+    path: FIRMWARE_SOURCE_ROOT,
+    kind: 'folder',
+    children: [],
+  }
+  const folderPaths = Array.from(
+    new Set([...sourceFolders, ...inferFirmwareFolders(sourceFiles)]),
+  ).sort()
+
+  for (const folderPath of folderPaths) {
+    const validation = validateFirmwareSourcePath(folderPath, 'folder')
+    if (!validation.ok || !validation.path) continue
+    const segments = validation.path.split('/').slice(1)
+    let parent = root
+    for (let index = 0; index < segments.length; index += 1) {
+      const path = [FIRMWARE_SOURCE_ROOT, ...segments.slice(0, index + 1)].join('/')
+      parent = ensureSourceFolder(parent, segments[index]!, path)
+    }
+  }
+
+  for (const path of Object.keys(sourceFiles).sort()) {
+    const validation = validateFirmwareSourcePath(path, 'file')
+    if (!validation.ok || !validation.path) continue
+    const segments = validation.path.split('/').slice(1)
+    const fileName = segments.pop()
+    if (!fileName) continue
+    let parent = root
+    for (let index = 0; index < segments.length; index += 1) {
+      const folderPath = [FIRMWARE_SOURCE_ROOT, ...segments.slice(0, index + 1)].join('/')
+      parent = ensureSourceFolder(parent, segments[index]!, folderPath)
+    }
+    parent.children = [
+      ...(parent.children ?? []),
+      {
+        id: validation.path,
+        name: fileName,
+        path: validation.path,
+        kind: 'file',
+        status: 'editable',
+      },
+    ]
+  }
+
+  return root
 }
 
 /**
@@ -101,6 +189,8 @@ export function buildFirmwareWorktree(
   board: BoardId,
   buildResult: BuildResult | null,
   projectName?: string,
+  sourceFiles: Record<string, string> = { [DEFAULT_FIRMWARE_PATH]: '' },
+  sourceFolders: string[] = [],
 ): FirmwareWorktree {
   const artifact = buildResult?.ok ? buildResult.artifact : undefined
   const artifactBadge =
@@ -149,21 +239,7 @@ export function buildFirmwareWorktree(
         status: 'generated',
         badge: board,
       },
-      {
-        id: 'src',
-        name: 'src',
-        path: 'src',
-        kind: 'folder',
-        children: [
-          {
-            id: DEFAULT_FIRMWARE_PATH,
-            name: 'main.cpp',
-            path: DEFAULT_FIRMWARE_PATH,
-            kind: 'file',
-            status: 'editable',
-          },
-        ],
-      },
+      buildSourceBranch(sourceFiles, sourceFolders),
       {
         id: '.pio',
         name: '.pio',
@@ -189,9 +265,11 @@ export function resolveFirmwareWorktreeFileContent(
   board: BoardId,
   mainCpp: string,
   buildResult?: BuildResult | null,
+  sourceFiles: Record<string, string> = {},
 ): string | null {
   if (path === PROJECT_JSON_PATH) return serializeBerryProject(project)
   if (path === DEFAULT_FIRMWARE_PATH) return mainCpp
+  if (typeof sourceFiles[path] === 'string') return sourceFiles[path]
   if (path === 'platformio.ini') return resolvePlatformioIni(board)
 
   const artifact = buildResult?.ok ? buildResult.artifact : undefined
@@ -230,7 +308,8 @@ ${downloadLine}
  * @param path Worktree file path.
  */
 export function isEditableFirmwareWorktreePath(path: string): boolean {
-  return path === DEFAULT_FIRMWARE_PATH
+  const validation = validateFirmwareSourcePath(path, 'file')
+  return validation.ok && validation.path === path
 }
 
 /**

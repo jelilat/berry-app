@@ -1,24 +1,34 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   ChevronDown,
   ChevronRight,
   Download,
   File,
   FileCode2,
+  FilePlus2,
   FileOutput,
   Folder,
   FolderOpen,
+  FolderPlus,
+  Trash2,
+  X,
 } from 'lucide-react'
-import type { BuildResult } from '@/lib/build/types'
+import type { BuildResult, FirmwareSourceFiles } from '@/lib/build/types'
 import { downloadFirmwareArtifact } from '@/lib/firmware/download'
+import { DEFAULT_FIRMWARE_PATH } from '@/lib/firmware/source'
 import type { BoardId } from '@/lib/project/types'
 import {
   buildFirmwareWorktree,
   type FirmwareWorktreeNode,
   type FirmwareWorktreeFileStatus,
 } from '@/lib/firmware/worktree'
+import {
+  firmwareParentFolders,
+  inferFirmwareFolders,
+  validateFirmwareSourcePath,
+} from '@/lib/firmware/workspace'
 import {
   INSPECTOR_WIDTH_MAX,
   INSPECTOR_WIDTH_MIN,
@@ -39,17 +49,29 @@ export function FirmwareWorktreePanel({
   projectName,
   buildResult,
   selectedPath,
+  sourceFiles,
+  sourceFolders,
+  readOnly = false,
   onSelectPath,
+  onCreateFile,
+  onCreateFolder,
+  onDeleteFile,
 }: {
   board: BoardId
   projectName: string
   buildResult: BuildResult | null
   selectedPath: string
+  sourceFiles: FirmwareSourceFiles
+  sourceFolders: string[]
+  readOnly?: boolean
   onSelectPath: (path: string) => void
+  onCreateFile?: (path: string) => void
+  onCreateFolder?: (path: string) => void
+  onDeleteFile?: (path: string) => void
 }) {
   const worktree = useMemo(
-    () => buildFirmwareWorktree(board, buildResult, projectName),
-    [board, buildResult, projectName],
+    () => buildFirmwareWorktree(board, buildResult, projectName, sourceFiles, sourceFolders),
+    [board, buildResult, projectName, sourceFiles, sourceFolders],
   )
   const artifact = buildResult?.ok ? buildResult.artifact : undefined
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
@@ -57,6 +79,33 @@ export function FirmwareWorktreePanel({
     '.pio': Boolean(buildResult?.ok),
     '.pio/build': Boolean(buildResult?.ok),
   })
+  const [createKind, setCreateKind] = useState<'file' | 'folder' | null>(null)
+  const [newPath, setNewPath] = useState('')
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [selectedNodePath, setSelectedNodePath] = useState(selectedPath)
+  const sourceFolderPaths = useMemo(
+    () => new Set(['src', ...sourceFolders, ...inferFirmwareFolders(sourceFiles)]),
+    [sourceFiles, sourceFolders],
+  )
+  const selectedCreationFolder = useMemo(() => {
+    if (sourceFolderPaths.has(selectedNodePath)) return selectedNodePath
+    if (!selectedNodePath.startsWith('src/')) return null
+    const parent = selectedNodePath.split('/').slice(0, -1).join('/')
+    return sourceFolderPaths.has(parent) ? parent : null
+  }, [selectedNodePath, sourceFolderPaths])
+  const canDeleteSelectedFile =
+    !readOnly &&
+    selectedNodePath !== DEFAULT_FIRMWARE_PATH &&
+    Object.prototype.hasOwnProperty.call(sourceFiles, selectedNodePath)
+
+  useEffect(() => {
+    const selectionStillExists =
+      sourceFolderPaths.has(selectedNodePath) ||
+      Object.prototype.hasOwnProperty.call(sourceFiles, selectedNodePath)
+    if (!selectionStillExists) {
+      setSelectedNodePath(selectedPath)
+    }
+  }, [selectedNodePath, selectedPath, sourceFiles, sourceFolderPaths])
 
   /**
    * Toggle folder expansion in the worktree.
@@ -74,6 +123,77 @@ export function FirmwareWorktreePanel({
     downloadFirmwareArtifact(artifact.downloadUrl, artifact.filename)
   }
 
+  /**
+   * Open the inline source-item creator.
+   * @param kind Whether the user is creating a file or folder.
+   */
+  const openCreator = (kind: 'file' | 'folder') => {
+    if (!selectedCreationFolder) return
+    setCreateKind(kind)
+    setNewPath('')
+    setCreateError(null)
+  }
+
+  /**
+   * Close and clear the inline source-item creator.
+   */
+  const closeCreator = () => {
+    setCreateKind(null)
+    setNewPath('')
+    setCreateError(null)
+  }
+
+  /**
+   * Confirm and delete the selected custom source file.
+   */
+  const deleteSelectedFile = () => {
+    if (!canDeleteSelectedFile) return
+    if (!window.confirm(`Delete ${selectedNodePath}?`)) return
+    const parent = selectedNodePath.split('/').slice(0, -1).join('/') || 'src'
+    onDeleteFile?.(selectedNodePath)
+    setSelectedNodePath(parent)
+    closeCreator()
+  }
+
+  /**
+   * Validate and create a new source file or folder.
+   * @param event Inline creator form submission.
+   */
+  const submitCreator = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!createKind || !selectedCreationFolder) return
+    const requestedPath = newPath.trim().startsWith('src/')
+      ? newPath
+      : `${selectedCreationFolder}/${newPath}`
+    const validation = validateFirmwareSourcePath(requestedPath, createKind)
+    if (!validation.ok || !validation.path) {
+      setCreateError(validation.error ?? 'Choose a valid path inside src.')
+      return
+    }
+    const path = validation.path
+    const fileExists = Object.prototype.hasOwnProperty.call(sourceFiles, path)
+    const folderExists = sourceFolderPaths.has(path)
+    if (fileExists || folderExists) {
+      setCreateError('A file or folder already uses that path.')
+      return
+    }
+
+    setExpanded((current) => ({
+      ...current,
+      src: true,
+      ...Object.fromEntries(firmwareParentFolders(path).map((folder) => [folder, true])),
+      ...(createKind === 'folder' ? { [path]: true } : {}),
+    }))
+    if (createKind === 'file') {
+      onCreateFile?.(path)
+      setSelectedNodePath(path)
+    } else {
+      onCreateFolder?.(path)
+      setSelectedNodePath(path)
+    }
+    closeCreator()
+  }
+
   return (
     <aside
       className="flex max-h-full min-h-0 w-[240px] shrink-0 flex-col overflow-hidden rounded-2xl"
@@ -89,9 +209,75 @@ export function FirmwareWorktreePanel({
         className="shrink-0 px-4 py-3"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
-        <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--accent)' }}>
-          Worktree
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--accent)' }}>
+            Worktree
+          </p>
+          {!readOnly && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => openCreator('file')}
+                disabled={!selectedCreationFolder}
+                className="rounded-md p-1.5"
+                style={{
+                  color: selectedCreationFolder
+                    ? 'var(--text-secondary)'
+                    : 'var(--text-muted)',
+                  opacity: selectedCreationFolder ? 1 : 0.45,
+                }}
+                title={
+                  selectedCreationFolder
+                    ? `New file in ${selectedCreationFolder}`
+                    : 'Select a folder under src'
+                }
+                aria-label="New firmware file in selected folder"
+              >
+                <FilePlus2 size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={() => openCreator('folder')}
+                disabled={!selectedCreationFolder}
+                className="rounded-md p-1.5"
+                style={{
+                  color: selectedCreationFolder
+                    ? 'var(--text-secondary)'
+                    : 'var(--text-muted)',
+                  opacity: selectedCreationFolder ? 1 : 0.45,
+                }}
+                title={
+                  selectedCreationFolder
+                    ? `New folder in ${selectedCreationFolder}`
+                    : 'Select a folder under src'
+                }
+                aria-label="New firmware folder in selected folder"
+              >
+                <FolderPlus size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={deleteSelectedFile}
+                disabled={!canDeleteSelectedFile}
+                className="rounded-md p-1.5"
+                style={{
+                  color: canDeleteSelectedFile ? 'var(--accent)' : 'var(--text-muted)',
+                  opacity: canDeleteSelectedFile ? 1 : 0.45,
+                }}
+                title={
+                  selectedNodePath === DEFAULT_FIRMWARE_PATH
+                    ? 'src/main.cpp is required'
+                    : canDeleteSelectedFile
+                      ? `Delete ${selectedNodePath}`
+                      : 'Select a custom source file'
+                }
+                aria-label="Delete selected firmware file"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          )}
+        </div>
         <p className="mt-1 truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
           {worktree.label}
         </p>
@@ -113,6 +299,59 @@ export function FirmwareWorktreePanel({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        {createKind && (
+          <form
+            onSubmit={submitCreator}
+            className="mb-2 rounded-xl p-2"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor="firmware-new-path"
+                className="text-[11px] font-bold"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                New {createKind} in {selectedCreationFolder}
+              </label>
+              <button
+                type="button"
+                onClick={closeCreator}
+                aria-label="Cancel creating source item"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <input
+              id="firmware-new-path"
+              autoFocus
+              value={newPath}
+              onChange={(event) => {
+                setNewPath(event.target.value)
+                setCreateError(null)
+              }}
+              placeholder={createKind === 'file' ? 'sensor.cpp' : 'drivers'}
+              className="mt-2 w-full rounded-lg px-2 py-1.5 text-xs outline-none"
+              style={{
+                background: 'var(--bg-surface)',
+                border: `1px solid ${createError ? 'var(--accent)' : 'var(--border)'}`,
+                color: 'var(--text-primary)',
+              }}
+            />
+            {createError && (
+              <p className="mt-1 text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
+                {createError}
+              </p>
+            )}
+            <button
+              type="submit"
+              className="mt-2 w-full rounded-lg px-2 py-1.5 text-xs font-bold text-white"
+              style={{ background: 'var(--accent)' }}
+            >
+              Create {createKind}
+            </button>
+          </form>
+        )}
         <ul className="space-y-0.5">
           {worktree.nodes.map((node) => (
             <WorktreeNodeRow
@@ -120,9 +359,14 @@ export function FirmwareWorktreePanel({
               node={node}
               depth={0}
               expanded={expanded}
-              selectedPath={selectedPath}
+              selectedNodePath={selectedNodePath}
               onToggleFolder={toggleFolder}
-              onSelectPath={onSelectPath}
+              onSelectNode={(node) => {
+                setSelectedNodePath(node.path)
+                if (node.kind === 'file' && node.status !== 'pending') {
+                  onSelectPath(node.path)
+                }
+              }}
               onDownloadArtifact={downloadArtifact}
               canDownloadArtifact={Boolean(artifact?.downloadUrl && artifact.filename)}
             />
@@ -141,24 +385,24 @@ function WorktreeNodeRow({
   node,
   depth,
   expanded,
-  selectedPath,
+  selectedNodePath,
   onToggleFolder,
-  onSelectPath,
+  onSelectNode,
   onDownloadArtifact,
   canDownloadArtifact,
 }: {
   node: FirmwareWorktreeNode
   depth: number
   expanded: Record<string, boolean>
-  selectedPath: string
+  selectedNodePath: string
   onToggleFolder: (path: string) => void
-  onSelectPath: (path: string) => void
+  onSelectNode: (node: FirmwareWorktreeNode) => void
   onDownloadArtifact: () => void
   canDownloadArtifact: boolean
 }) {
   const isFolder = node.kind === 'folder'
   const isOpen = expanded[node.path] ?? depth < 1
-  const isSelected = !isFolder && node.path === selectedPath
+  const isSelected = node.path === selectedNodePath
   const status = node.status ?? (isFolder ? undefined : 'editable')
   const color = status ? STATUS_TINT[status] : 'var(--text-primary)'
 
@@ -167,6 +411,7 @@ function WorktreeNodeRow({
       <button
         type="button"
         onClick={() => {
+          onSelectNode(node)
           if (isFolder) {
             onToggleFolder(node.path)
             return
@@ -176,7 +421,6 @@ function WorktreeNodeRow({
             return
           }
           if (node.status === 'pending') return
-          onSelectPath(node.path)
         }}
         disabled={!isFolder && node.status === 'pending'}
         className="flex w-full items-center gap-1 rounded-lg px-2 py-1.5 text-left text-xs font-semibold"
@@ -215,9 +459,9 @@ function WorktreeNodeRow({
               node={child}
               depth={depth + 1}
               expanded={expanded}
-              selectedPath={selectedPath}
+              selectedNodePath={selectedNodePath}
               onToggleFolder={onToggleFolder}
-              onSelectPath={onSelectPath}
+              onSelectNode={onSelectNode}
               onDownloadArtifact={onDownloadArtifact}
               canDownloadArtifact={canDownloadArtifact}
             />

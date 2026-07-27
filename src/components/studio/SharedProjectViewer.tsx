@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
 import { hasSupabaseBrowserConfig } from '@/lib/auth/config'
 import { DEFAULT_FIRMWARE_PATH, createDefaultFirmwareSource } from '@/lib/firmware/source'
+import { createFirmwareSourceFiles, inferFirmwareFolders } from '@/lib/firmware/workspace'
+import type { FirmwareSourceFiles } from '@/lib/build/types'
 import {
   resolveFirmwareWorktreeFileContent,
 } from '@/lib/firmware/worktree'
@@ -24,7 +26,7 @@ type SharedViewerStatus = 'loading' | 'ready' | 'unavailable' | 'error'
 
 interface SharedProjectState {
   project: BerryProject
-  firmwareSource: string
+  firmwareFiles: FirmwareSourceFiles
 }
 
 /**
@@ -94,11 +96,12 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
           return
         }
         const project = loadBerryProjectFromJson(entry.projectJson)
+        const mainCpp =
+            entry.firmwareFiles?.[DEFAULT_FIRMWARE_PATH] ??
+            createDefaultFirmwareSource(project.board)
         setSharedProject({
           project,
-          firmwareSource:
-            entry.firmwareFiles?.[DEFAULT_FIRMWARE_PATH] ??
-            createDefaultFirmwareSource(project.board),
+          firmwareFiles: createFirmwareSourceFiles(mainCpp, entry.firmwareFiles ?? {}),
         })
         setStatus('ready')
       } catch (error) {
@@ -138,7 +141,8 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
     )
   }
 
-  const { project, firmwareSource } = sharedProject
+  const { project, firmwareFiles } = sharedProject
+  const firmwareSource = firmwareFiles[DEFAULT_FIRMWARE_PATH]
   const selectedFirmwareContent =
     resolveFirmwareWorktreeFileContent(
       selectedFirmwarePath,
@@ -146,6 +150,7 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
       project.board,
       firmwareSource,
       null,
+      firmwareFiles,
     ) ?? firmwareSource
   const projectName = project.metadata.name.trim() || 'Untitled project'
 
@@ -196,6 +201,9 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
               projectName={projectName}
               buildResult={null}
               selectedPath={selectedFirmwarePath}
+              sourceFiles={firmwareFiles}
+              sourceFolders={inferFirmwareFolders(firmwareFiles)}
+              readOnly
               onSelectPath={setSelectedFirmwarePath}
             />
             <div className="min-h-0 min-w-0 flex-1">

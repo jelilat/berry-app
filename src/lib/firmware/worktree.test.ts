@@ -25,6 +25,23 @@ describe('buildFirmwareWorktree', () => {
     ).toBe(true)
   })
 
+  it('renders nested user-created source files and empty folders', () => {
+    const tree = buildFirmwareWorktree(
+      'esp32-devkit-v1',
+      null,
+      'Custom firmware',
+      {
+        [DEFAULT_FIRMWARE_PATH]: 'void setup() {}',
+        'src/drivers/sensor.cpp': '#include "sensor.h"',
+      },
+      ['src/include'],
+    )
+
+    const src = tree.nodes.find((node) => node.path === 'src')
+    expect(findNodeByPath(src, 'src/drivers/sensor.cpp')?.status).toBe('editable')
+    expect(findNodeByPath(src, 'src/include')?.kind).toBe('folder')
+  })
+
   it('shows artifact path and size after a successful build', () => {
     const tree = buildFirmwareWorktree('esp32-devkit-v1', {
       ok: true,
@@ -126,6 +143,7 @@ describe('formatFirmwareFileSize', () => {
 describe('isEditableFirmwareWorktreePath', () => {
   it('allows editing only src/main.cpp', () => {
     expect(isEditableFirmwareWorktreePath(DEFAULT_FIRMWARE_PATH)).toBe(true)
+    expect(isEditableFirmwareWorktreePath('src/drivers/sensor.cpp')).toBe(true)
     expect(isEditableFirmwareWorktreePath(PROJECT_JSON_PATH)).toBe(false)
     expect(isEditableFirmwareWorktreePath('platformio.ini')).toBe(false)
   })

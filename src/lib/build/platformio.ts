@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 import type { BoardId } from '@/lib/project/types'
+import { isSafeFirmwareBuildPath } from '@/lib/firmware/workspace'
 import { BOARD_PIO_CONFIG, resolvePlatformioIni } from './platformio-ini'
 import { persistBuildArtifact } from './artifacts'
 import { computeFirmwareHash } from './hash'
@@ -189,11 +190,18 @@ export async function writeBuildFiles(
   board: BoardId,
 ): Promise<string[]> {
   const written: string[] = []
-  const srcDir = path.join(rootDir, 'src')
-  await mkdir(srcDir, { recursive: true })
-  const mainPath = path.join(srcDir, 'main.cpp')
-  await writeFile(mainPath, files['src/main.cpp'], 'utf8')
-  written.push('src/main.cpp')
+  for (const [sourcePath, source] of Object.entries(files).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    if (sourcePath === 'platformio.ini') continue
+    if (!isSafeFirmwareBuildPath(sourcePath)) {
+      throw new Error(`Firmware source path must stay inside src: ${sourcePath}`)
+    }
+    const outputPath = path.join(rootDir, sourcePath)
+    await mkdir(path.dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, source, 'utf8')
+    written.push(sourcePath)
+  }
 
   const iniContent = resolvePlatformioIni(board, files['platformio.ini'])
   const iniPath = path.join(rootDir, 'platformio.ini')

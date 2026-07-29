@@ -29,6 +29,7 @@ export function ComponentInspectorPanel({
   onRotate,
   onPositionChange,
   onPinSiteChange,
+  readOnly = false,
 }: {
   project: BerryProject
   componentId: string
@@ -36,6 +37,7 @@ export function ComponentInspectorPanel({
   onRotate: (deltaDegrees: number) => void
   onPositionChange: (x: number, y: number) => void
   onPinSiteChange: (terminalId: string, site: BreadboardSite) => void
+  readOnly?: boolean
 }) {
   const model = useMemo(
     () => buildComponentInspectorModel(project, componentId),
@@ -166,49 +168,55 @@ export function ComponentInspectorPanel({
             {model.physicalMm.depth} mm
           </InspectorRow>
           <InspectorRow label="Bench (cm)">
-            <div className="flex items-center gap-1.5">
-              <label className="sr-only" htmlFor="inspector-pos-x">
-                X position cm
-              </label>
-              <input
-                id="inspector-pos-x"
-                type="number"
-                step="0.1"
-                defaultValue={sceneXCm}
-                key={`x-${sceneXCm}-${model.rotationZ}`}
-                onFocus={startEditPosition}
-                onChange={(e) => setPosX(e.target.value)}
-                onBlur={commitPosition}
-                onKeyDown={(e) => e.key === 'Enter' && commitPosition()}
-                className="w-[4.5rem] rounded-md px-1.5 py-0.5 text-right text-[11px] font-semibold tabular-nums"
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-              />
-              <span style={{ color: 'var(--text-muted)' }}>,</span>
-              <label className="sr-only" htmlFor="inspector-pos-y">
-                Y position cm
-              </label>
-              <input
-                id="inspector-pos-y"
-                type="number"
-                step="0.1"
-                defaultValue={sceneYCm}
-                key={`y-${sceneYCm}-${model.rotationZ}`}
-                onFocus={startEditPosition}
-                onChange={(e) => setPosY(e.target.value)}
-                onBlur={commitPosition}
-                onKeyDown={(e) => e.key === 'Enter' && commitPosition()}
-                className="w-[4.5rem] rounded-md px-1.5 py-0.5 text-right text-[11px] font-semibold tabular-nums"
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-              />
-            </div>
+            {readOnly ? (
+              <span className="tabular-nums">
+                {sceneXCm}, {sceneYCm}
+              </span>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <label className="sr-only" htmlFor="inspector-pos-x">
+                  X position cm
+                </label>
+                <input
+                  id="inspector-pos-x"
+                  type="number"
+                  step="0.1"
+                  defaultValue={sceneXCm}
+                  key={`x-${sceneXCm}-${model.rotationZ}`}
+                  onFocus={startEditPosition}
+                  onChange={(e) => setPosX(e.target.value)}
+                  onBlur={commitPosition}
+                  onKeyDown={(e) => e.key === 'Enter' && commitPosition()}
+                  className="w-[4.5rem] rounded-md px-1.5 py-0.5 text-right text-[11px] font-semibold tabular-nums"
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+                <span style={{ color: 'var(--text-muted)' }}>,</span>
+                <label className="sr-only" htmlFor="inspector-pos-y">
+                  Y position cm
+                </label>
+                <input
+                  id="inspector-pos-y"
+                  type="number"
+                  step="0.1"
+                  defaultValue={sceneYCm}
+                  key={`y-${sceneYCm}-${model.rotationZ}`}
+                  onFocus={startEditPosition}
+                  onChange={(e) => setPosY(e.target.value)}
+                  onBlur={commitPosition}
+                  onKeyDown={(e) => e.key === 'Enter' && commitPosition()}
+                  className="w-[4.5rem] rounded-md px-1.5 py-0.5 text-right text-[11px] font-semibold tabular-nums"
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+            )}
           </InspectorRow>
           <InspectorRow label="Canvas (px)">
             ({canvasX}, {canvasY})
@@ -216,24 +224,28 @@ export function ComponentInspectorPanel({
           <InspectorRow label="Rotation">
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] font-semibold tabular-nums">{model.rotationZ}°</span>
-              <button
-                type="button"
-                onClick={() => onRotate(-90)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-overlay)]"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-                title="Rotate counter-clockwise 90°"
-              >
-                <RotateCcw size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => onRotate(90)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-overlay)]"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-                title="Rotate clockwise 90°"
-              >
-                <RotateCw size={14} />
-              </button>
+              {!readOnly && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onRotate(-90)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-overlay)]"
+                    style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                    title="Rotate counter-clockwise 90°"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRotate(90)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-overlay)]"
+                    style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                    title="Rotate clockwise 90°"
+                  >
+                    <RotateCw size={14} />
+                  </button>
+                </>
+              )}
             </div>
           </InspectorRow>
           {model.parentId && (
@@ -280,7 +292,7 @@ export function ComponentInspectorPanel({
                         {pin.label}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[9px]">
-                        {pin.canEditHole ? (
+                        {pin.canEditHole && !readOnly ? (
                           <input
                             type="text"
                             inputMode="text"

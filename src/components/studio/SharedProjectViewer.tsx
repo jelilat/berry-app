@@ -13,9 +13,15 @@ import {
   resolveFirmwareWorktreeFileContent,
 } from '@/lib/firmware/worktree'
 import { loadBerryProjectFromJson } from '@/lib/project/io'
-import type { BerryProject, ComponentTypeId, WireTypeId } from '@/lib/project/types'
+import type {
+  BerryProject,
+  BreadboardSite,
+  ComponentTypeId,
+  WireTypeId,
+} from '@/lib/project/types'
 import type { WireEndpointRef } from '@/lib/project/mutations'
 import { loadPublicCloudProject } from '@/lib/projects/cloud-projects'
+import { ComponentInspectorPanel } from './ComponentInspectorPanel'
 import { ComponentsOverviewPanel } from './ComponentsOverviewPanel'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
 import { FirmwareWorktreePanel } from './FirmwareWorktreePanel'
@@ -62,6 +68,26 @@ function ignoreWireConnect(
 function ignoreSelection(_id: string | null): void {}
 
 /**
+ * Ignore a rotation attempted by the read-only inspector.
+ * @param _deltaDegrees Unused rotation delta.
+ */
+function ignoreRotation(_deltaDegrees: number): void {}
+
+/**
+ * Ignore a position change attempted by the read-only inspector.
+ * @param _x Unused x coordinate.
+ * @param _y Unused y coordinate.
+ */
+function ignorePositionChange(_x: number, _y: number): void {}
+
+/**
+ * Ignore a pin placement change attempted by the read-only inspector.
+ * @param _terminalId Unused component terminal.
+ * @param _site Unused breadboard site.
+ */
+function ignorePinSiteChange(_terminalId: string, _site: BreadboardSite): void {}
+
+/**
  * Public project shell that exposes project data without any mutation controls.
  * @param props Shared project route identity.
  */
@@ -70,6 +96,7 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [sharedProject, setSharedProject] = useState<SharedProjectState | null>(null)
   const [viewMode, setViewMode] = useState<StudioViewMode>('visual')
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
 
   useEffect(() => {
@@ -221,20 +248,33 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
             <ComponentsOverviewPanel project={project} />
           </div>
         ) : (
-          <div className="relative min-h-0 min-w-0 flex-1">
-            <StudioCanvas
-              project={project}
-              activeWireType={'jumper-mm' as WireTypeId}
-              selectedNodeId={null}
-              selectedWireId={null}
-              onProjectChange={ignoreProjectChange}
-              onPartDrop={ignorePartDrop}
-              onWireConnect={ignoreWireConnect}
-              onSelectionChange={ignoreSelection}
-              onWireSelectionChange={ignoreSelection}
-              readOnly
-            />
-          </div>
+          <>
+            <div className="relative min-h-0 min-w-0 flex-1">
+              <StudioCanvas
+                project={project}
+                activeWireType={'jumper-mm' as WireTypeId}
+                selectedNodeId={selectedNodeId}
+                selectedWireId={null}
+                onProjectChange={ignoreProjectChange}
+                onPartDrop={ignorePartDrop}
+                onWireConnect={ignoreWireConnect}
+                onSelectionChange={setSelectedNodeId}
+                onWireSelectionChange={ignoreSelection}
+                readOnly
+              />
+            </div>
+            {selectedNodeId && (
+              <ComponentInspectorPanel
+                project={project}
+                componentId={selectedNodeId}
+                onClose={() => setSelectedNodeId(null)}
+                onRotate={ignoreRotation}
+                onPositionChange={ignorePositionChange}
+                onPinSiteChange={ignorePinSiteChange}
+                readOnly
+              />
+            )}
+          </>
         )}
       </section>
 

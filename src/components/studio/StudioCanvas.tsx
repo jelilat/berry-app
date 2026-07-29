@@ -995,7 +995,7 @@ function StudioCanvasInner({
         ...n,
         selected: n.id === selectedNodeId,
         draggable: !readOnly,
-        selectable: !readOnly,
+        selectable: true,
         connectable: !readOnly,
         data: {
           ...n.data,
@@ -1132,7 +1132,7 @@ function StudioCanvasInner({
         connectOnClick={!readOnly}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
-        elementsSelectable={!readOnly}
+        elementsSelectable
         elevateNodesOnSelect={false}
         zIndexMode="manual"
         fitView

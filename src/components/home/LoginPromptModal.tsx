@@ -12,11 +12,15 @@ export function LoginPromptModal({
   onClose,
   onGoogleSignIn,
   onEmailSignIn,
+  title = 'Sign in to berry.',
+  description,
 }: {
   open: boolean
   onClose: () => void
   onGoogleSignIn: () => void | Promise<void>
   onEmailSignIn: (email: string) => Promise<void>
+  title?: string
+  description?: string
 }) {
   const [email, setEmail] = useState('')
   const [emailSent, setEmailSent] = useState(false)
@@ -97,8 +101,13 @@ export function LoginPromptModal({
         </div>
 
         <h2 id="login-prompt-title" className="text-2xl font-extrabold tracking-[-0.03em]">
-          Sign in to berry.
+          {title}
         </h2>
+        {description && (
+          <p className="mt-2 text-sm font-medium leading-6" style={{ color: 'var(--text-secondary)' }}>
+            {description}
+          </p>
+        )}
 
         {emailSent ? (
           <div

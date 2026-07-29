@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { ExternalLink, Eye, LockKeyhole } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Eye, Loader2, LockKeyhole } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/auth/supabase-browser'
 import { hasSupabaseBrowserConfig } from '@/lib/auth/config'
 import { DEFAULT_FIRMWARE_PATH, createDefaultFirmwareSource } from '@/lib/firmware/source'
@@ -20,7 +21,11 @@ import type {
   WireTypeId,
 } from '@/lib/project/types'
 import type { WireEndpointRef } from '@/lib/project/mutations'
-import { loadPublicCloudProject } from '@/lib/projects/cloud-projects'
+import {
+  loadPublicCloudProject,
+  upsertCloudUserProject,
+} from '@/lib/projects/cloud-projects'
+import { LoginPromptModal } from '@/components/home/LoginPromptModal'
 import { ComponentInspectorPanel } from './ComponentInspectorPanel'
 import { ComponentsOverviewPanel } from './ComponentsOverviewPanel'
 import { FirmwareEditorPanel } from './FirmwareEditorPanel'
@@ -29,6 +34,7 @@ import { StudioCanvas } from './StudioCanvas'
 import { ViewModeToggle, type StudioViewMode } from './ViewModeToggle'
 
 type SharedViewerStatus = 'loading' | 'ready' | 'unavailable' | 'error'
+type RemixStatus = 'idle' | 'creating'
 
 interface SharedProjectState {
   project: BerryProject
@@ -88,16 +94,61 @@ function ignorePositionChange(_x: number, _y: number): void {}
 function ignorePinSiteChange(_terminalId: string, _site: BreadboardSite): void {}
 
 /**
+ * Create an independently owned project graph from a shared snapshot.
+ * @param project Shared source project.
+ */
+function createRemixedProject(project: BerryProject): BerryProject {
+  const now = new Date().toISOString()
+  const sourceName = project.metadata.name.trim() || 'Untitled project'
+  return {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      name: `${sourceName} remix`,
+      createdAt: now,
+      updatedAt: now,
+    },
+  }
+}
+
+/**
  * Public project shell that exposes project data without any mutation controls.
  * @param props Shared project route identity.
  */
 export function SharedProjectViewer({ projectId }: { projectId: string }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const remixStartedRef = useRef(false)
   const [status, setStatus] = useState<SharedViewerStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [sharedProject, setSharedProject] = useState<SharedProjectState | null>(null)
   const [viewMode, setViewMode] = useState<StudioViewMode>('visual')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedFirmwarePath, setSelectedFirmwarePath] = useState(DEFAULT_FIRMWARE_PATH)
+  const [signedIn, setSignedIn] = useState<boolean | null>(null)
+  const [loginOpen, setLoginOpen] = useState(false)
+  const [remixStatus, setRemixStatus] = useState<RemixStatus>('idle')
+  const [remixError, setRemixError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!hasSupabaseBrowserConfig()) {
+      setSignedIn(false)
+      return
+    }
+
+    let mounted = true
+    const supabase = createSupabaseBrowserClient()
+    void supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setSignedIn(Boolean(data.user))
+    })
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) setSignedIn(Boolean(session?.user))
+    })
+    return () => {
+      mounted = false
+      data.subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -144,6 +195,92 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
     return () => {
       mounted = false
     }
+  }, [projectId])
+
+  /**
+   * Insert the shared project as a new project owned by the signed-in viewer.
+   */
+  const createRemix = useCallback(async (): Promise<void> => {
+    if (!sharedProject || remixStatus === 'creating' || remixStartedRef.current) return
+    remixStartedRef.current = true
+    setRemixStatus('creating')
+    setRemixError(null)
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { data } = await supabase.auth.getUser()
+      if (!data.user) {
+        remixStartedRef.current = false
+        setRemixStatus('idle')
+        setSignedIn(false)
+        setLoginOpen(true)
+        return
+      }
+      const entry = await upsertCloudUserProject(
+        supabase,
+        createRemixedProject(sharedProject.project),
+        sharedProject.firmwareFiles,
+      )
+      router.push(`/bench/${entry.id}`)
+    } catch (error) {
+      remixStartedRef.current = false
+      setRemixStatus('idle')
+      setRemixError(
+        error instanceof Error ? error.message : 'Could not create your project copy',
+      )
+    }
+  }, [remixStatus, router, sharedProject])
+
+  /**
+   * Gate project remixing behind authentication.
+   */
+  const handleRemix = useCallback((): void => {
+    setRemixError(null)
+    if (!signedIn) {
+      setLoginOpen(true)
+      return
+    }
+    void createRemix()
+  }, [createRemix, signedIn])
+
+  useEffect(() => {
+    if (searchParams.get('remix') !== '1' || signedIn === null) return
+    if (!signedIn) {
+      setLoginOpen(true)
+      return
+    }
+    if (sharedProject) void createRemix()
+  }, [createRemix, searchParams, sharedProject, signedIn])
+
+  /**
+   * Start Google authentication and return to this shared project to finish remixing.
+   */
+  const handleGoogleSignIn = useCallback(async (): Promise<void> => {
+    const next = `/share/${encodeURIComponent(projectId)}?remix=1`
+    const supabase = createSupabaseBrowserClient()
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        queryParams: { prompt: 'select_account' },
+      },
+    })
+    if (error) throw error
+  }, [projectId])
+
+  /**
+   * Send an email sign-in link that returns to this shared project to finish remixing.
+   * @param email Viewer email address.
+   */
+  const handleEmailSignIn = useCallback(async (email: string): Promise<void> => {
+    const next = `/share/${encodeURIComponent(projectId)}?remix=1`
+    const supabase = createSupabaseBrowserClient()
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    })
+    if (error) throw error
   }, [projectId])
 
   if (status === 'loading') {
@@ -207,6 +344,11 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
           </p>
         </div>
         <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
+        <RemixButton
+          onClick={handleRemix}
+          creating={remixStatus === 'creating'}
+          compact
+        />
         <div
           className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-extrabold"
           style={{
@@ -219,6 +361,16 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
           View only
         </div>
       </header>
+
+      {remixError && (
+        <p
+          className="mb-3 shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold"
+          style={{ background: 'rgba(214,51,108,0.1)', color: 'var(--accent)' }}
+          role="alert"
+        >
+          {remixError}
+        </p>
+      )}
 
       <section className="flex min-h-0 flex-1 gap-3">
         {viewMode === 'firmware' ? (
@@ -272,6 +424,27 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
                 onPositionChange={ignorePositionChange}
                 onPinSiteChange={ignorePinSiteChange}
                 readOnly
+                footer={
+                  <div>
+                    <p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
+                      Make this project your own
+                    </p>
+                    <p
+                      className="mt-1 text-[11px] font-medium leading-4"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      {signedIn
+                        ? 'Create an editable copy with its wiring and firmware.'
+                        : 'Sign up or sign in to edit its wiring, components, and firmware.'}
+                    </p>
+                    <div className="mt-3">
+                      <RemixButton
+                        onClick={handleRemix}
+                        creating={remixStatus === 'creating'}
+                      />
+                    </div>
+                  </div>
+                }
               />
             )}
           </>
@@ -282,16 +455,52 @@ export function SharedProjectViewer({ projectId }: { projectId: string }) {
         <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
           Open-source AI agent for hardware development.
         </p>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-xs font-extrabold"
-          style={{ color: 'var(--accent)' }}
-        >
-          Build with berry.
-          <ExternalLink size={13} />
-        </Link>
+        <p className="text-xs font-extrabold" style={{ color: 'var(--accent)' }}>
+          {signedIn ? 'Ready to make it your own.' : 'Sign up or sign in to build with berry.'}
+        </p>
       </footer>
+
+      <LoginPromptModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onGoogleSignIn={handleGoogleSignIn}
+        onEmailSignIn={handleEmailSignIn}
+        title="Sign up or sign in to remix"
+        description="Create an account to make an editable copy of this project. The original stays unchanged."
+      />
     </main>
+  )
+}
+
+/**
+ * Primary shared-project action for creating an authenticated editable copy.
+ * @param props Click behavior, pending state, and compact header styling.
+ */
+function RemixButton({
+  onClick,
+  creating,
+  compact = false,
+}: {
+  onClick: () => void
+  creating: boolean
+  compact?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={creating}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl font-extrabold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70 ${
+        compact ? 'h-9 px-3 text-xs' : 'h-10 w-full px-4 text-sm'
+      }`}
+      style={{
+        background: 'linear-gradient(135deg, #F05F8D 0%, #D6336C 55%, #A61E4D 100%)',
+        boxShadow: '0 10px 24px rgba(214,51,108,0.2)',
+      }}
+    >
+      {creating && <Loader2 size={15} className="animate-spin" />}
+      {creating ? 'Creating copy…' : 'Remix in berry.'}
+    </button>
   )
 }
 

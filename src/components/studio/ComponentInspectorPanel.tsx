@@ -30,6 +30,7 @@ export function ComponentInspectorPanel({
   onPositionChange,
   onPinSiteChange,
   readOnly = false,
+  footer,
 }: {
   project: BerryProject
   componentId: string
@@ -38,6 +39,7 @@ export function ComponentInspectorPanel({
   onPositionChange: (x: number, y: number) => void
   onPinSiteChange: (terminalId: string, site: BreadboardSite) => void
   readOnly?: boolean
+  footer?: React.ReactNode
 }) {
   const model = useMemo(
     () => buildComponentInspectorModel(project, componentId),
@@ -372,6 +374,14 @@ export function ComponentInspectorPanel({
           </p>
         )}
       </div>
+      {footer && (
+        <div
+          className="shrink-0 border-t p-3"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg-elevated)' }}
+        >
+          {footer}
+        </div>
+      )}
     </aside>
   )
 }
